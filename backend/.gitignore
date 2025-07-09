@@ -1,0 +1,26 @@
+# Python cache
+__pycache__/
+*.py[cod]
+*$py.class
+
+# Virtual environment
+.venv/
+env/
+venv/
+
+# Dotenv file
+.env
+
+# Uploaded audio files
+uploads/
+
+# IDE/editor-settings
+.vscode/
+.idea/
+
+# Logs
+*.log
+
+# OS-filer
+.DS_Store
+Thumbs.db
