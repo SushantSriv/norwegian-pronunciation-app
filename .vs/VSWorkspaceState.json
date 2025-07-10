@@ -3,8 +3,11 @@
     "",
     "\\backend",
     "\\frontend",
+    "\\public",
     "\\src",
+    "\\src\\assets",
     "\\src\\components"
   ],
+  "SelectedNode": "\\src\\index.css",
   "PreviewInSolutionExplorer": false
 }
