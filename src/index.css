@@ -92,3 +92,18 @@ html, body, #root {
         opacity: 0;
     }
 }
+
+.zoom-word {
+    display: inline-block;
+    animation: zoomInOut 0.6s ease forwards;
+}
+
+@keyframes zoomInOut {
+    0%, 100% {
+        transform: scale(1);
+    }
+
+    50% {
+        transform: scale(1.4);
+    }
+}
