@@ -6,6 +6,17 @@ import React, {
     type CSSProperties
 } from 'react';
 
+import { motion, AnimatePresence } from 'framer-motion';
+
+
+
+// At top of file, after your imports
+const wordVariants = {
+    hidden: { scale: 0.8, opacity: 0 },
+    visible: { scale: 1, opacity: 1 },
+    zoom: { scale: [1, 1.6, 1], opacity: [1, 1, 1] }
+};
+
 // -----------------------------------------------------------------------------
 // Types & constants
 // -----------------------------------------------------------------------------
@@ -82,7 +93,7 @@ const AudioRecorder: React.FC<Props> = ({
     // -------------------- Refs ---------------------
     const mediaRecorderRef = useRef<MediaRecorder | null>(null);
     const audioChunks = useRef<Blob[]>([]);
-    const zoomTimer = useRef<NodeJS.Timeout | null>(null);
+    const zoomTimer = useRef<number | null>(null);
 
     // ------------------ Derived --------------------
     const currentPool = sentencePools[level.toString()] || sentencePools['1'];
@@ -152,21 +163,27 @@ const AudioRecorder: React.FC<Props> = ({
     useEffect(() => {
         if (!recording) {
             setZoomIndex(-1);
-            if (zoomTimer.current) clearInterval(zoomTimer.current);
+            if (zoomTimer.current !== null) window.clearInterval(zoomTimer.current);
             return;
         }
+        // start zooming each word
         let idx = 0;
         setZoomIndex(0);
-        zoomTimer.current = setInterval(() => {
+        zoomTimer.current = window.setInterval(() => {
             idx += 1;
             if (idx >= words.length) {
-                clearInterval(zoomTimer.current!);
+                window.clearInterval(zoomTimer.current!);
             } else {
                 setZoomIndex(idx);
             }
         }, WORD_ZOOM_MS);
-        return () => clearInterval(zoomTimer.current!);
-    }, [recording, expected]);
+        return () => {
+            if (zoomTimer.current !== null) window.clearInterval(zoomTimer.current);
+        };
+    }, [recording, expected, words.length]);
+
+
+
 
     // -------------------- Recorder -----------------
     const startRecordingInternal = async () => {
@@ -268,8 +285,12 @@ const AudioRecorder: React.FC<Props> = ({
         words.map((w, i) => {
             const bad = errors.has(w.replace(/[?.!]/g, ''));
             return (
-                <span
+                <motion.span
                     key={i}
+                    variants={wordVariants}
+                    initial="hidden"
+                    animate={i === zoomIndex ? 'zoom' : 'visible'}
+                    transition={{ duration: 0.6 }}
                     onClick={() =>
                         tryPlay(
                             `/samples/${encodeURIComponent(currentDialect)}/${encodeURIComponent(
@@ -279,18 +300,19 @@ const AudioRecorder: React.FC<Props> = ({
                         )
                     }
                     style={{
+                        display: 'inline-block',      // ensure transform works
                         marginRight: '0.5rem',
                         cursor: 'pointer',
                         color: bad ? '#e57373' : '#64b5f6',
                         fontWeight: bad ? 'bold' : 'normal',
                         textDecoration: bad ? 'underline' : 'none'
                     }}
-                    className={i === zoomIndex ? 'zoom-word' : ''}
                 >
                     {w}
-                </span>
+                </motion.span>
             );
         });
+
 
     // --------------------------- JSX ---------------
     return (
@@ -314,44 +336,59 @@ const AudioRecorder: React.FC<Props> = ({
                 ))}
 
             {/* Countdown Overlay */}
-            {countdown !== null && (
-                <div
-                    style={{
-                        position: 'absolute',
-                        inset: 0,
-                        background: 'rgba(255,255,255,0.9)',
-                        display: 'flex',
-                        alignItems: 'center',
-                        justifyContent: 'center',
-                        fontSize: '4rem',
-                        fontWeight: 700,
-                        pointerEvents: 'none'
-                    }}
-                >
-                    {countdown === 0 ? text.countdown : countdown}
-                </div>
-            )}
+            <AnimatePresence>
+                {countdown !== null && (
+                    <motion.div
+                        key="countdown"
+                        initial={{ opacity: 0, scale: 0.8 }}
+                        animate={{ opacity: 1, scale: 1 }}
+                        exit={{ opacity: 0, scale: 0.5 }}
+                        transition={{ duration: 0.4 }}
+                        style={{
+                            position: 'absolute',
+                            inset: 0,
+                            background: 'rgba(255,255,255,0.9)',
+                            display: 'flex',
+                            alignItems: 'center',
+                            justifyContent: 'center',
+                            fontSize: '4rem',
+                            fontWeight: 700,
+                            pointerEvents: 'none'
+                        }}
+                    >
+                        {countdown === 0 ? text.countdown : countdown}
+                    </motion.div>
+                )}
+            </AnimatePresence>
+
 
             {/* Feedback Overlay */}
-            {feedback && (
-                <div
-                    style={{
-                        position: 'absolute',
-                        inset: 0,
-                        background: 'rgba(255,255,255,0.85)',
-                        display: 'flex',
-                        alignItems: 'center',
-                        justifyContent: 'center',
-                        fontSize: '1.6rem',
-                        animation: 'fadeIn 0.4s',
-                        pointerEvents: 'none'
-                    }}
-                >
-                    {feedback === 'success'
-                        ? `🎉 ${text.success(((1 - (werScore || 0)) * 100).toFixed(0))}`
-                        : `😅 ${text.tryAgain}`}
-                </div>
-            )}
+            <AnimatePresence>
+                {feedback && (
+                    <motion.div
+                        key="feedback"
+                        initial={{ opacity: 0, scale: 0.9 }}
+                        animate={{ opacity: 1, scale: 1 }}
+                        exit={{ opacity: 0 }}
+                        transition={{ duration: 0.5 }}
+                        style={{
+                            position: 'absolute',
+                            inset: 0,
+                            background: 'rgba(255,255,255,0.85)',
+                            display: 'flex',
+                            alignItems: 'center',
+                            justifyContent: 'center',
+                            fontSize: '1.6rem',
+                            pointerEvents: 'none'
+                        }}
+                    >
+                        {feedback === 'success'
+                            ? `🎉 ${text.success(((1 - (werScore || 0)) * 100).toFixed(0))}`
+                            : `😅 ${text.tryAgain}`}
+                    </motion.div>
+                )}
+            </AnimatePresence>
+
 
             {/* Header */}
             <h2 style={{ margin: 0, color: '#37474f' }}>Nivå {level}</h2>
@@ -408,10 +445,20 @@ const AudioRecorder: React.FC<Props> = ({
                 🔈 {text.hearCorrect}
             </button>
 
-            {/* Expected sentence */}
-            <div style={{ margin: '1rem 0' }}>
+            {/* Expected sentence (sentrert) */}
+            <div
+                style={{
+                    margin: '1rem 0',
+                    display: 'flex',
+                    flexDirection: 'column',
+                    alignItems: 'center',
+                    textAlign: 'center'
+                }}
+            >
                 <strong>{text.expected}</strong>
-                <div style={{ marginTop: '0.5rem' }}>{renderSentence()}</div>
+                <div style={{ marginTop: '0.5rem' }}>
+                    {renderSentence()}
+                </div>
             </div>
 
             {/* Record button */}
