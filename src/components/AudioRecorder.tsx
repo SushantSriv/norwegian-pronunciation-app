@@ -21,6 +21,8 @@ const wordVariants = {
 // Types & constants
 // -----------------------------------------------------------------------------
 interface Texts {
+    title: string;
+    languageLabel: string;
     start: string;
     stop: string;
     preview: string;
@@ -53,7 +55,7 @@ const THRESHOLDS: Record<Difficulty, number> = {
     Amateur: 0.2,
     Professional: 0.1
 };
-const SUCCESSES_NEEDED = 2;
+const SUCCESSES_NEEDED = 1;
 const OVERLAY_DURATION = 3000;
 
 // helper for per-word zoom duration

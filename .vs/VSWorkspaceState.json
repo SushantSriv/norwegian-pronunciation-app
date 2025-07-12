@@ -1,12 +1,12 @@
 {
   "ExpandedNodes": [
     "",
-    "\\frontend",
+    "\\backend",
     "\\public",
     "\\src",
     "\\src\\components",
     "\\src\\data"
   ],
-  "SelectedNode": "\\src\\components\\AudioRecorder.tsx",
+  "SelectedNode": "\\src\\data\\sentences.json",
   "PreviewInSolutionExplorer": false
 }

@@ -1,4 +1,4 @@
-# syntax=docker/dockerfile:1
+﻿# syntax=docker/dockerfile:1
 FROM python:3.10-slim
 
 # 1) System deps including CA bundle, ffmpeg, git, etc.

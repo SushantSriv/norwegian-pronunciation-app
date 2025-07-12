@@ -1,8 +1,10 @@
 import React, { useState } from 'react';
 import AudioRecorder from './components/AudioRecorder';
-import sentencePools from './data/sentences.json';
 import './index.css';
 
+import rawSentenceData from './data/sentences.json';
+
+const sentencePools = rawSentenceData.levels;
 const TRANSLATIONS = {
     nb: {
         title: 'Øv på norsk uttale',
@@ -20,7 +22,9 @@ const TRANSLATIONS = {
         hearCorrect: 'Hør korrekt uttale',
         success: (p: string) => `Hurra! Du var ${p}% riktig!`,
         tryAgain: '😅 Prøv igjen – sørg for at det er stille rundt deg',
-        nextSentence: '🔄 Ny setning'
+        nextSentence: '🔄 Ny setning',
+        countdown: 'Kjør!'
+
     },
     en: {
         // … same for English …
