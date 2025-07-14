@@ -7,6 +7,7 @@ import React, {
 } from 'react';
 
 import { motion, AnimatePresence } from 'framer-motion';
+import { useAppStatus } from '../hooks/useAppStatus';
 import { getAdvice, getPhonemeHint } from '../utils/pronunciationHints';
 import { tokenizeIPA } from '../utils/ipaTokenizer'
 
@@ -118,6 +119,7 @@ const AudioRecorder: React.FC<Props> = ({
     const [zoomIndex, setZoomIndex] = useState<number>(-1); 
     const [badIpa, setBadIpa] = useState<BadIpa | null>(null);
     const [tooltipIdx, setTooltipIdx] = useState<number | null>(null);
+    const [, setStatus] = useAppStatus();
     
     // -------------------- Refs ---------------------
     const mediaRecorderRef = useRef<MediaRecorder | null>(null);
@@ -163,6 +165,10 @@ const AudioRecorder: React.FC<Props> = ({
     }, [pickNewSentence, currentPool]);
 
     useEffect(() => {
+        setStatus('welcome');   // vis velkomst-ikon første gang
+    }, [setStatus]);
+
+    useEffect(() => {
         if (!transcript) { setErrors(new Set()); return; }
         const clean = (t: string) => t.replace(/[?.!]/g, '').trim().split(/\s+/);
         const err = new Set<string>();
@@ -175,6 +181,7 @@ const AudioRecorder: React.FC<Props> = ({
         setProcessing(false);
         if (passed) {
             setFeedback('success');
+            setStatus('success');
             setShowConfetti(true);
             const t = setTimeout(() => {
                 setShowConfetti(false);
@@ -184,9 +191,12 @@ const AudioRecorder: React.FC<Props> = ({
             return () => clearTimeout(t);
         }
         setFeedback('fail');
+        // avgjør om det var total- eller delvis feil
+        if (errors.size === 0) setStatus('fail');
+        else setStatus('partialFail');
         const failTimer = setTimeout(() => setFeedback(null), 1000);
         return () => clearTimeout(failTimer);
-    }, [werScore, passed, advanceOrRepeat]);
+    }, [werScore, passed, advanceOrRepeat, errors]);
 
     // animate zoom on each word when recording starts
     useEffect(() => {
@@ -226,6 +236,7 @@ const AudioRecorder: React.FC<Props> = ({
             mr.onerror = handleStop;
             mr.start();
             setRecording(true);
+            setStatus('listening');
         } catch (err) {
             console.error(err);
             alert("⚠️ Mic access is required to record. Please enable microphone permission.");
@@ -262,6 +273,7 @@ const AudioRecorder: React.FC<Props> = ({
 
     const handleStop = async () => {
         setRecording(false);
+        setStatus('idle'); 
         setProcessing(true);
         const blob = new Blob(audioChunks.current, { type: 'audio/webm' });
         audioChunks.current = [];
@@ -286,7 +298,6 @@ const AudioRecorder: React.FC<Props> = ({
             setSubs(data.substitutions);
             setDels(data.deletions);
             setIns(data.insertions);
-
             // append history
             setHistory(h => [
                 ...h,
@@ -347,7 +358,7 @@ const AudioRecorder: React.FC<Props> = ({
                 />
                 <button
                     disabled={!userName.trim()}
-                    onClick={() => setAskedName(true)}
+                    onClick={() => { setAskedName(true); setStatus('idle'); }}
                     style={{ marginLeft: 10, padding: '0.5rem 1rem' }}
                 >
                     Start
@@ -546,7 +557,10 @@ const AudioRecorder: React.FC<Props> = ({
             <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '1rem' }}>
                 <h2 style={{ margin: 0, color: '#37474f' }}>Hello, {userName}! (Nivå {level})</h2>
                 <button
-                    onClick={() => setFinished(true)}
+                    onClick={() => {
+                        setFinished(true);
+                        setStatus('idle');
+                    }}
                     style={{
                         background: '#2196f3',
                         color: '#fff',

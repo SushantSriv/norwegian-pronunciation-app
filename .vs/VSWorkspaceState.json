@@ -5,8 +5,9 @@
     "\\public",
     "\\src",
     "\\src\\components",
-    "\\src\\data"
+    "\\src\\data",
+    "\\src\\utils"
   ],
-  "SelectedNode": "\\README.md",
+  "SelectedNode": "\\src\\utils\\ipaTokenizer.ts",
   "PreviewInSolutionExplorer": false
 }
