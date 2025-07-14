@@ -7,6 +7,8 @@ import React, {
 } from 'react';
 
 import { motion, AnimatePresence } from 'framer-motion';
+import { getAdvice, getPhonemeHint } from '../utils/pronunciationHints';
+import { tokenizeIPA } from '../utils/ipaTokenizer'
 
 
 
@@ -67,81 +69,6 @@ const OVERLAY_DURATION = 3000;
 // helper for per-word zoom duration
 const WORD_ZOOM_MS = 600;
 
-// Enkle tekstvise råd for vanlige feilor
-const adviceMap: Record<string, string> = {
-    hei: "Si «hay» med åpen /æɪ/ – ikke hard ‘haj’.",
-    takk: "Kort, hard /a/ og tydelig /k/ – ikke ‘tag’.",
-    ja: "Lang åpen /ɑː/ – som «aah».",
-    nei: "Diftong /æɪ/ – ikke ‘nai’.",
-    mor: "Rull r-en svakt (eller skarre) og kort /u/.",
-    far: "Lang /ɑː/ og tydelig r på slutten.",
-    sol: "Rund leppene på lang /uː/.",
-    hus: "Rund /ʉː/ (ikke engelsk /huːs/).",
-    mat: "Lang vokal /ɑː/ – ikke like kort som i «Matt».",
-    "god natt": "Husk stum d i «god» – uttales «go natt».",
-
-    // Nivå 2–3 (vanlige funksjonsord)
-    jeg: "Diftong /jæɪ/ – ikke «jegg».",
-    du: "Rund /ʉː/ – trekk sammen leppene.",
-    det: "Kort ‘e’; ikke uttal t-en tydelig.",
-    ikke: "H-en er stum, si «ikke» /ɪkə/.",
-    hva: "Uttales «va» – stum h.",
-    hvor: "Rund /ʉ/ i midten, lett r til slutt.",
-    når: "Åpen /oː/ + r – ikke ‘nårR’.",
-    hvem: "Stum h, kort /vɛm/.",
-    hvordan: "Trykk på første stavelse «HVOR-», stum d.",
-    fordi: "Trykk på andre stavelse /diː/.",
-
-    // Noen vanlige verb & substantiv (nivå 1-5)
-    liker: "Lang i-lyd /liːkər/. Ikke ‘laiker’.",
-    jobber: "Dobbel b → kort vokal «jobb-» + schwa-r.",
-    leser: "Trykk på første stavelse «LE-ser».",
-    prøver: "Ø-lyd /øː/ – rund leppene.",
-    spiser: "Lang i /spiː-/ – ikke ‘spisser’.",
-    drikker: "Kort i + dobbel k /ˈdrikːər/.",
-    kaffe: "Åpen /ɑ/ i begge stavelser: /kɑfə/.",
-    vann: "Kort a; dobbel n gir kort vokal.",
-    bok: "Rund /uː/ – ikke ‘bok’ på engelsk.",
-    film: "Kort i; final m uttales tydelig.",
-    sofa: "Uttales /ˈsuːfa/ – trykk på første stavelse.",
-    penger: "Bløt g («penn-jer»); ikke hard /g/.",
-
-    // Flertall & småord
-    oss: "Kort, åpen /ɔs/ – ikke «ås».",
-    dere: "To stavelser «de-re», åpen e.",
-    våre: "Åpen /oː/ i første stavelse.",
-    mine: "Lang /iː/ – ‘mi-ne’, ikke «main».",
-    dine: "Samme mønster som «mine».",
-
-    // Tidsuttrykk
-    morgen: "Uttales «mår-ren» /ˈmɔːrən/.",
-    kveld: "Slutt-ld → retrofleks /ɭ/.",
-    lørdag: "Ø-d-a: /ˈløːɖɑːg/ – ‘d’→retroflex.",
-    mandag: "Nasal /ɑn-/ + retrofleks d.",
-    torsdag: "‘rs’ → retrofleks /ʂ/ : «tåʂ-».",
-
-    // Nivå 4-7 (noen typiske feil)
-    vanskelig: "Trykk på første stavelse «VANS-kli», ikke *vanskelig*.",
-    hyggelig: "Y-lyd /ʏ/ + retrofleks ‘gl’. «HY-g-li».",
-    selvfølgelig: "Tre stavelser : «sel-FØL-ge-li».",
-    trøtt: "Rund /ʈrøtː/ retrofleks t.",
-
-    // Små høflighetsfraser
-    "vær så snill": "R-s → retrofleks /ʂ/; si «værʂ snill».",
-    "tusen takk": "Lang /uː/ i ‘tusen’; pause før ‘takk’.",
-    sykehus: "To y-lyder /ˈʃyːkəhuːs/.",
-    språk: "Åpen /oː/ + retrofleks k: /sprɔːk/.",
-    går: "Lang å-lyd /goːr/.",
-    år: "Samme vokal som i «går».",
-    gjør: "Palatal j- + /øː/.",
-    kjører: "Palatal ‘kj’ → /çøːrər/.",
-
-    // Tips for noen “kj/sj”-minimalpar
-    "kjære": "Tynn palatal /ç/ – ikke som «skjære».",
-    "skjære": "Sj-lyd /ʂ/ – rundt bak i munnen.",
-
-    // … fyll gjerne på videre etter behov …
-};
 
 
 // -----------------------------------------------------------------------------
@@ -176,8 +103,7 @@ const AudioRecorder: React.FC<Props> = ({
     const [zoomIndex, setZoomIndex] = useState<number>(-1); 
     const [badIpa, setBadIpa] = useState<BadIpa | null>(null);
     const [tooltipIdx, setTooltipIdx] = useState<number | null>(null);
-
-
+    
     // -------------------- Refs ---------------------
     const mediaRecorderRef = useRef<MediaRecorder | null>(null);
     const audioChunks = useRef<Blob[]>([]);
@@ -419,6 +345,7 @@ const AudioRecorder: React.FC<Props> = ({
         });
 
 
+    
 
     // --------------------------- JSX ---------------
     return (
@@ -633,14 +560,44 @@ const AudioRecorder: React.FC<Props> = ({
             )}
 
             {badIpa && (
-                <p style={{ marginTop: '0.5rem', fontSize: '1.1rem' }}>
-                    <strong>Uttale-hint:</strong>&nbsp;
-                    <span style={{ color: '#64b5f6' }}>{badIpa.expected}</span>&nbsp;→&nbsp;
-                    <span style={{ color: '#e57373' }}>{badIpa.heard}</span>
-                </p>
+                <div style={{ marginTop: '1rem' }}>
+
+                    <div style={{ display: 'flex', gap: '2rem', marginTop: '1rem' }}>
+                        {/* Expected phonemes */}
+                        <div style={{ flex: 1 }}>
+                            <strong>Forventet uttale:</strong>
+                            <ul style={{ marginTop: '0.25rem', paddingLeft: '1.2rem' }}>
+                                {tokenizeIPA(badIpa.expected).map((p, idx) => {
+                                    const hint = getPhonemeHint(p);
+                                    return (
+                                        <li key={`expected-${idx}`}>
+                                            <strong>{p}</strong>: {hint ?? '(ingen forklaring)'}
+                                        </li>
+                                    );
+                                })}
+                            </ul>
+                        </div>
+
+                        {/* Heard phonemes */}
+                        <div style={{ flex: 1 }}>
+                            <strong>Du sa:</strong>
+                            <ul style={{ marginTop: '0.25rem', paddingLeft: '1.2rem' }}>
+                                {tokenizeIPA(badIpa.heard).map((p, idx) => {
+                                    const hint = getPhonemeHint(p);
+                                    return (
+                                        <li key={`heard-${idx}`}>
+                                            <strong>{p}</strong>: {hint ?? '(ingen forklaring)'}
+                                        </li>
+                                    );
+                                })}
+                            </ul>
+                        </div>
+                    </div>
+                </div>
             )}
 
-            {tooltipIdx !== null && (
+
+            {tooltipIdx !== null && badIpa?.wordIdx === tooltipIdx && (
                 <div
                     style={{
                         margin: '1rem 0',
@@ -652,12 +609,26 @@ const AudioRecorder: React.FC<Props> = ({
                     <p style={{ margin: 0, fontWeight: 'bold' }}>
                         Tips for «{words[tooltipIdx].replace(/[?.!]/g, '')}»:
                     </p>
+
                     <p style={{ margin: '0.25rem 0 0' }}>
-                        {adviceMap[words[tooltipIdx].replace(/[?.!]/g, '')] ||
+                        {getAdvice(words[tooltipIdx].replace(/[?.!]/g, '')) ||
                             'Prøv å uttale ordet saktere og tydelig.'}
                     </p>
+
+                    <ul style={{ marginTop: '0.5rem', paddingLeft: '1.2rem' }}>
+                        {tokenizeIPA(badIpa.expected).map((p, idx) => {
+                            const hint = getPhonemeHint(p);
+                            return hint ? (
+                                <li key={`tooltip-phoneme-${idx}`}>
+                                    <strong>{p}</strong>: {hint}
+                                </li>
+                            ) : null;
+                        })}
+                    </ul>
                 </div>
             )}
+
+
 
             {/* Error words */}
             {errors.size > 0 && (
