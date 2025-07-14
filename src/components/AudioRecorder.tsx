@@ -81,13 +81,28 @@ const AudioRecorder: React.FC<Props> = ({
     currentDialect,
     onDialectChange
 }) => {
+
+    // ——— Ask for user name first —————————————————————————————
+    const [userName, setUserName] = useState<string>('')
+    const [askedName, setAskedName] = useState(false)
+
+    // ——— Keep history of trials —————————————————————————————
+    const [history, setHistory] = useState<{
+        wer: number,
+        badWord?: string
+    }[]>([])
+
+    // ——— “Finished?” state ———————————————————————————————
+    const [finished, setFinished] = useState(false)
+
+
     // -------------------- State --------------------
     const [level, setLevel] = useState(1);
     const [expected, setExpected] = useState('');
     const [recording, setRecording] = useState(false);
     const [processing, setProcessing] = useState(false);
     const [audioURL, setAudioURL] = useState<string | null>(null);
-    const [uploadStatus, setUploadStatus] = useState<string | null>(null);
+    const [uploadStatus] = useState<string | null>(null);
     const [playbackRate, setPlaybackRate] = useState(1);
     const [difficulty, setDifficulty] = useState<Difficulty>('Beginner');
     const [transcript, setTranscript] = useState('');
@@ -126,7 +141,6 @@ const AudioRecorder: React.FC<Props> = ({
         setDels(0);
         setIns(0);
         setErrors(new Set());
-        setUploadStatus(null);
         setTooltipIdx(null);
         setFeedback(null);
     }, []);
@@ -214,6 +228,7 @@ const AudioRecorder: React.FC<Props> = ({
             setRecording(true);
         } catch (err) {
             console.error(err);
+            alert("⚠️ Mic access is required to record. Please enable microphone permission.");
             setRecording(false);
         }
     };
@@ -249,40 +264,43 @@ const AudioRecorder: React.FC<Props> = ({
         setRecording(false);
         setProcessing(true);
         const blob = new Blob(audioChunks.current, { type: 'audio/webm' });
-        if (blob.size === 0) {
-            setProcessing(false);
-            return;
-        }
-        setAudioURL(URL.createObjectURL(blob));
-        mediaRecorderRef.current?.stream.getTracks().forEach(t => t.stop());
-        mediaRecorderRef.current = null;
+        audioChunks.current = [];
+        if (blob.size === 0) { setProcessing(false); return; }
         try {
             const form = new FormData();
             form.append('audio', blob, 'rec.webm');
             form.append('expected', expected);
-            setUploadStatus('Laster opp…');
             const res = await fetch('http://localhost:8000/upload-audio/', { method: 'POST', body: form });
             const data = await res.json();
-            if (!res.ok) throw new Error(data.detail || res.statusText);  
+            if (!res.ok) throw new Error(data.detail || res.statusText);
+            setAudioURL(URL.createObjectURL(blob));
+            // set states
             setBadIpa(
                 data.bad_word
                     ? { expected: data.expected_ipa, heard: data.heard_ipa, wordIdx: data.word_index }
                     : null
             );
             setTooltipIdx(data.bad_word ? data.word_index : null);
-            setUploadStatus(null);
             setTranscript(data.transcript || '');
             setWerScore(data.wer);
             setSubs(data.substitutions);
             setDels(data.deletions);
             setIns(data.insertions);
+
+            // append history
+            setHistory(h => [
+                ...h,
+                { wer: data.wer, badWord: data.bad_word ? data.bad_word : undefined }
+            ]);
         } catch (err) {
             console.error(err);
-            setUploadStatus('Opplastingsfeil');
         } finally {
             setProcessing(false);
         }
     };
+
+
+
 
     // -------------------- Playback helpers ---------
     const speakTTS = (str: string) => {
@@ -300,6 +318,100 @@ const AudioRecorder: React.FC<Props> = ({
         audio.onerror = () => speakTTS(fallback);
         audio.load();
     };
+
+    // Summary memo
+    const summary = React.useMemo(() => {
+        if (!history.length) return null;
+        const avgWer = history.reduce((s, t) => s + t.wer, 0) / history.length;
+        const missed = history.filter(t => t.badWord).map(t => t.badWord!) as string[];
+        const got = history.filter(t => !t.badWord).length;
+        return {
+            avgWer,
+            total: history.length,
+            goodCount: got,
+            missedWords: Array.from(new Set(missed))
+        };
+    }, [history]);
+
+    // Render: ask name
+    if (!askedName) {
+        return (
+            <div style={{ padding: 20 }}>
+                <h2>Welcome! What’s your name?</h2>
+                <input
+                    type="text"
+                    value={userName}
+                    onChange={e => setUserName(e.target.value)}
+                    placeholder="Your name"
+                    style={{ fontSize: '1.2rem', padding: '0.5rem' }}
+                />
+                <button
+                    disabled={!userName.trim()}
+                    onClick={() => setAskedName(true)}
+                    style={{ marginLeft: 10, padding: '0.5rem 1rem' }}
+                >
+                    Start
+                </button>
+            </div>
+        );
+    }
+
+    if (finished && summary) {
+        return (
+            <div
+                style={{
+                    maxWidth: 600,
+                    margin: '2rem auto',
+                    padding: '2rem',
+                    background: '#fefefe',
+                    borderRadius: 12,
+                    boxShadow: '0 4px 16px rgba(0,0,0,0.1)'
+                }}
+            >
+                <h2 style={{ fontSize: '1.8rem', marginBottom: '1rem' }}>
+                    👏 Great job, <span style={{ color: '#1976d2' }}>{userName}</span>!
+                </h2>
+                <p style={{ fontSize: '1.1rem', marginBottom: '0.5rem' }}>
+                    You completed <strong>{summary.total}</strong> sentences.
+                </p>
+                <p style={{ color: '#388e3c', marginBottom: '0.25rem' }}>
+                    ✅ <strong>{summary.goodCount}</strong> correct pronunciations.
+                </p>
+                <p style={{ color: '#d32f2f', marginBottom: '0.25rem' }}>
+                    ❌ Missed: {summary.missedWords.length > 0 ? summary.missedWords.join(', ') : 'None!'}
+                </p>
+                <p style={{ marginBottom: '1rem' }}>
+                    📊 Average WER: <strong>{(summary.avgWer * 100).toFixed(1)}%</strong>
+                </p>
+
+                <h3 style={{ marginTop: '1.5rem' }}>🔁 Next steps</h3>
+                <ul style={{ marginTop: '0.5rem', paddingLeft: '1.25rem' }}>
+                    {summary.missedWords.map(w => (
+                        <li key={w}>
+                            <strong>{w}</strong>: {getAdvice(w) || 'Keep practicing.'}
+                        </li>
+                    ))}
+                </ul>
+
+                <button
+                    onClick={() => window.location.reload()}
+                    style={{
+                        marginTop: '2rem',
+                        background: '#1976d2',
+                        color: '#fff',
+                        padding: '0.75rem 1.5rem',
+                        fontSize: '1rem',
+                        border: 'none',
+                        borderRadius: 6,
+                        cursor: 'pointer'
+                    }}
+                >
+                    🔄 Start Over
+                </button>
+            </div>
+        );
+    }
+
 
     // --------------------- Render helpers ----------
     const renderSentence = () =>
@@ -349,15 +461,8 @@ const AudioRecorder: React.FC<Props> = ({
 
     // --------------------------- JSX ---------------
     return (
-        <div
-            style={{
-                position: 'relative',
-                padding: '2rem',
-                background: '#fff',
-                borderRadius: 8,
-                boxShadow: '0 4px 12px rgba(0,0,0,0.1)'
-            }}
-        >
+        <div className="relative p-6 bg-white rounded-lg shadow-lg">
+            
             {/* Confetti */}
             {showConfetti &&
                 Array.from({ length: 40 }).map((_, i) => (
@@ -422,32 +527,77 @@ const AudioRecorder: React.FC<Props> = ({
                 )}
             </AnimatePresence>
 
+            <div style={{
+                height: '8px',
+                background: '#eee',
+                borderRadius: 4,
+                overflow: 'hidden',
+                marginBottom: '1rem'
+            }}>
+                <div style={{
+                    width: `${(level / Object.keys(sentencePools).length) * 100}%`,
+                    background: '#4caf50',
+                    height: '100%',
+                    transition: 'width 0.4s'
+                }} />
+            </div>
 
-            {/* Header */}
-            <h2 style={{ margin: 0, color: '#37474f' }}>Nivå {level}</h2>
+            {/* Header: personalized greeting + level + finish */}
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '1rem' }}>
+                <h2 style={{ margin: 0, color: '#37474f' }}>Hello, {userName}! (Nivå {level})</h2>
+                <button
+                    onClick={() => setFinished(true)}
+                    style={{
+                        background: '#2196f3',
+                        color: '#fff',
+                        border: 'none',
+                        borderRadius: 4,
+                        padding: '0.5rem 1rem',
+                        cursor: 'pointer'
+                    }}
+                >
+                    Finish my exercise
+                </button>
+            </div>
 
             {/* Dialect & Mode selectors */}
-            <div style={{ display: 'flex', gap: '1rem', margin: '1rem 0' }}>
-                <div style={{ flex: 1 }}>
-                    <label>Dialekt:</label>
+            <div style={{
+                display: 'grid',
+                gridTemplateColumns: '1fr 1fr',
+                gap: '1rem',
+                marginBottom: '1.5rem'
+            }}>
+                <div>
+                    <label style={{ display: 'block', marginBottom: 4, fontWeight: 500 }}>Dialect</label>
                     <select
                         value={currentDialect}
                         onChange={e => onDialectChange(e.target.value)}
-                        style={{ width: '100%' }}
+                        style={{
+                            width: '100%',
+                            padding: '0.5rem',
+                            borderRadius: 6,
+                            border: '1px solid #ccc',
+                            fontSize: '1rem'
+                        }}
                     >
                         {dialects.map(d => (
-                            <option key={d} value={d}>
-                                {d}
-                            </option>
+                            <option key={d} value={d}>{d}</option>
                         ))}
                     </select>
                 </div>
-                <div style={{ flex: 1 }}>
-                    <label>Mode:</label>
+
+                <div>
+                    <label style={{ display: 'block', marginBottom: 4, fontWeight: 500 }}>Mode</label>
                     <select
                         value={difficulty}
                         onChange={e => setDifficulty(e.target.value as Difficulty)}
-                        style={{ width: '100%' }}
+                        style={{
+                            width: '100%',
+                            padding: '0.5rem',
+                            borderRadius: 6,
+                            border: '1px solid #ccc',
+                            fontSize: '1rem'
+                        }}
                     >
                         <option value="Beginner">Beginner (≤35% WER)</option>
                         <option value="Amateur">Amateur (≤20% WER)</option>
@@ -456,27 +606,69 @@ const AudioRecorder: React.FC<Props> = ({
                 </div>
             </div>
 
+
+
             {/* Hear correct */}
-            <button
-                onClick={() =>
-                    tryPlay(
-                        `/samples/${encodeURIComponent(currentDialect)}/${encodeURIComponent(
+            {/* ► Hear correct + playback rate (styled like button) */}
+            <div style={{ marginTop: '1rem' }}>
+                <button
+                    onClick={() =>
+                        tryPlay(
+                            `/samples/${encodeURIComponent(currentDialect)}/${encodeURIComponent(expected)}.mp3`,
                             expected
-                        )}.mp3`,
-                        expected
-                    )
-                }
-                style={{
-                    background: '#ffa726',
-                    color: '#fff',
-                    border: 'none',
-                    borderRadius: 4,
-                    padding: '0.6rem 1rem',
-                    cursor: 'pointer'
-                }}
-            >
-                🔈 {text.hearCorrect}
-            </button>
+                        )
+                    }
+                    style={{
+                        background: '#ff9800',
+                        color: 'white',
+                        border: 'none',
+                        borderRadius: '6px',
+                        padding: '0.7rem 1.4rem',
+                        fontWeight: 'bold',
+                        fontSize: '1rem',
+                        cursor: 'pointer',
+                        boxShadow: '0 2px 6px rgba(0,0,0,0.1)',
+                        transition: 'background 0.2s ease'
+                    }}
+                    onMouseOver={e => (e.currentTarget.style.background = '#fb8c00')}
+                    onMouseOut={e => (e.currentTarget.style.background = '#ff9800')}
+                >
+                    🔈 {text.hearCorrect}
+                </button>
+
+                {/* Styled select next to it */}
+                <div
+                    style={{
+                        display: 'inline-flex',
+                        alignItems: 'center',
+                        marginLeft: '1rem',
+                        background: '#ffecb3',
+                        padding: '0.6rem 1rem',
+                        borderRadius: '6px',
+                        boxShadow: '0 2px 6px rgba(0,0,0,0.05)',
+                        fontSize: '0.95rem',
+                        fontWeight: 500
+                    }}
+                >
+                    <span style={{ marginRight: '0.5rem' }}>Lyttehastighet:</span>
+                    <select
+                        value={playbackRate}
+                        onChange={e => setPlaybackRate(parseFloat(e.target.value))}
+                        style={{
+                            padding: '0.3rem 0.5rem',
+                            border: '1px solid #ccc',
+                            borderRadius: '4px',
+                            fontSize: '0.95rem'
+                        }}
+                    >
+                        <option value={0.75}>0.75× – Rolig</option>
+                        <option value={1}>1× – Normal</option>
+                        <option value={1.25}>1.25× – Rask</option>
+                        <option value={1.5}>1.5× – Raskest</option>
+                    </select>
+                </div>
+            </div>
+
 
             {/* Expected sentence (sentrert) */}
             <div
@@ -501,30 +693,25 @@ const AudioRecorder: React.FC<Props> = ({
                 style={{
                     width: '100%',
                     padding: '1rem',
+                    fontSize: '1.1rem',
+                    fontWeight: 'bold',
                     border: 'none',
-                    borderRadius: 6,
-                    fontSize: '1rem',
+                    borderRadius: '6px',
+                    background: recording ? '#e53935' : '#43a047',
+                    color: 'white',
+                    transition: 'background 0.2s ease, transform 0.1s ease',
                     cursor: processing || countdown !== null ? 'not-allowed' : 'pointer',
-                    background: recording ? '#d32f2f' : '#388e3c',
-                    color: '#fff'
+                    boxShadow: '0 2px 6px rgba(0,0,0,0.15)'
                 }}
+                onMouseDown={e => (e.currentTarget.style.transform = 'scale(0.98)')}
+                onMouseUp={e => (e.currentTarget.style.transform = 'scale(1)')}
             >
-                {recording ? `🔴 ${text.stop}` : `🎙️ ${text.start}`}
+                {recording ? '🔴 Stop Recording' : '🎙️ Start Recording'}
             </button>
 
-            {/* Playback rate */}
-            <div style={{ margin: '1rem 0' }}>
-                <label>Lyttehastighet:</label>
-                <select
-                    value={playbackRate}
-                    onChange={e => setPlaybackRate(parseFloat(e.target.value))}
-                >
-                    <option value={0.75}>0.75×</option>
-                    <option value={1}>1×</option>
-                    <option value={1.25}>1.25×</option>
-                    <option value={1.5}>1.5×</option>
-                </select>
-            </div>
+
+            
+
 
             {/* Audio preview */}
             {audioURL && (
@@ -538,84 +725,109 @@ const AudioRecorder: React.FC<Props> = ({
             {werScore !== null && (
                 <div
                     style={{
-                        background: '#f5f5f5',
-                        borderRadius: 6,
-                        padding: '0.75rem',
-                        marginBottom: '1rem'
+                        background: '#ffffff',
+                        border: '1px solid #ddd',
+                        borderRadius: '8px',
+                        padding: '1rem',
+                        marginTop: '1rem',
+                        marginBottom: '1rem',
+                        display: 'grid',
+                        gridTemplateColumns: 'repeat(auto-fit, minmax(120px, 1fr))',
+                        gap: '0.75rem',
+                        fontSize: '0.95rem',
+                        boxShadow: '0 2px 5px rgba(0,0,0,0.05)'
                     }}
                 >
-                    <div>
-                        <strong>{text.wer}</strong> {(werScore * 100).toFixed(1)}%
+                    <div style={{ textAlign: 'center' }}>
+                        <strong>{text.wer}</strong>
+                        <div style={{ fontSize: '1.1rem', color: '#f44336' }}>
+                            {(werScore * 100).toFixed(1)}%
+                        </div>
                     </div>
-                    <div>
-                        <strong>{text.substitutions}</strong> {subs}
+                    <div style={{ textAlign: 'center' }}>
+                        <strong>{text.substitutions}</strong>
+                        <div>{subs}</div>
                     </div>
-                    <div>
-                        <strong>{text.deletions}</strong> {dels}
+                    <div style={{ textAlign: 'center' }}>
+                        <strong>{text.deletions}</strong>
+                        <div>{dels}</div>
                     </div>
-                    <div>
-                        <strong>{text.insertions}</strong> {ins}
+                    <div style={{ textAlign: 'center' }}>
+                        <strong>{text.insertions}</strong>
+                        <div>{ins}</div>
                     </div>
                 </div>
             )}
+
 
             {badIpa && (
-                <div style={{ marginTop: '1rem' }}>
+                <div
+                    style={{
+                        display: 'grid',
+                        gridTemplateColumns: '1fr 1fr',
+                        gap: '1.5rem',
+                        marginTop: '1.5rem',
+                        padding: '1rem',
+                        background: '#f9f9f9',
+                        borderRadius: 8,
+                        boxShadow: '0 1px 4px rgba(0,0,0,0.05)'
+                    }}
+                >
+                    {/* Expected phonemes */}
+                    <div>
+                        <div style={{ fontWeight: 'bold', marginBottom: '0.5rem' }}>✅ Forventet uttale</div>
+                        <ul style={{ listStyle: 'disc', paddingLeft: '1.2rem', margin: 0 }}>
+                            {tokenizeIPA(badIpa.expected).map((p, idx) => {
+                                const hint = getPhonemeHint(p);
+                                return (
+                                    <li key={`expected-${idx}`}>
+                                        <strong>{p}</strong>: {hint ?? '(ingen forklaring)'}
+                                    </li>
+                                );
+                            })}
+                        </ul>
+                    </div>
 
-                    <div style={{ display: 'flex', gap: '2rem', marginTop: '1rem' }}>
-                        {/* Expected phonemes */}
-                        <div style={{ flex: 1 }}>
-                            <strong>Forventet uttale:</strong>
-                            <ul style={{ marginTop: '0.25rem', paddingLeft: '1.2rem' }}>
-                                {tokenizeIPA(badIpa.expected).map((p, idx) => {
-                                    const hint = getPhonemeHint(p);
-                                    return (
-                                        <li key={`expected-${idx}`}>
-                                            <strong>{p}</strong>: {hint ?? '(ingen forklaring)'}
-                                        </li>
-                                    );
-                                })}
-                            </ul>
-                        </div>
-
-                        {/* Heard phonemes */}
-                        <div style={{ flex: 1 }}>
-                            <strong>Du sa:</strong>
-                            <ul style={{ marginTop: '0.25rem', paddingLeft: '1.2rem' }}>
-                                {tokenizeIPA(badIpa.heard).map((p, idx) => {
-                                    const hint = getPhonemeHint(p);
-                                    return (
-                                        <li key={`heard-${idx}`}>
-                                            <strong>{p}</strong>: {hint ?? '(ingen forklaring)'}
-                                        </li>
-                                    );
-                                })}
-                            </ul>
-                        </div>
+                    {/* Heard phonemes */}
+                    <div>
+                        <div style={{ fontWeight: 'bold', marginBottom: '0.5rem' }}>🗣️ Du sa</div>
+                        <ul style={{ listStyle: 'disc', paddingLeft: '1.2rem', margin: 0 }}>
+                            {tokenizeIPA(badIpa.heard).map((p, idx) => {
+                                const hint = getPhonemeHint(p);
+                                return (
+                                    <li key={`heard-${idx}`}>
+                                        <strong>{p}</strong>: {hint ?? '(ingen forklaring)'}
+                                    </li>
+                                );
+                            })}
+                        </ul>
                     </div>
                 </div>
             )}
+
 
 
             {tooltipIdx !== null && badIpa?.wordIdx === tooltipIdx && (
                 <div
                     style={{
-                        margin: '1rem 0',
-                        padding: '0.75rem',
-                        background: '#fff8e1',
-                        borderRadius: 4
+                        margin: '1.5rem 0',
+                        padding: '1rem 1.25rem',
+                        background: '#fffdf3',
+                        borderLeft: '4px solid #ffd54f',
+                        borderRadius: 6,
+                        boxShadow: '0 1px 4px rgba(0,0,0,0.05)'
                     }}
                 >
-                    <p style={{ margin: 0, fontWeight: 'bold' }}>
-                        Tips for «{words[tooltipIdx].replace(/[?.!]/g, '')}»:
+                    <p style={{ margin: 0, fontWeight: 'bold', fontSize: '1.1rem' }}>
+                        💡 Tips for <em>«{words[tooltipIdx].replace(/[?.!]/g, '')}»</em>:
                     </p>
 
-                    <p style={{ margin: '0.25rem 0 0' }}>
+                    <p style={{ marginTop: '0.5rem' }}>
                         {getAdvice(words[tooltipIdx].replace(/[?.!]/g, '')) ||
                             'Prøv å uttale ordet saktere og tydelig.'}
                     </p>
 
-                    <ul style={{ marginTop: '0.5rem', paddingLeft: '1.2rem' }}>
+                    <ul style={{ marginTop: '0.75rem', paddingLeft: '1.2rem' }}>
                         {tokenizeIPA(badIpa.expected).map((p, idx) => {
                             const hint = getPhonemeHint(p);
                             return hint ? (
@@ -627,6 +839,7 @@ const AudioRecorder: React.FC<Props> = ({
                     </ul>
                 </div>
             )}
+
 
 
 

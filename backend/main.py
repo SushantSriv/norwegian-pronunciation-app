@@ -1,19 +1,21 @@
 # -*- coding: utf-8 -*-
-# Development-only: slå av SSL-sjekk så Whisper kan laste modeller bak proxy
-import ssl, os, uuid
-ssl._create_default_https_context = ssl._create_unverified_context
-
+import ssl, io
+import uuid
 from fastapi import FastAPI, File, UploadFile, Form
 from fastapi.middleware.cors import CORSMiddleware
 import whisper
 from pydub import AudioSegment
+import numpy as np
 from jiwer import wer, process_words, Strip, RemovePunctuation, ToLowerCase, Compose
-from phonemizer import phonemize        # ← NYTT
+from phonemizer import phonemize
 
-# ─────────────────────────── 1) Whisper-modell ────────────────────────────
+# ───── Disable SSL checks behind proxy ─────────────────────────────────────
+ssl._create_default_https_context = ssl._create_unverified_context
+
+# ───── Load Whisper model ─────────────────────────────────────────────────
 model = whisper.load_model("medium")
 
-# ─────────────────────────── 2) FastAPI + CORS ────────────────────────────
+# ───── FastAPI + CORS ─────────────────────────────────────────────────────
 app = FastAPI()
 app.add_middleware(
     CORSMiddleware,
@@ -22,14 +24,10 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
-UPLOAD_DIR = "uploads"
-os.makedirs(UPLOAD_DIR, exist_ok=True)
-
-# ─────────────────────────── 3) Hjelper: tekst-norm & IPA ─────────────────
+# ───── Helpers ─────────────────────────────────────────────────────────────
 _normalize = Compose([Strip(), RemovePunctuation(), ToLowerCase()])
 
 def to_ipa(word: str) -> str:
-    """Konverter ett norsk ord til IPA-strengen via eSpeak-NG."""
     return phonemize(
         word,
         language="nb",
@@ -38,28 +36,32 @@ def to_ipa(word: str) -> str:
         preserve_punctuation=True,
     )
 
-# ─────────────────────────── 4) Endepunkt ────────────────────────────────
+# ───── Endpoint ────────────────────────────────────────────────────────────
 @app.post("/upload-audio/")
 async def upload_audio(
     audio: UploadFile = File(...),
     expected: str     = Form(...)
 ):
-    # 4.1  lagre råfil
-    ext      = os.path.splitext(audio.filename)[1] or ".webm"
-    audio_id = f"{uuid.uuid4()}{ext}"
-    in_path  = os.path.join(UPLOAD_DIR, audio_id)
-    with open(in_path, "wb") as f:
-        f.write(await audio.read())
+    # 1️⃣ Read upload into memory
+    webm_bytes = await audio.read()
+    webm_io = io.BytesIO(webm_bytes)
 
-    # 4.2  padding + resample → 16 kHz mono
-    raw    = AudioSegment.from_file(in_path)
-    padded = AudioSegment.silent(duration=300) + raw + AudioSegment.silent(duration=300)
-    wav_path = in_path + ".wav"
-    padded.set_frame_rate(16_000).set_channels(1).export(wav_path, format="wav")
+    # 2️⃣ Decode and pad via pydub, resample to 16 kHz mono
+    raw = AudioSegment.from_file(webm_io, format="webm")
+    padded = (
+        AudioSegment.silent(300)
+        + raw
+        + AudioSegment.silent(300)
+    ).set_frame_rate(16_000).set_channels(1)
 
-    # 4.3  Whisper-transkripsjon
+    # 3️⃣ Convert to float32 NumPy array in [–1,1]
+    samples = np.array(padded.get_array_of_samples(), dtype=np.float32)
+    # pydub samples are int16, so normalize:
+    samples /= np.iinfo(padded.array_type).max  # typically 32767
+
+    # 4️⃣ Transcribe from NumPy array
     result = model.transcribe(
-        wav_path,
+        samples,
         language="no",
         beam_size=5,
         best_of=5,
@@ -68,17 +70,16 @@ async def upload_audio(
     )
     transcript = result["text"].strip()
 
-    # 4.4  WER
+    # 5️⃣ Compute WER & counts
     clean_truth = _normalize(expected)
     clean_hyp   = _normalize(transcript)
     error_rate  = wer(clean_truth, clean_hyp)
     metrics     = process_words(clean_truth, clean_hyp)
     subs, dels, ins = metrics.substitutions, metrics.deletions, metrics.insertions
 
-    # 4.5  «Quick-and-dirty» fonem-feedback
+    # 6️⃣ Quick phoneme feedback
     truth_words = expected.split()
     hyp_words   = transcript.split()
-
     bad_word_info = {"bad_word": None}
     for idx, (t_word, h_word) in enumerate(zip(truth_words, hyp_words)):
         if t_word.lower() != h_word.lower():
@@ -86,19 +87,18 @@ async def upload_audio(
                 "bad_word":      t_word,
                 "expected_ipa":  to_ipa(t_word),
                 "heard_ipa":     to_ipa(h_word),
-                "word_index":    idx,        # kan brukes til highlight i UI
+                "word_index":    idx,
             }
             break
 
-    # 4.6  JSON-respons
+    # 7️⃣ Return JSON
     return {
-        "filename":      audio_id,
         "expected":      expected,
         "transcript":    transcript,
         "wer":           error_rate,
         "substitutions": subs,
         "deletions":     dels,
         "insertions":    ins,
-        **bad_word_info,                    # fletter inn IPA-felt
-        "detail":        "Transkripsjon + WER + enkel IPA-feedback"
+        **bad_word_info,
+        "detail":        "Transcription + WER + IPA feedback"
     }
