@@ -2,6 +2,7 @@
   "ExpandedNodes": [
     "",
     "\\src",
+    "\\src\\assets",
     "\\src\\components",
     "\\src\\context",
     "\\src\\data",
@@ -9,6 +10,6 @@
     "\\src\\types",
     "\\src\\utils"
   ],
-  "SelectedNode": "\\src\\index.css",
+  "SelectedNode": "\\src\\SnowTest.tsx",
   "PreviewInSolutionExplorer": false
 }

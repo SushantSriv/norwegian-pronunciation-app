@@ -13,7 +13,7 @@ from phonemizer import phonemize
 ssl._create_default_https_context = ssl._create_unverified_context
 
 # ───── Load Whisper model ─────────────────────────────────────────────────
-model = whisper.load_model("medium")
+model = whisper.load_model("small")
 
 # ───── FastAPI + CORS ─────────────────────────────────────────────────────
 app = FastAPI()
