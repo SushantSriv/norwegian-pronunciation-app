@@ -6,6 +6,7 @@ import { MooseMascot } from './components/MooseMascot';
 import './index.css';
 import type { Texts } from './types/Texts';
 import rawSentenceData from './data/sentences.json';
+import { useAppStatus } from './hooks/useAppStatus'; 
 
 const sentencePools = rawSentenceData.levels;
 
@@ -57,6 +58,7 @@ const App: React.FC = () => {
     const [lang, setLang] = useState<'nb' | 'en'>('nb');
     const [dialect, setDialect] = useState(DIALECTS[0]);
     const t = TRANSLATIONS[lang];
+    const [status] = useAppStatus();
 
     return (
         <>
@@ -66,9 +68,12 @@ const App: React.FC = () => {
             </div>
 
             {/* Maskotten i hjørnet */}
-            <div className="moose-wrapper">
-                <MooseMascot />
-            </div>
+            {status !== 'welcome' && (
+                <div className="moose-wrapper">
+                    <MooseMascot />
+                </div>
+            )}
+
 
             {/* Resten av app-innholdet ligger over bakgrunnen */}
             <div

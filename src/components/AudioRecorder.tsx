@@ -346,26 +346,64 @@ const AudioRecorder: React.FC<Props> = ({
 
     // Render: ask name
     if (!askedName) {
-        return (
-            <div style={{ padding: 20 }}>
-                <h2>Welcome! What’s your name?</h2>
+    return (
+        <div
+            style={{
+                position: 'absolute',
+                top: '50%',
+                left: '50%',
+                transform: 'translate(-50%, -50%)',
+                textAlign: 'center',
+                zIndex: 10,
+            }}
+        >
+            <div style={{ marginBottom: '1.5rem' }}>
+                <img
+                    src="/src/assets/mascot/mascot_welcome.png"
+                    alt="Moose welcome"
+                    style={{ width: '400px', userSelect: 'none', pointerEvents: 'none' }}
+                />
+            </div>
+
+            <h2 style={{ fontSize: '1.6rem', marginBottom: '1rem' }}>Welcome! What’s your name?</h2>
+
+            <div style={{ display: 'flex', gap: '0.5rem', justifyContent: 'center' }}>
                 <input
                     type="text"
                     value={userName}
                     onChange={e => setUserName(e.target.value)}
                     placeholder="Your name"
-                    style={{ fontSize: '1.2rem', padding: '0.5rem' }}
+                    style={{
+                        fontSize: '1.2rem',
+                        padding: '0.5rem',
+                        borderRadius: 6,
+                        border: '1px solid #ccc',
+                    }}
                 />
                 <button
                     disabled={!userName.trim()}
-                    onClick={() => { setAskedName(true); setStatus('idle'); }}
-                    style={{ marginLeft: 10, padding: '0.5rem 1rem' }}
+                    onClick={() => {
+                        setAskedName(true);
+                        setStatus('idle');
+                    }}
+                    style={{
+                        fontSize: '1.2rem',
+                        padding: '0.5rem 1rem',
+                        borderRadius: 6,
+                        background: '#1976d2',
+                        color: '#fff',
+                        border: 'none',
+                        cursor: 'pointer',
+                    }}
                 >
                     Start
                 </button>
             </div>
-        );
-    }
+        </div>
+    );
+}
+
+
 
     if (finished && summary) {
         return (

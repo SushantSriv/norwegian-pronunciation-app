@@ -45,17 +45,15 @@ const anim: Record<string, Variants> = {
 export const MooseMascot: React.FC = () => {
     const [status] = useAppStatus();
 
+    const isWelcome = status === 'welcome';
+
     return (
         <motion.img
             src={sprite[status] ?? mooseNeutral}
             variants={anim[status] ?? anim.idle}
-            initial={false} // 🔄 viktig! ikke bruk default animasjon med scale: 0
+            initial="vis"
             animate="vis"
-            style={{
-                width: 120,
-                userSelect: 'none',
-                pointerEvents: 'none'
-            }}
+            className={isWelcome ? 'moose-welcome' : 'moose-default'}
             alt="Moose mascot"
         />
     );

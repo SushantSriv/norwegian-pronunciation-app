@@ -151,11 +151,23 @@ html, body, #root {
 /* ───────────────────────────────────────────── */
 /* Moose-maskotten */
 
-.moose-wrapper {
+.moose-default {
     position: fixed;
-    top: 20px;
-    right: 20px;
+    top: 10%;
+    left: 81%;
     z-index: 1000;
+    width: 350px;
     pointer-events: none;
-    transform: translateY(0);
+    user-select: none;
+}
+
+.moose-welcome {
+    position: absolute;
+    top: 22%;
+    left: 43%;
+    transform: translateX(-50%);
+    z-index: 9;
+    width: 400px;
+    pointer-events: none;
+    user-select: none;
 }

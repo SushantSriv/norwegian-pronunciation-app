@@ -1,13 +1,16 @@
 {
   "ExpandedNodes": [
     "",
-    "\\backend",
-    "\\public",
     "\\src",
+    "\\src\\assets\\bg",
+    "\\src\\assets\\mascot",
     "\\src\\components",
+    "\\src\\context",
     "\\src\\data",
+    "\\src\\hooks",
+    "\\src\\types",
     "\\src\\utils"
   ],
-  "SelectedNode": "\\src\\utils\\ipaTokenizer.ts",
+  "SelectedNode": "\\src\\App.tsx",
   "PreviewInSolutionExplorer": false
 }
