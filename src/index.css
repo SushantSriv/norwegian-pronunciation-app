@@ -1,27 +1,30 @@
-﻿/* Gjør root full høyde og gir lys bakgrunn */
-html, body, #root {
+﻿/* ───────── 1. Grunn-reset & typografi ───────────────────────── */
+
+html,
+body,
+#root {
     height: 100%;
     margin: 0;
     font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
-    background-color: transparent; /* Viktig: lar bakgrunn være synlig */
-    overflow-x: hidden;
+    background-color: transparent; /* lar parallax-bakgrunnen være synlig */
+    overflow-x: hidden; /* hindrer horisontal scroll når lagene er >100 vw */
 }
 
-/* Reset boksmodell og fjerner margin/padding */
 * {
     box-sizing: border-box;
     margin: 0;
     padding: 0;
 }
 
-/* Pulse-effekt for indikator */
+/* ───────── 2. Små hjelpe-animasjoner (pulse, confetti, fade) ─ */
+
 .pulse-dot {
     position: absolute;
     top: 50%;
     right: 1rem;
     width: 10px;
     height: 10px;
-    background-color: red;
+    background: red;
     border-radius: 50%;
     animation: pulse 1.2s infinite;
     transform: translateY(-50%);
@@ -34,7 +37,7 @@ html, body, #root {
     }
 
     50% {
-        opacity: 0.6;
+        opacity: .6;
         transform: scale(1.5);
     }
 
@@ -44,9 +47,8 @@ html, body, #root {
     }
 }
 
-/* Tilbakemeldings-fade & konfetti */
 .feedback {
-    animation: fadeIn 0.6s ease;
+    animation: fadeIn .6s ease;
     font-weight: 600;
     text-align: center;
 }
@@ -62,7 +64,7 @@ html, body, #root {
 @keyframes fadeIn {
     from {
         opacity: 0;
-        transform: scale(0.9);
+        transform: scale(.9);
     }
 
     to {
@@ -71,7 +73,6 @@ html, body, #root {
     }
 }
 
-/* Enkel konfetti-effekt */
 .confetti {
     position: fixed;
     top: -10vh;
@@ -79,95 +80,113 @@ html, body, #root {
     width: 8px;
     height: 8px;
     background: hsl(var(--h) 70% 55%);
-    animation: confFall 2.8s cubic-bezier(0.35,0,0.2,1) forwards;
+    animation: confFall 2.8s cubic-bezier(.35,0,.2,1) forwards;
     z-index: 5;
 }
 
 @keyframes confFall {
-    0% {
-        transform: translateX(0) rotate(0deg);
+    from {
+        transform: translateX(0) rotate(0);
         opacity: 1;
     }
 
-    100% {
+    to {
         transform: translateX(40vw) translateY(110vh) rotate(720deg);
         opacity: 0;
     }
 }
 
-/* ───────────────────────────────────────────── */
-/* Parallax bakgrunn */
+/* ───────── 3. Parallax-bakgrunn ─────────────────────────────── */
 
 #parallax {
     position: fixed;
     inset: 0;
-    width: 100vw;
-    height: 100vh;
     perspective: 800px;
     z-index: -10;
     overflow: hidden;
 }
 
+/* Felles for alle lag */
 .bg {
     position: absolute;
     inset: 0;
-    width: 100%;
     height: 100%;
     object-fit: cover;
+    will-change: transform;
 }
 
+    /* Mindre skalering – men nok til å skjule kanter */
     .bg.far {
         z-index: -5;
-        transform: translateZ(-2px) scale(3);
-        animation: drift 60s linear infinite reverse;
+        min-width: 140vw; /* scale(1.4) */
+        transform: translateZ(-2px) scale(1.4);
+        animation: driftFar 60s linear infinite reverse;
     }
 
     .bg.mid {
         z-index: -4;
-        transform: translateZ(-1px) scale(2);
-        animation: drift 45s linear infinite;
+        min-width: 130vw; /* scale(1.3) */
+        transform: translateZ(-1px) scale(1.3);
+        animation: driftMid 45s linear infinite;
     }
 
     .bg.fore {
-        transform: translateZ(0) translateY(30px); /* ⬅️ flytt 30px nedover */
-        animation: drift 30s linear infinite reverse;
+        z-index: -3;
+        min-width: 120vw; /* scale(1.2) */
+        transform: translateZ(0) scale(1.2) translateY(30px);
+        animation: driftFore 40s linear infinite;
     }
 
-@keyframes drift {
+/* Justerte keyframes med riktig transform beholdt */
+@keyframes driftFar {
     0% {
-        transform: translateX(0);
+        transform: translateX(0) translateZ(-2px) scale(1.4);
     }
 
     100% {
-        transform: translateX(-800px);
+        transform: translateX(-15vw) translateZ(-2px) scale(1.4);
     }
 }
 
-/* Tving partikkel-canvas under maskott og UI */
-#snow canvas {
-    z-index: -2 !important;
+@keyframes driftMid {
+    0% {
+        transform: translateX(0) translateZ(-1px) scale(1.3);
+    }
+
+    100% {
+        transform: translateX(-20vw) translateZ(-1px) scale(1.3);
+    }
 }
 
-/* ───────────────────────────────────────────── */
-/* Moose-maskotten */
+@keyframes driftFore {
+    0% {
+        transform: translateX(0) translateZ(0) scale(1.2) translateY(30px);
+    }
+
+    100% {
+        transform: translateX(-25vw) translateZ(0) scale(1.2) translateY(30px);
+    }
+}
+
+/* ───────── 4. Moose-maskott ─────────────────────────────────── */
 
 .moose-default {
     position: fixed;
     top: 10%;
-    left: 81%;
-    z-index: 1000;
-    width: 350px;
+    right: 0%; /* litt inn fra høyrekant */
+    width: 350px; /* normal størrelse */
     pointer-events: none;
     user-select: none;
+    z-index: 1000;
 }
 
 .moose-welcome {
     position: absolute;
     top: 22%;
-    left: 43%;
+    left: 50%;
     transform: translateX(-50%);
-    z-index: 9;
-    width: 400px;
+    width: 400px; /* litt større under velkomst */
     pointer-events: none;
     user-select: none;
+    z-index: 1000;
 }
