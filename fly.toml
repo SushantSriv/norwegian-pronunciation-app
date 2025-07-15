@@ -7,6 +7,8 @@ app = 'norwegian-pronunciation-app'
 primary_region = 'arn'
 
 [build]
+  dockerfile = "backend/Dockerfile"
+  context = "./backend"
 
 [http_service]
   internal_port = 8080
