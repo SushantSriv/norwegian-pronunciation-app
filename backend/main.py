@@ -8,6 +8,8 @@ from pydub import AudioSegment
 import numpy as np
 from jiwer import wer, process_words, Strip, RemovePunctuation, ToLowerCase, Compose
 from phonemizer import phonemize
+from fastapi.staticfiles import StaticFiles
+from fastapi.responses import FileResponse
 
 # ───── Disable SSL checks behind proxy ─────────────────────────────────────
 ssl._create_default_https_context = ssl._create_unverified_context
@@ -23,6 +25,8 @@ app.add_middleware(
     allow_methods=["*"],
     allow_headers=["*"],
 )
+# Serve built frontend (Vite build output)
+app.mount("/assets", StaticFiles(directory="frontend-build/assets"), name="assets")
 
 # ───── Helpers ─────────────────────────────────────────────────────────────
 _normalize = Compose([Strip(), RemovePunctuation(), ToLowerCase()])
@@ -102,3 +106,7 @@ async def upload_audio(
         **bad_word_info,
         "detail":        "Transcription + WER + IPA feedback"
     }
+
+@app.get("/")
+def serve_index():
+    return FileResponse("frontend-build/index.html")
