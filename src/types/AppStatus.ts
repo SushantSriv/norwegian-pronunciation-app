@@ -4,4 +4,6 @@ export type Status =
     | 'listening'
     | 'success'
     | 'partialFail'
-    | 'fail';
+    | 'fail'
+    | 'processing'
+    | 'error';

@@ -6,7 +6,9 @@ import { MooseMascot } from './components/MooseMascot';
 import './index.css';
 import type { Texts } from './types/Texts';
 import rawSentenceData from './data/sentences.json';
-import { useAppStatus } from './hooks/useAppStatus'; 
+import { useAppStatus } from './hooks/useAppStatus';
+import snowPNG from '../src/assets/particles/snowflake.png?url';
+import Particles from 'react-tsparticles';
 
 const sentencePools = rawSentenceData.levels;
 
@@ -67,15 +69,41 @@ const App: React.FC = () => {
                 <Parallax />
             </div>
 
-            {/* Maskotten i hjørnet */}
-            {status !== 'welcome' && (
-                <div className="moose-wrapper">
-                    <MooseMascot />
-                </div>
-            )}
+            {/* SNØ – vises over bakgrunn, men bak innhold */}
+            <Particles
+                id="snow"
+                style={{
+                    position: 'fixed',
+                    top: 0,
+                    left: 0,
+                    width: '100vw',
+                    height: '100vh',
+                    zIndex: -2,
+                    pointerEvents: 'none',
+                }}
+                options={{
+                    fullScreen: { enable: false }, 
+                    fpsLimit: 60,
+                    particles: {
+                        number: { value: 120 },
+                        size: { value: { min: 2, max: 5 } },
+                        move: { enable: true, speed: 0.3, direction: 'bottom' },
+                        shape: {
+                            type: 'image',
+                            image: {
+                                src: snowPNG,
+                                width: 32,
+                                height: 32
+                            }
+                        },
+                        opacity: { value: { min: 0.3, max: 0.9 } },
+                    },
+                }}
+            />
 
+        
 
-            {/* Resten av app-innholdet ligger over bakgrunnen */}
+            {/* Hovedinnhold sentrert */}
             <div
                 style={{
                     display: 'flex',
@@ -83,63 +111,81 @@ const App: React.FC = () => {
                     height: '100%',
                     position: 'relative',
                     zIndex: 1,
+                    alignItems: 'center', // sentrerer alt horisontalt
                 }}
             >
-                {/* Header */}
-                <header
-                    style={{
-                        backgroundColor: '#fff',
-                        padding: '1rem 2rem',
-                        boxShadow: '0 2px 4px rgba(0,0,0,0.1)',
-                    }}
-                >
-                    <div
+                <div style={{ position: 'relative', width: '100%', maxWidth: 900 }}>
+                    {/* Maskott i hjørnet av containeren */}
+                    {status !== 'welcome' && (
+                        <div style={{
+                            position: 'absolute',
+                            top: '20px',
+                            right: '-100px',
+                            width: '350px',
+                            pointerEvents: 'none',
+                            userSelect: 'none',
+                            zIndex: 10
+                        }}>
+                            <MooseMascot />
+                        </div>
+                    )}
+
+                    {/* Header */}
+                    <header
                         style={{
-                            maxWidth: 1200,
-                            margin: '0 auto',
-                            display: 'flex',
-                            justifyContent: 'space-between',
-                            alignItems: 'center',
+                            backgroundColor: '#fff',
+                            padding: '1rem 2rem',
+                            boxShadow: '0 2px 4px rgba(0,0,0,0.1)',
                         }}
                     >
-                        <h1 style={{ fontSize: '1.8rem', color: '#333' }}>{t.title}</h1>
+                        <div
+                            style={{
+                                maxWidth: 1200,
+                                margin: '0 auto',
+                                display: 'flex',
+                                justifyContent: 'space-between',
+                                alignItems: 'center',
+                            }}
+                        >
+                            <h1 style={{ fontSize: '1.8rem', color: '#333' }}>{t.title}</h1>
 
-                        <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
-                            <label style={{ color: '#555', fontSize: '0.9rem' }}>{t.languageLabel}</label>
+                            <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
+                                <label style={{ color: '#555', fontSize: '0.9rem' }}>{t.languageLabel}</label>
 
-                            <select
-                                value={lang}
-                                onChange={(e) => setLang(e.target.value as 'nb' | 'en')}
-                                style={{
-                                    padding: '0.3rem 0.5rem',
-                                    borderRadius: 4,
-                                    border: '1px solid #ccc',
-                                    background: '#fff',
-                                    color: '#333',
-                                }}
-                            >
-                                <option value="nb">Norsk</option>
-                                <option value="en">English</option>
-                            </select>
+                                <select
+                                    value={lang}
+                                    onChange={(e) => setLang(e.target.value as 'nb' | 'en')}
+                                    style={{
+                                        padding: '0.3rem 0.5rem',
+                                        borderRadius: 4,
+                                        border: '1px solid #ccc',
+                                        background: '#fff',
+                                        color: '#333',
+                                    }}
+                                >
+                                    <option value="nb">Norsk</option>
+                                    <option value="en">English</option>
+                                </select>
+                            </div>
                         </div>
-                    </div>
-                </header>
+                    </header>
 
-                {/* Main content */}
-                <main style={{ flex: 1, overflowY: 'auto', padding: '2rem 1rem' }}>
-                    <div style={{ maxWidth: 1200, margin: '0 auto' }}>
-                        <AudioRecorder
-                            sentencePools={sentencePools}
-                            text={t}
-                            dialects={DIALECTS}
-                            currentDialect={dialect}
-                            onDialectChange={setDialect}
-                        />
-                    </div>
-                </main>
+                    {/* Main content */}
+                    <main style={{ flex: 1, overflowY: 'auto', padding: '2rem 1rem' }}>
+                        <div style={{ maxWidth: 1200, margin: '0 auto' }}>
+                            <AudioRecorder
+                                sentencePools={sentencePools}
+                                text={t}
+                                dialects={DIALECTS}
+                                currentDialect={dialect}
+                                onDialectChange={setDialect}
+                            />
+                        </div>
+                    </main>
+                </div>
             </div>
         </>
     );
-};
+}
 
 export default App;

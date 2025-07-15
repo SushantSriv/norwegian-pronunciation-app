@@ -172,17 +172,22 @@ body,
 
 .moose-default {
     position: fixed;
-    top: 10%;
-    right: 0%; /* litt inn fra høyrekant */
-    width: 350px; /* normal størrelse */
+    top: 10px; /* ← senker maskotten nærmere innhold */
+    right: -0px;
+    width: 320px; /* valgfritt: mindre bredde gir bedre tilpasning */
     pointer-events: none;
     user-select: none;
-    z-index: 1000;
+    z-index: 100;
 }
+
+    .moose-default.processing,
+    .moose-default.error {
+        width: 350px;
+    }
 
 .moose-welcome {
     position: absolute;
-    top: 22%;
+    top: 100%;
     left: 50%;
     transform: translateX(-50%);
     width: 400px; /* litt større under velkomst */

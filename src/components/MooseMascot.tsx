@@ -1,4 +1,4 @@
-﻿/* src/components/MooseMascot.tsx */
+/* src/components/MooseMascot.tsx */
 import { motion } from 'framer-motion';
 import type { Variants } from 'framer-motion';
 import { useAppStatus } from '../hooks/useAppStatus';
@@ -9,6 +9,9 @@ import mooseListening from '../assets/mascot/mascot_listening.png';
 import mooseHappy from '../assets/mascot/mascot_happy.png';
 import mooseSad from '../assets/mascot/mascot_sad.png';
 import mooseWelcome from '../assets/mascot/mascot_welcome.png';
+import mooseProcessing from '../assets/mascot/mascot_processing.png';
+import mooseError from '../assets/mascot/mascot_error.png';
+
 
 /* ---- interne konstanter, men IKKE med “export” ---- */
 const sprite: Record<string, string> = {
@@ -18,6 +21,8 @@ const sprite: Record<string, string> = {
     success: mooseHappy,
     partialFail: mooseSad,
     fail: mooseSad,
+    processing: mooseProcessing,
+    error: mooseError,
 };
 
 const anim: Record<string, Variants> = {
@@ -32,6 +37,12 @@ const anim: Record<string, Variants> = {
     },
     fail: {
         vis: { rotate: [0, 5, -5, 5, -5, 0], transition: { duration: 1 } }
+    },
+    processing: {
+        vis: { rotate: [0, 8, -8, 8, -8, 0], transition: { repeat: Infinity, duration: 1.4 } }
+    },
+    error: {
+        vis: { scale: [1, 0.95, 1], transition: { repeat: Infinity, duration: 0.6 } }
     },
     welcome: {
         vis: { scale: [1, 1.1, 1], transition: { duration: 1 } } // 🔄 start på 1 i stedet for 0

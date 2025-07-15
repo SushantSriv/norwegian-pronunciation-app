@@ -2,8 +2,6 @@
   "ExpandedNodes": [
     "",
     "\\src",
-    "\\src\\assets\\bg",
-    "\\src\\assets\\mascot",
     "\\src\\components",
     "\\src\\context",
     "\\src\\data",
@@ -11,6 +9,6 @@
     "\\src\\types",
     "\\src\\utils"
   ],
-  "SelectedNode": "\\src\\components\\AudioRecorder.tsx",
+  "SelectedNode": "\\src\\index.css",
   "PreviewInSolutionExplorer": false
 }

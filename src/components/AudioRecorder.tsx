@@ -145,6 +145,8 @@ const AudioRecorder: React.FC<Props> = ({
         setErrors(new Set());
         setTooltipIdx(null);
         setFeedback(null);
+        setBadIpa(null);       // ← viktig!
+        setZoomIndex(-1);      // ← tilbakestill zoom
     }, []);
 
     const advanceOrRepeat = useCallback(() => {
@@ -236,7 +238,7 @@ const AudioRecorder: React.FC<Props> = ({
             mr.onerror = handleStop;
             mr.start();
             setRecording(true);
-            setStatus('listening');
+            setStatus('listening'); 
         } catch (err) {
             console.error(err);
             alert("⚠️ Mic access is required to record. Please enable microphone permission.");
@@ -257,9 +259,9 @@ const AudioRecorder: React.FC<Props> = ({
                 if (prev === null) { clearInterval(tick); return null; }
                 if (prev <= 1) {
                     clearInterval(tick);
-                    setCountdown(null);
                     startRecordingInternal();
-                    return null;
+                    setTimeout(() => setCountdown(null), 100); // ← delay
+                    return 0;
                 }
                 return prev - 1;
             });
@@ -272,21 +274,39 @@ const AudioRecorder: React.FC<Props> = ({
     };
 
     const handleStop = async () => {
+        // Vi har stoppet opptak → vis «spinner»-elg og loader-state
         setRecording(false);
-        setStatus('idle'); 
+        setStatus('processing');   // ← vis «processing»-maskott
         setProcessing(true);
+
+        // Bygg blob og send til back-end
         const blob = new Blob(audioChunks.current, { type: 'audio/webm' });
         audioChunks.current = [];
-        if (blob.size === 0) { setProcessing(false); return; }
+        if (blob.size === 0) {
+            setProcessing(false);
+            return;
+        }
+
         try {
             const form = new FormData();
             form.append('audio', blob, 'rec.webm');
             form.append('expected', expected);
-            const res = await fetch('http://localhost:8000/upload-audio/', { method: 'POST', body: form });
+
+            const res = await fetch('http://localhost:8000/upload-audio/', {
+                method: 'POST',
+                body: form,
+            });
+
             const data = await res.json();
-            if (!res.ok) throw new Error(data.detail || res.statusText);
+            if (!res.ok) {
+                // Server svarte med feilkode
+                console.error('Server error:', data);
+                setStatus('error');    // ← vis «error»-maskott
+                throw new Error(data.detail || res.statusText);
+            }
+
+            // OK! Oppdater alle egne states
             setAudioURL(URL.createObjectURL(blob));
-            // set states
             setBadIpa(
                 data.bad_word
                     ? { expected: data.expected_ipa, heard: data.heard_ipa, wordIdx: data.word_index }
@@ -298,13 +318,26 @@ const AudioRecorder: React.FC<Props> = ({
             setSubs(data.substitutions);
             setDels(data.deletions);
             setIns(data.insertions);
-            // append history
+
+            // Legg inn i historikk
             setHistory(h => [
                 ...h,
-                { wer: data.wer, badWord: data.bad_word ? data.bad_word : undefined }
+                { wer: data.wer, badWord: data.bad_word ?? undefined }
             ]);
+
+            // Sett maskott-status basert på resultat
+            if (data.wer <= THRESHOLDS[difficulty]) {
+                setStatus('success');
+            } else if (data.bad_word) {
+                setStatus('partialFail');
+            } else {
+                setStatus('fail');
+            }
         } catch (err) {
+            // Nettverksfeil eller kastet over
             console.error(err);
+            setStatus('error');
+            setFeedback('fail');// ← vis «error»-maskott
         } finally {
             setProcessing(false);
         }
@@ -350,7 +383,7 @@ const AudioRecorder: React.FC<Props> = ({
         <div
             style={{
                 position: 'absolute',
-                top: '50%',
+                top: '100%',
                 left: '50%',
                 transform: 'translate(-50%, -50%)',
                 textAlign: 'center',
@@ -361,7 +394,7 @@ const AudioRecorder: React.FC<Props> = ({
                 <img
                     src="/src/assets/mascot/mascot_welcome.png"
                     alt="Moose welcome"
-                    style={{ width: '400px', userSelect: 'none', pointerEvents: 'none' }}
+                    className="moose-welcome"
                 />
             </div>
 
@@ -559,13 +592,14 @@ const AudioRecorder: React.FC<Props> = ({
                         exit={{ opacity: 0 }}
                         transition={{ duration: 0.5 }}
                         style={{
-                            position: 'absolute',
+                            position: 'fixed',
                             inset: 0,
                             background: 'rgba(255,255,255,0.85)',
                             display: 'flex',
                             alignItems: 'center',
                             justifyContent: 'center',
                             fontSize: '1.6rem',
+                            zIndex: 999, // ← viktig
                             pointerEvents: 'none'
                         }}
                     >
@@ -575,6 +609,33 @@ const AudioRecorder: React.FC<Props> = ({
                     </motion.div>
                 )}
             </AnimatePresence>
+
+            {/* Processing Overlay */}
+            <AnimatePresence>
+                {processing && (
+                    <motion.div
+                        key="processing"
+                        initial={{ opacity: 0, scale: 0.9 }}
+                        animate={{ opacity: 1, scale: 1 }}
+                        exit={{ opacity: 0 }}
+                        transition={{ duration: 0.4 }}
+                        style={{
+                            position: 'absolute',
+                            inset: 0,
+                            background: 'rgba(255,255,255,0.8)',
+                            display: 'flex',
+                            alignItems: 'center',
+                            justifyContent: 'center',
+                            fontSize: '1.6rem',
+                            fontWeight: 600,
+                            pointerEvents: 'none'
+                        }}
+                    >
+                        ⏳ Venter på resultat …
+                    </motion.div>
+                )}
+            </AnimatePresence>
+
 
             <div style={{
                 height: '8px',
@@ -722,18 +783,31 @@ const AudioRecorder: React.FC<Props> = ({
             </div>
 
 
-            {/* Expected sentence (sentrert) */}
+            {/* Expected sentence (i kort) */}
             <div
                 style={{
-                    margin: '1rem 0',
-                    display: 'flex',
-                    flexDirection: 'column',
-                    alignItems: 'center',
-                    textAlign: 'center'
+                    background: '#f5f5f5',
+                    border: '1px solid #ddd',
+                    borderRadius: '8px',
+                    padding: '1rem 1.5rem',
+                    margin: '1.5rem 0',
+                    textAlign: 'center',
+                    boxShadow: '0 2px 4px rgba(0,0,0,0.05)',
+                    maxWidth: '100%',
                 }}
             >
-                <strong>{text.expected}</strong>
-                <div style={{ marginTop: '0.5rem' }}>
+                <div style={{ fontSize: '1.1rem', fontWeight: 600, color: '#333', marginBottom: '0.5rem' }}>
+                    {text.expected}
+                </div>
+                <div style={{
+                    fontSize: '1.6rem',
+                    fontWeight: 500,
+                    color: '#222',
+                    display: 'flex',
+                    flexWrap: 'wrap',
+                    justifyContent: 'center',
+                    gap: '0.5rem'
+                }}>
                     {renderSentence()}
                 </div>
             </div>
