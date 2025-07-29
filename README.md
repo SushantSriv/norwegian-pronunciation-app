@@ -1,4 +1,4 @@
-﻿# Norwegian Pronunciation Coach 🗣️🇳🇴
+﻿# Norwegian Pronunciation Coach 🗣️
 A lightweight web app that lets you **record yourself, get instant feedback on Norwegian pronunciation, and level‑up sentence by sentence**.
 
 ---
