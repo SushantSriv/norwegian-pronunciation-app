@@ -3,7 +3,11 @@ FROM node:18 AS frontend
 WORKDIR /frontend
 COPY ./src ./src
 COPY ./public ./public
-COPY package.json vite.config.ts tsconfig.* ./
+COPY index.html vite.config.ts tsconfig.* tailwind.config.js postcss.config.js package.json ./
+# Same-origin deployment (frontend served by this FastAPI app): API calls are
+# relative, no absolute URL to bake in. Override at build time for other setups.
+ARG VITE_API_URL=""
+ENV VITE_API_URL=${VITE_API_URL}
 RUN npm install && npm run build
 
 # --- STEP 2: Backend base image ---
@@ -28,7 +32,7 @@ COPY backend/ .
 COPY --from=frontend /frontend/dist ./frontend-build
 
 # Expose port used by uvicorn
-EXPOSE 8080
+EXPOSE 8000
 
 # Start FastAPI
 CMD ["uvicorn", "main:app", "--host", "0.0.0.0", "--port", "8000"]
