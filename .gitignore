@@ -23,4 +23,4 @@ dist-ssr
 *.njsproj
 *.sln
 *.sw?
-/.vs/norwegian-pronunciation-app/FileContentIndex
+.vs/
