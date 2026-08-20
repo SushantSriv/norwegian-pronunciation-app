@@ -1,77 +1,19 @@
-﻿/* ───────── 1. Grunn-reset & typografi ───────────────────────── */
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+/* ───────── 1. Base layout ─────────────────────────────────── */
 
 html,
 body,
 #root {
     height: 100%;
-    margin: 0;
     font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
-    background-color: transparent; /* lar parallax-bakgrunnen være synlig */
-    overflow-x: hidden; /* hindrer horisontal scroll når lagene er >100 vw */
+    background-color: transparent; /* lets the parallax background show through */
+    overflow-x: hidden; /* the parallax layers are intentionally >100vw */
 }
 
-* {
-    box-sizing: border-box;
-    margin: 0;
-    padding: 0;
-}
-
-/* ───────── 2. Små hjelpe-animasjoner (pulse, confetti, fade) ─ */
-
-.pulse-dot {
-    position: absolute;
-    top: 50%;
-    right: 1rem;
-    width: 10px;
-    height: 10px;
-    background: red;
-    border-radius: 50%;
-    animation: pulse 1.2s infinite;
-    transform: translateY(-50%);
-}
-
-@keyframes pulse {
-    0% {
-        opacity: 1;
-        transform: scale(1);
-    }
-
-    50% {
-        opacity: .6;
-        transform: scale(1.5);
-    }
-
-    100% {
-        opacity: 1;
-        transform: scale(1);
-    }
-}
-
-.feedback {
-    animation: fadeIn .6s ease;
-    font-weight: 600;
-    text-align: center;
-}
-
-    .feedback.success {
-        color: #2e7d32;
-    }
-
-    .feedback.fail {
-        color: #c62828;
-    }
-
-@keyframes fadeIn {
-    from {
-        opacity: 0;
-        transform: scale(.9);
-    }
-
-    to {
-        opacity: 1;
-        transform: scale(1);
-    }
-}
+/* ───────── 2. Confetti ──────────────────────────────────────── */
 
 .confetti {
     position: fixed;
@@ -80,7 +22,7 @@ body,
     width: 8px;
     height: 8px;
     background: hsl(var(--h) 70% 55%);
-    animation: confFall 2.8s cubic-bezier(.35,0,.2,1) forwards;
+    animation: confFall 2.8s cubic-bezier(0.35, 0, 0.2, 1) forwards;
     z-index: 5;
 }
 
@@ -96,7 +38,7 @@ body,
     }
 }
 
-/* ───────── 3. Parallax-bakgrunn ─────────────────────────────── */
+/* ───────── 3. Parallax background ───────────────────────────── */
 
 #parallax {
     position: fixed;
@@ -106,7 +48,6 @@ body,
     overflow: hidden;
 }
 
-/* Felles for alle lag */
 .bg {
     position: absolute;
     inset: 0;
@@ -115,34 +56,31 @@ body,
     will-change: transform;
 }
 
-    /* Mindre skalering – men nok til å skjule kanter */
-    .bg.far {
-        z-index: -5;
-        min-width: 140vw; /* scale(1.4) */
-        transform: translateZ(-2px) scale(1.4);
-        animation: driftFar 60s linear infinite reverse;
-    }
+.bg.far {
+    z-index: -5;
+    min-width: 140vw;
+    transform: translateZ(-2px) scale(1.4);
+    animation: driftFar 60s linear infinite reverse;
+}
 
-    .bg.mid {
-        z-index: -4;
-        min-width: 130vw; /* scale(1.3) */
-        transform: translateZ(-1px) scale(1.3);
-        animation: driftMid 45s linear infinite;
-    }
+.bg.mid {
+    z-index: -4;
+    min-width: 130vw;
+    transform: translateZ(-1px) scale(1.3);
+    animation: driftMid 45s linear infinite;
+}
 
-    .bg.fore {
-        z-index: -3;
-        min-width: 120vw; /* scale(1.2) */
-        transform: translateZ(0) scale(1.2) translateY(30px);
-        animation: driftFore 40s linear infinite;
-    }
+.bg.fore {
+    z-index: -3;
+    min-width: 120vw;
+    transform: translateZ(0) scale(1.2) translateY(30px);
+    animation: driftFore 40s linear infinite;
+}
 
-/* Justerte keyframes med riktig transform beholdt */
 @keyframes driftFar {
     0% {
         transform: translateX(0) translateZ(-2px) scale(1.4);
     }
-
     100% {
         transform: translateX(-15vw) translateZ(-2px) scale(1.4);
     }
@@ -152,7 +90,6 @@ body,
     0% {
         transform: translateX(0) translateZ(-1px) scale(1.3);
     }
-
     100% {
         transform: translateX(-20vw) translateZ(-1px) scale(1.3);
     }
@@ -162,35 +99,69 @@ body,
     0% {
         transform: translateX(0) translateZ(0) scale(1.2) translateY(30px);
     }
-
     100% {
         transform: translateX(-25vw) translateZ(0) scale(1.2) translateY(30px);
     }
 }
 
-/* ───────── 4. Moose-maskott ─────────────────────────────────── */
+/* ───────── 4. Moose mascot — responsive corner badge ─────────── */
 
 .moose-default {
     position: fixed;
-    top: 10px; /* ← senker maskotten nærmere innhold */
-    right: -0px;
-    width: 320px; /* valgfritt: mindre bredde gir bedre tilpasning */
+    top: 8px;
+    right: 4px;
+    width: 180px;
     pointer-events: none;
     user-select: none;
-    z-index: 100;
+    /* Below the header/card (see App.tsx's z-20 content wrapper) so it peeks
+       out from behind them instead of covering the language/dialect dropdowns. */
+    z-index: 10;
 }
 
+.moose-default.processing,
+.moose-default.error {
+    width: 190px;
+}
+
+@media (min-width: 640px) {
+    .moose-default {
+        top: 10px;
+        right: 8px;
+        width: 240px;
+    }
     .moose-default.processing,
     .moose-default.error {
-        width: 350px;
+        width: 260px;
     }
+}
+
+@media (min-width: 1024px) {
+    .moose-default {
+        top: 10px;
+        right: 16px;
+        width: 300px;
+    }
+    .moose-default.processing,
+    .moose-default.error {
+        width: 320px;
+    }
+}
+
+@media (max-width: 420px) {
+    /* Not enough room for both the header and a corner mascot — hide it,
+       the animated status is still reflected in the overlays/feedback text. */
+    .moose-default {
+        display: none;
+    }
+}
 
 .moose-welcome {
     position: absolute;
     top: 100%;
     left: 50%;
     transform: translateX(-50%);
-    width: 400px; /* litt større under velkomst */
+    width: 320px;
+    max-width: 80vw;
     pointer-events: none;
     user-select: none;
     z-index: 1000;

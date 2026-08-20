@@ -1,14 +1,14 @@
 // src/App.tsx
-import React, { useState } from 'react';
+import { useState } from 'react';
 import AudioRecorder from './components/AudioRecorder';
 import { Parallax } from './components/Parallax';
 import { MooseMascot } from './components/MooseMascot';
 import './index.css';
 import type { Texts } from './types/Texts';
 import rawSentenceData from './data/sentences.json';
-import { useAppStatus } from './hooks/useAppStatus';
-import snowPNG from '../src/assets/particles/snowflake.png?url';
+import snowPNG from './assets/particles/snowflake.png?url';
 import Particles from 'react-tsparticles';
+import { useAppStatus } from './hooks/useAppStatus';
 
 const sentencePools = rawSentenceData.levels;
 
@@ -27,7 +27,7 @@ const TRANSLATIONS: Record<'nb' | 'en', Texts> = {
         insertions: 'Innsettinger:',
         errors: 'Feil ord:',
         hearCorrect: 'Hør korrekt uttale',
-        success: (p) => `Hurra! Du var ${p}% riktig!`,
+        success: (p) => `Hurra! Du fikk ${p} poeng!`,
         tryAgain: '😅 Prøv igjen – sørg for at det er stille rundt deg',
         nextSentence: '🔄 Ny setning',
         countdown: 'Kjør!',
@@ -47,7 +47,7 @@ const TRANSLATIONS: Record<'nb' | 'en', Texts> = {
         insertions: 'Insertions:',
         errors: 'Wrong words:',
         hearCorrect: 'Hear correct pronunciation',
-        success: (p) => `Great! You were ${p}% correct!`,
+        success: (p) => `Great! You scored ${p} points!`,
         tryAgain: '😅 Try again – make sure your room is quiet',
         nextSentence: '🔄 New sentence',
         countdown: 'Go!',
@@ -64,25 +64,16 @@ const App: React.FC = () => {
 
     return (
         <>
-            {/* Parallax-bakgrunn + snøpartikler */}
+            {/* Parallax background + snow particles */}
             <div id="parallax">
                 <Parallax />
             </div>
 
-            {/* SNØ – vises over bakgrunn, men bak innhold */}
             <Particles
                 id="snow"
-                style={{
-                    position: 'fixed',
-                    top: 0,
-                    left: 0,
-                    width: '100vw',
-                    height: '100vh',
-                    zIndex: -2,
-                    pointerEvents: 'none',
-                }}
+                className="pointer-events-none fixed inset-0 -z-20"
                 options={{
-                    fullScreen: { enable: false }, 
+                    fullScreen: { enable: false },
                     fpsLimit: 60,
                     particles: {
                         number: { value: 120 },
@@ -93,75 +84,32 @@ const App: React.FC = () => {
                             image: {
                                 src: snowPNG,
                                 width: 32,
-                                height: 32
-                            }
+                                height: 32,
+                            },
                         },
                         opacity: { value: { min: 0.3, max: 0.9 } },
                     },
                 }}
             />
 
-        
+            {status !== 'welcome' && <MooseMascot />}
 
-            {/* Hovedinnhold sentrert */}
-            <div
-                style={{
-                    display: 'flex',
-                    flexDirection: 'column',
-                    height: '100%',
-                    position: 'relative',
-                    zIndex: 1,
-                    alignItems: 'center', // sentrerer alt horisontalt
-                }}
-            >
-                <div style={{ position: 'relative', width: '100%', maxWidth: 900 }}>
-                    {/* Maskott i hjørnet av containeren */}
-                    {status !== 'welcome' && (
-                        <div style={{
-                            position: 'absolute',
-                            top: '20px',
-                            right: '-100px',
-                            width: '350px',
-                            pointerEvents: 'none',
-                            userSelect: 'none',
-                            zIndex: 10
-                        }}>
-                            <MooseMascot />
-                        </div>
-                    )}
+            {/* z-20 beats the mascot's fixed z-10 so the header/card occlude it
+                instead of it covering the dropdowns — see .moose-default in index.css */}
+            <div className="relative z-20 flex min-h-full flex-col items-center">
+                <div className="relative w-full max-w-4xl px-3 sm:px-4">
+                    <header className="rounded-b-lg bg-white/95 px-4 py-4 shadow sm:px-8">
+                        <div className="mx-auto flex max-w-5xl flex-col items-center justify-between gap-3 sm:flex-row">
+                            <h1 className="text-center text-xl font-bold text-slate-800 sm:text-left sm:text-2xl">
+                                {t.title}
+                            </h1>
 
-                    {/* Header */}
-                    <header
-                        style={{
-                            backgroundColor: '#fff',
-                            padding: '1rem 2rem',
-                            boxShadow: '0 2px 4px rgba(0,0,0,0.1)',
-                        }}
-                    >
-                        <div
-                            style={{
-                                maxWidth: 1200,
-                                margin: '0 auto',
-                                display: 'flex',
-                                justifyContent: 'space-between',
-                                alignItems: 'center',
-                            }}
-                        >
-                            <h1 style={{ fontSize: '1.8rem', color: '#333' }}>{t.title}</h1>
-
-                            <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
-                                <label style={{ color: '#555', fontSize: '0.9rem' }}>{t.languageLabel}</label>
-
+                            <div className="flex items-center gap-2">
+                                <label className="text-sm text-slate-600">{t.languageLabel}</label>
                                 <select
                                     value={lang}
-                                    onChange={(e) => setLang(e.target.value as 'nb' | 'en')}
-                                    style={{
-                                        padding: '0.3rem 0.5rem',
-                                        borderRadius: 4,
-                                        border: '1px solid #ccc',
-                                        background: '#fff',
-                                        color: '#333',
-                                    }}
+                                    onChange={e => setLang(e.target.value as 'nb' | 'en')}
+                                    className="min-h-[40px] rounded-md border border-slate-300 bg-white px-2 py-1 text-slate-800"
                                 >
                                     <option value="nb">Norsk</option>
                                     <option value="en">English</option>
@@ -170,22 +118,19 @@ const App: React.FC = () => {
                         </div>
                     </header>
 
-                    {/* Main content */}
-                    <main style={{ flex: 1, overflowY: 'auto', padding: '2rem 1rem' }}>
-                        <div style={{ maxWidth: 1200, margin: '0 auto' }}>
-                            <AudioRecorder
-                                sentencePools={sentencePools}
-                                text={t}
-                                dialects={DIALECTS}
-                                currentDialect={dialect}
-                                onDialectChange={setDialect}
-                            />
-                        </div>
+                    <main className="px-0 py-6 sm:px-2">
+                        <AudioRecorder
+                            sentencePools={sentencePools}
+                            text={t}
+                            dialects={DIALECTS}
+                            currentDialect={dialect}
+                            onDialectChange={setDialect}
+                        />
                     </main>
                 </div>
             </div>
         </>
     );
-}
+};
 
 export default App;
