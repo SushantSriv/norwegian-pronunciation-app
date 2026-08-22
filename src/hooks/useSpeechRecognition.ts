@@ -67,6 +67,37 @@ export function useSpeechRecognition({ lang = 'nb-NO', onResult }: Options) {
     const [listening, setListening] = useState(false);
     const [interim, setInterim] = useState('');
     const [error, setError] = useState<string | null>(null);
+    /** Object URL of the learner's own last recording, for A/B comparison. */
+    const [recordingUrl, setRecordingUrl] = useState<string | null>(null);
+
+    // The Web Speech API never hands back the audio it captured, so we run a
+    // MediaRecorder on a parallel mic stream purely so the learner can hear
+    // what they actually said next to the reference pronunciation.
+    const mediaRecorderRef = useRef<MediaRecorder | null>(null);
+    const chunksRef = useRef<BlobPart[]>([]);
+    const recordingUrlRef = useRef<string | null>(null);
+    // Live analyser over the same mic stream, so the UI can render the learner's
+    // voice as they speak. Exposed as a ref so the visualiser can drive its own
+    // requestAnimationFrame loop without re-rendering this hook every frame.
+    const analyserRef = useRef<AnalyserNode | null>(null);
+    const audioContextRef = useRef<AudioContext | null>(null);
+
+    const stopRecorder = useCallback(() => {
+        const recorder = mediaRecorderRef.current;
+        if (recorder && recorder.state !== 'inactive') recorder.stop();
+        mediaRecorderRef.current = null;
+        analyserRef.current = null;
+        void audioContextRef.current?.close();
+        audioContextRef.current = null;
+    }, []);
+
+    // Release the last object URL when the hook goes away.
+    useEffect(
+        () => () => {
+            if (recordingUrlRef.current) URL.revokeObjectURL(recordingUrlRef.current);
+        },
+        []
+    );
 
     const recognitionRef = useRef<SpeechRecognitionLike | null>(null);
     // Keep the latest callback without re-creating the recognizer each render.
@@ -118,6 +149,7 @@ export function useSpeechRecognition({ lang = 'nb-NO', onResult }: Options) {
         recognition.onend = () => {
             setListening(false);
             setInterim('');
+            stopRecorder();
         };
 
         recognitionRef.current = recognition;
@@ -129,12 +161,53 @@ export function useSpeechRecognition({ lang = 'nb-NO', onResult }: Options) {
             recognition.abort();
             recognitionRef.current = null;
         };
-    }, [lang]);
+    }, [lang, stopRecorder]);
 
-    const start = useCallback(() => {
+    const start = useCallback(async () => {
         const recognition = recognitionRef.current;
         if (!recognition || listening) return;
         setError(null);
+
+        // Start capturing audio first so we do not miss the opening syllable.
+        // A failure here is not fatal: recognition (and therefore scoring)
+        // still works, the learner just cannot play their attempt back.
+        try {
+            const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+            const recorder = new MediaRecorder(stream);
+            chunksRef.current = [];
+            recorder.ondataavailable = e => {
+                if (e.data.size) chunksRef.current.push(e.data);
+            };
+            recorder.onstop = () => {
+                stream.getTracks().forEach(t => t.stop());
+                if (!chunksRef.current.length) return;
+                const blob = new Blob(chunksRef.current, { type: recorder.mimeType || 'audio/webm' });
+                chunksRef.current = [];
+                if (recordingUrlRef.current) URL.revokeObjectURL(recordingUrlRef.current);
+                const url = URL.createObjectURL(blob);
+                recordingUrlRef.current = url;
+                setRecordingUrl(url);
+            };
+            recorder.start();
+            mediaRecorderRef.current = recorder;
+
+            // Tap the same stream for live level data.
+            const AudioCtor =
+                window.AudioContext ??
+                (window as unknown as { webkitAudioContext?: typeof AudioContext }).webkitAudioContext;
+            if (AudioCtor) {
+                const context = new AudioCtor();
+                const analyser = context.createAnalyser();
+                analyser.fftSize = 256;
+                analyser.smoothingTimeConstant = 0.75;
+                context.createMediaStreamSource(stream).connect(analyser);
+                audioContextRef.current = context;
+                analyserRef.current = analyser;
+            }
+        } catch {
+            mediaRecorderRef.current = null;
+        }
+
         try {
             recognition.start();
         } catch {
@@ -144,7 +217,8 @@ export function useSpeechRecognition({ lang = 'nb-NO', onResult }: Options) {
 
     const stop = useCallback(() => {
         recognitionRef.current?.stop();
-    }, []);
+        stopRecorder();
+    }, [stopRecorder]);
 
-    return { supported, listening, interim, error, start, stop };
+    return { supported, listening, interim, error, recordingUrl, analyserRef, start, stop };
 }

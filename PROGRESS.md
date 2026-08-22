@@ -1,5 +1,50 @@
 # Progress & Goals
 
+## v2.1 — Listen-back, melody analysis, design pass ✅ shipped
+
+Response to feedback: the reference voice sounded wrong, there was no way to compare
+your attempt against it, and the UI wanted more polish.
+
+### Fixed
+- ✅ **The TTS voice bug.** `speechSynthesis.getVoices()` returns an empty array on the
+  first synchronous call in Chrome/Edge, so voice selection silently failed and
+  Norwegian was being read aloud by an English voice — exactly why it did not sound
+  Norwegian. Selection now goes through an awaited `loadVoices()`.
+  (Verified empirically: this machine exposes exactly one Norwegian voice,
+  `nb-NO / Microsoft Jon`; every other installed voice is en-US.)
+- ✅ Mic idle animation no longer animates `transform` — framer-motion owns that
+  property on the same element and the two were fighting. Glow only now.
+- ✅ Feedback exit no longer mixes `variants` with an `exit` object, which had wedged
+  `AnimatePresence mode="wait"` so the mic never returned after pressing Next.
+
+### Added
+- ✅ **Listen-back comparison.** The Web Speech API never hands back its audio, so a
+  MediaRecorder runs on a parallel mic stream. Correct vs You, with a slow toggle.
+- ✅ **Melody view — the distinctive feature.** Norwegian is a pitch-accent language and
+  flat delivery is the classic non-native giveaway. The recording is run through
+  autocorrelation F0 detection and drawn as a pitch contour with a semitone-range
+  readout and coaching. Mainstream apps do not do this.
+- ✅ Voice picker ranked best-first (neural "Natural" voices outrank older local SAPI),
+  choice persisted.
+- ✅ Per-word playback inside the phoneme breakdown.
+- ✅ Streak counter, success burst, aurora wash, glass surfaces, shimmering progress
+  bar, staggered reveals, word-by-word phrase animation, live mic visualiser.
+
+### Notes on the dialect request
+**Nynorsk is a written standard, not a spoken dialect** — nobody "speaks Nynorsk", they
+speak a dialect (Østnorsk, Vestlandsk, Trøndersk...). Browsers expose voices, not
+dialects, and `nn-NO` voices are essentially nonexistent. The picker therefore lists
+the Norwegian voices actually installed, labelled by locale tag, instead of offering
+dialects the platform cannot deliver.
+
+### Known limitations
+- Pitch detection is honest about uncertainty: unvoiced/quiet frames return `null`
+  rather than a guess, though a dominant 2nd harmonic can still cause an octave slip
+  (median-filtered, and covered by tests).
+- Playback quality is capped by whatever voices the OS and browser provide.
+
+---
+
 ## v2 — a focused, self-contained GitHub Pages app ✅ shipped
 
 Pivot from "wide feature surface + Python backend" to a **tight, static, free-hosted
@@ -44,7 +89,7 @@ Status legend: ⬜ Not started · 🟨 In progress · ✅ Done
 - ✅ Dropped now-unused deps (`react-tsparticles`, `tsparticles-engine`) and assets
 
 ### Verified
-`tsc -b`, `eslint`, `vitest` (29 tests), `vite build`, plus a scripted real-browser
+`tsc -b`, `eslint`, `vitest` (37 tests), `vite build`, plus a scripted real-browser
 pass (Edge via Playwright, Web Speech API stubbed) covering: stage select → practice
 → correct answer clears and raises the bar → wrong answer shows the phoneme
 breakdown → lives exhausted → results, at desktop and mobile widths, with **no

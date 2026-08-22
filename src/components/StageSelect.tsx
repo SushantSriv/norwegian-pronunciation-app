@@ -9,69 +9,137 @@ interface Props {
 
 const container = {
     hidden: {},
-    show: { transition: { staggerChildren: 0.07 } },
+    show: { transition: { staggerChildren: 0.075, delayChildren: 0.12 } },
 };
+
 const card = {
-    hidden: { opacity: 0, y: 24 },
-    show: { opacity: 1, y: 0, transition: { type: 'spring' as const, stiffness: 260, damping: 24 } },
+    hidden: { opacity: 0, y: 34, scale: 0.95 },
+    show: {
+        opacity: 1,
+        y: 0,
+        scale: 1,
+        transition: { type: 'spring' as const, stiffness: 270, damping: 24 },
+    },
+};
+
+const fadeUp = {
+    hidden: { opacity: 0, y: -18 },
+    show: { opacity: 1, y: 0, transition: { type: 'spring' as const, stiffness: 200, damping: 22 } },
 };
 
 export function StageSelect({ bests, onPick }: Props) {
     return (
         <motion.div initial="hidden" animate="show" variants={container} className="w-full">
-            <motion.header variants={card} className="mb-8 text-center">
-                <h1 className="text-3xl font-extrabold tracking-tight text-white sm:text-4xl">
+            <motion.header variants={fadeUp} className="mb-10 text-center">
+                <motion.div
+                    initial={{ opacity: 0, scale: 0.7 }}
+                    animate={{ opacity: 1, scale: 1 }}
+                    transition={{ type: 'spring', stiffness: 260, damping: 18 }}
+                    className="mb-4 inline-flex items-center gap-2 rounded-full border border-white/15 bg-white/[0.07] px-3.5 py-1.5 text-xs font-semibold text-white/70 backdrop-blur"
+                >
+                    <span className="relative flex h-2 w-2">
+                        <span className="absolute inline-flex h-full w-full animate-ping rounded-full bg-emerald-400 opacity-75" />
+                        <span className="relative inline-flex h-2 w-2 rounded-full bg-emerald-400" />
+                    </span>
+                    Live pronunciation scoring
+                </motion.div>
+
+                <motion.h1
+                    className="bg-gradient-to-b from-white via-white to-sky-200/70 bg-clip-text text-5xl font-black tracking-tight text-transparent drop-shadow-[0_2px_20px_rgba(56,189,248,0.25)] sm:text-6xl"
+                    initial={{ letterSpacing: '0.16em', opacity: 0, y: 10 }}
+                    animate={{ letterSpacing: '-0.03em', opacity: 1, y: 0 }}
+                    transition={{ duration: 0.9, ease: [0.16, 1, 0.3, 1] }}
+                >
                     Norsk uttale
-                </h1>
-                <p className="mx-auto mt-3 max-w-lg text-sm text-white/70 sm:text-base">
-                    Pick your level, then say each phrase out loud. Clear{' '}
-                    <strong className="text-white">{ITEMS_TO_WIN}</strong> of them before you run out of{' '}
-                    <strong className="text-white">{MAX_STRIKES}</strong> lives — and the bar gets higher as
-                    you go.
+                </motion.h1>
+
+                <p className="mx-auto mt-4 max-w-md text-sm leading-relaxed text-white/60 sm:text-base">
+                    Pick a level and say each phrase out loud. Clear{' '}
+                    <strong className="font-semibold text-white">{ITEMS_TO_WIN}</strong> before you lose{' '}
+                    <strong className="font-semibold text-white">{MAX_STRIKES}</strong> lives — and the bar
+                    climbs with every one you get right.
                 </p>
             </motion.header>
 
-            <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
+            <div className="grid auto-rows-fr gap-4 sm:grid-cols-2 lg:grid-cols-3">
                 {STAGES.map(stage => {
                     const best = bests[stage.id] ?? 0;
+                    const mastered = best >= ITEMS_TO_WIN;
+
                     return (
                         <motion.button
                             key={stage.id}
                             variants={card}
-                            whileHover={{ y: -6, transition: { duration: 0.18 } }}
+                            whileHover={{ y: -8 }}
                             whileTap={{ scale: 0.98 }}
+                            transition={{ type: 'spring', stiffness: 400, damping: 25 }}
                             onClick={() => onPick(stage)}
-                            className="group relative flex h-full flex-col overflow-hidden rounded-2xl border border-white/15 bg-slate-900/55 p-5 text-left backdrop-blur-xl transition-colors hover:border-white/30 focus:outline-none focus-visible:ring-2 focus-visible:ring-white/60"
+                            className="glass group relative flex h-full flex-col overflow-hidden rounded-2xl p-5 text-left transition-[border-color,box-shadow] duration-300 hover:border-white/30 focus:outline-none focus-visible:ring-2 focus-visible:ring-sky-300/70"
                         >
+                            {/* Accent rail + hover wash */}
                             <div
-                                className={`absolute inset-x-0 top-0 h-1 bg-gradient-to-r ${stage.accent}`}
+                                className={`absolute inset-x-0 top-0 h-[3px] bg-gradient-to-r ${stage.accent}`}
+                                aria-hidden="true"
+                            />
+                            <div
+                                className={`pointer-events-none absolute inset-0 bg-gradient-to-br ${stage.accent} opacity-0 transition-opacity duration-300 group-hover:opacity-[0.13]`}
+                                aria-hidden="true"
+                            />
+                            {/* Corner glow that blooms on hover */}
+                            <div
+                                className={`pointer-events-none absolute -right-12 -top-12 h-32 w-32 rounded-full bg-gradient-to-br ${stage.accent} opacity-0 blur-2xl transition-opacity duration-500 group-hover:opacity-40`}
                                 aria-hidden="true"
                             />
 
-                            <div className="flex items-start justify-between gap-3">
-                                <span className="text-3xl" aria-hidden="true">
+                            <div className="relative flex items-start justify-between gap-3">
+                                <motion.span
+                                    className={`flex h-12 w-12 items-center justify-center rounded-xl bg-gradient-to-br text-2xl shadow-lg ${stage.accent}`}
+                                    aria-hidden="true"
+                                    whileHover={{ rotate: [0, -10, 8, 0], scale: 1.12 }}
+                                    transition={{ duration: 0.5 }}
+                                >
                                     {stage.icon}
-                                </span>
-                                <span className="rounded-full border border-white/20 bg-white/10 px-2 py-0.5 text-xs font-bold text-white/80">
+                                </motion.span>
+                                <span className="rounded-full border border-white/15 bg-white/10 px-2.5 py-0.5 text-[11px] font-bold tracking-wide text-white/75">
                                     {stage.cefr}
                                 </span>
                             </div>
 
-                            <h2 className="mt-3 text-lg font-bold text-white">{stage.name}</h2>
-                            <p className="mt-1 text-sm leading-relaxed text-white/65">{stage.blurb}</p>
+                            <h2 className="relative mt-4 text-lg font-bold text-white">{stage.name}</h2>
+                            <p className="relative mt-1.5 text-sm leading-relaxed text-white/55">
+                                {stage.blurb}
+                            </p>
 
-                            <div className="mt-auto flex items-center justify-between pt-4 text-xs text-white/50">
-                                <span>Pass bar starts at {stage.baseThreshold}</span>
+                            <div className="relative mt-auto flex items-center justify-between gap-2 pt-5 text-xs">
+                                <span className="text-white/40">Bar starts at {stage.baseThreshold}</span>
                                 {best > 0 && (
-                                    <span className="font-semibold text-amber-300">
-                                        Best {best}/{ITEMS_TO_WIN}
-                                    </span>
+                                    <motion.span
+                                        initial={{ scale: 0 }}
+                                        animate={{ scale: 1 }}
+                                        transition={{
+                                            type: 'spring',
+                                            stiffness: 400,
+                                            damping: 14,
+                                            delay: 0.35,
+                                        }}
+                                        className={
+                                            mastered
+                                                ? 'shrink-0 rounded-full bg-amber-400/20 px-2 py-0.5 font-bold text-amber-200 ring-1 ring-amber-300/30'
+                                                : 'shrink-0 font-semibold text-white/60'
+                                        }
+                                    >
+                                        {mastered ? '★ Mastered' : `Best ${best}/${ITEMS_TO_WIN}`}
+                                    </motion.span>
                                 )}
                             </div>
                         </motion.button>
                     );
                 })}
             </div>
+
+            <motion.p variants={card} className="mt-9 text-center text-xs text-white/30">
+                Chrome &amp; Edge · your voice is analysed in your browser
+            </motion.p>
         </motion.div>
     );
 }

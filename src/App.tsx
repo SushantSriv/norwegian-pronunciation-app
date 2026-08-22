@@ -7,11 +7,12 @@ import { PracticeScreen } from './components/PracticeScreen';
 import { ResultsScreen } from './components/ResultsScreen';
 import { usePracticeSession } from './hooks/usePracticeSession';
 import { useSpeechRecognition } from './hooks/useSpeechRecognition';
+import { useNorwegianVoices } from './hooks/useNorwegianVoices';
 
 /** Shown instead of the app in browsers without the Web Speech API. */
 function UnsupportedNotice() {
     return (
-        <div className="w-full max-w-md rounded-2xl border border-white/15 bg-slate-900/55 p-7 text-center backdrop-blur-xl">
+        <div className="glass w-full max-w-md rounded-3xl p-7 text-center">
             <div className="text-4xl" aria-hidden="true">
                 🎙️
             </div>
@@ -32,6 +33,7 @@ export default function App() {
         threshold,
         cleared,
         strikes,
+        streak,
         outcome,
         lastAttempt,
         summary,
@@ -45,9 +47,10 @@ export default function App() {
     const [showConfetti, setShowConfetti] = useState(false);
 
     const handleResult = useCallback((transcript: string) => submit(transcript), [submit]);
-    const { supported, listening, interim, error, start, stop } = useSpeechRecognition({
+    const { supported, listening, interim, error, recordingUrl, analyserRef, start, stop } = useSpeechRecognition({
         onResult: handleResult,
     });
+    const { voices, activeVoiceURI, chooseVoice } = useNorwegianVoices();
 
     // Celebrate a cleared stage.
     useEffect(() => {
@@ -65,6 +68,7 @@ export default function App() {
             <div id="parallax">
                 <Parallax />
             </div>
+            <div className="aurora" aria-hidden="true" />
 
             {showConfetti &&
                 Array.from({ length: 60 }).map((_, i) => (
@@ -107,10 +111,16 @@ export default function App() {
                                         threshold={threshold}
                                         cleared={cleared}
                                         strikes={strikes}
+                                        streak={streak}
                                         listening={listening}
                                         interim={interim}
                                         speechError={error}
                                         lastAttempt={lastAttempt}
+                                        recordingUrl={recordingUrl}
+                                        analyserRef={analyserRef}
+                                        voices={voices}
+                                        activeVoiceURI={activeVoiceURI}
+                                        onChooseVoice={chooseVoice}
                                         onListen={start}
                                         onStopListening={stop}
                                         onNext={next}

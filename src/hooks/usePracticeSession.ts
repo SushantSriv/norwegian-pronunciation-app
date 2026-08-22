@@ -26,6 +26,9 @@ interface SessionState {
     cursor: number;
     cleared: number;
     strikes: number;
+    /** Consecutive clears; resets on any miss. */
+    streak: number;
+    bestStreak: number;
     attempts: Attempt[];
     outcome: Outcome | null;
 }
@@ -73,7 +76,7 @@ export function usePracticeSession() {
         const needed = ITEMS_TO_WIN + MAX_STRIKES;
         const queue = shuffle(pool).slice(0, Math.max(needed, Math.min(pool.length, needed)));
         setLastAttempt(null);
-        setSession({ stage, queue, cursor: 0, cleared: 0, strikes: 0, attempts: [], outcome: null });
+        setSession({ stage, queue, cursor: 0, cleared: 0, strikes: 0, streak: 0, bestStreak: 0, attempts: [], outcome: null });
     }, []);
 
     const quit = useCallback(() => {
@@ -99,6 +102,8 @@ export function usePracticeSession() {
 
             const cleared = session.cleared + (passed ? 1 : 0);
             const strikes = session.strikes + (passed ? 0 : 1);
+            const streak = passed ? session.streak + 1 : 0;
+            const bestStreak = Math.max(session.bestStreak, streak);
 
             let outcome: Outcome | null = null;
             if (cleared >= ITEMS_TO_WIN) outcome = 'completed';
@@ -116,6 +121,8 @@ export function usePracticeSession() {
                 ...session,
                 cleared,
                 strikes,
+                streak,
+                bestStreak,
                 attempts: [...session.attempts, attempt],
                 outcome,
                 // Advance regardless of pass/fail so a stubborn item cannot
@@ -144,6 +151,7 @@ export function usePracticeSession() {
             avgScore,
             attempts: attempts.length,
             cleared: session.cleared,
+            bestStreak: session.bestStreak,
             missedWords: [...missed.entries()]
                 .sort((a, b) => b[1] - a[1])
                 .map(([word, count]) => ({ word, count })),
@@ -157,6 +165,7 @@ export function usePracticeSession() {
         threshold,
         cleared: session?.cleared ?? 0,
         strikes: session?.strikes ?? 0,
+        streak: session?.streak ?? 0,
         outcome: session?.outcome ?? null,
         lastAttempt,
         summary,

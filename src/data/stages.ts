@@ -22,7 +22,7 @@ export const STAGES: Stage[] = [
         id: 'first-words',
         name: 'First Words',
         cefr: 'A1',
-        blurb: 'Single words and greetings. Start here if Norwegian is brand new.',
+        blurb: 'Everyday words and short greetings. Start here if Norwegian is brand new.',
         levels: [1, 3],
         baseThreshold: 55,
         accent: 'from-emerald-400 to-teal-500',

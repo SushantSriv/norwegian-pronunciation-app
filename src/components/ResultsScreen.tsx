@@ -9,6 +9,7 @@ interface Summary {
     avgScore: number;
     attempts: number;
     cleared: number;
+    bestStreak: number;
     missedWords: { word: string; count: number }[];
 }
 
@@ -28,7 +29,7 @@ export function ResultsScreen({ stage, outcome, summary, onRetry, onChangeStage 
             initial={{ opacity: 0, scale: 0.96, y: 16 }}
             animate={{ opacity: 1, scale: 1, y: 0 }}
             transition={{ type: 'spring', stiffness: 220, damping: 24 }}
-            className="w-full rounded-2xl border border-white/15 bg-slate-900/55 p-6 text-center backdrop-blur-xl sm:p-8"
+            className="glass w-full rounded-3xl p-6 text-center sm:p-8"
         >
             <motion.div
                 initial={{ scale: 0 }}
@@ -52,7 +53,7 @@ export function ResultsScreen({ stage, outcome, summary, onRetry, onChangeStage 
             <div className="mt-6 flex flex-col items-center gap-6 sm:flex-row sm:justify-center sm:gap-10">
                 <ScoreRing score={summary.avgScore} threshold={stage.baseThreshold} label="avg score" />
 
-                <dl className="grid grid-cols-2 gap-x-8 gap-y-3 text-left">
+                <dl className="grid grid-cols-3 gap-x-6 gap-y-3 text-center sm:text-left">
                     <div>
                         <dt className="text-xs uppercase tracking-wide text-white/45">Cleared</dt>
                         <dd className="text-xl font-bold text-white">
@@ -63,6 +64,13 @@ export function ResultsScreen({ stage, outcome, summary, onRetry, onChangeStage 
                     <div>
                         <dt className="text-xs uppercase tracking-wide text-white/45">Attempts</dt>
                         <dd className="text-xl font-bold text-white">{summary.attempts}</dd>
+                    </div>
+                    <div>
+                        <dt className="text-xs uppercase tracking-wide text-white/45">Best streak</dt>
+                        <dd className="text-xl font-bold text-amber-300">
+                            {summary.bestStreak > 1 ? '🔥 ' : ''}
+                            {summary.bestStreak}
+                        </dd>
                     </div>
                 </dl>
             </div>
@@ -92,13 +100,13 @@ export function ResultsScreen({ stage, outcome, summary, onRetry, onChangeStage 
             <div className="mt-8 flex flex-col gap-3 sm:flex-row">
                 <button
                     onClick={onRetry}
-                    className="min-h-[48px] flex-1 rounded-xl bg-white text-base font-bold text-slate-900 transition hover:bg-white/90"
+                    className="min-h-[52px] flex-1 rounded-2xl bg-white text-base font-bold text-slate-900 shadow-lg shadow-black/30 transition hover:bg-white/90"
                 >
                     Try again
                 </button>
                 <button
                     onClick={onChangeStage}
-                    className="min-h-[48px] flex-1 rounded-xl border border-white/25 text-base font-semibold text-white transition hover:bg-white/10"
+                    className="min-h-[52px] flex-1 rounded-2xl border border-white/20 text-base font-semibold text-white transition hover:border-white/40 hover:bg-white/10"
                 >
                     Pick another level
                 </button>
