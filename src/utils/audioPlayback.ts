@@ -1,17 +1,23 @@
-export function speakTTS(text: string, rate: number) {
+/**
+ * Reference pronunciation via the browser speech synthesiser. There is no
+ * recorded audio corpus shipped with the app, so this is the only source.
+ */
+export function speakNorwegian(text: string, rate = 0.95) {
     if (!('speechSynthesis' in window)) return;
-    const utt = new SpeechSynthesisUtterance(text);
-    utt.lang = 'nb-NO';
-    utt.rate = rate;
-    window.speechSynthesis.speak(utt);
-}
 
-// Falls back to browser TTS since /samples/<dialect>/<word>.mp3 audio isn't shipped yet.
-export function playPronunciation(dialect: string, text: string, rate: number) {
-    const url = `/samples/${encodeURIComponent(dialect)}/${encodeURIComponent(text)}.mp3`;
-    const audio = new Audio(url);
-    audio.playbackRate = rate;
-    audio.oncanplaythrough = () => audio.play();
-    audio.onerror = () => speakTTS(text, rate);
-    audio.load();
+    // Cancel anything already queued so rapid taps do not stack up.
+    window.speechSynthesis.cancel();
+
+    const utterance = new SpeechSynthesisUtterance(text);
+    utterance.lang = 'nb-NO';
+    utterance.rate = rate;
+
+    // Prefer a real Norwegian voice when the platform ships one; otherwise the
+    // default voice reads it with an English accent, which teaches the wrong thing.
+    const norwegian = window.speechSynthesis
+        .getVoices()
+        .find(v => v.lang.toLowerCase().startsWith('nb') || v.lang.toLowerCase().startsWith('no'));
+    if (norwegian) utterance.voice = norwegian;
+
+    window.speechSynthesis.speak(utterance);
 }

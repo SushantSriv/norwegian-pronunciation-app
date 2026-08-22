@@ -21,6 +21,16 @@ export const phonemeHints: Record<string, string> = {
     'ɑ': 'Short open “a”, as in “mat” or British English “father”',
     'ɑː': 'Long open “a”, as in “tak” or English “spa”',
 
+    // Reduced vowel
+    'ə': 'Unstressed “uh” sound, as in the last syllable of “ikke” or English “sofa”',
+    'ɔ': 'Short open “aw” sound, as in “norsk” or English “off”',
+
+    // Diphthongs
+    'æɪ': 'The “ay” glide in “hei” and “nei” — starts open, ends in a short i',
+    'øʏ': 'The “øy” glide in “øye” — rounded throughout, no English equivalent',
+    'æʉ': 'The “au” glide in “sau” — starts like “cat”, ends rounded',
+    'ɑɪ': 'The “ai” glide in “kai” — like English “eye”',
+
     // Consonants
     'p': 'Unvoiced “p”, as in “penn” or English “pen”',
     'b': 'Voiced “b”, as in “ball” or English “ball”',
@@ -44,6 +54,8 @@ export const phonemeHints: Record<string, string> = {
     'ʂ': 'Retroflex “sj” sound, as in eastern dialects—like Polish “sz”',
     'ʈ': 'Retroflex t, as in “trøtt”',
     'ɖ': 'Retroflex d, as in “lørdag”',
+    'ɳ': 'Retroflex n, as in “barn” — tongue tip curled back',
+    'ɭ': 'Retroflex l, as in “kveld” — tongue tip curled back',
 };
 
 // Enkle tips for enkelte ord

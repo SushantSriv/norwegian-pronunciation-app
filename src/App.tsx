@@ -1,136 +1,131 @@
-// src/App.tsx
-import { useState } from 'react';
-import AudioRecorder from './components/AudioRecorder';
+import { useCallback, useEffect, useState, type CSSProperties } from 'react';
+import { AnimatePresence, motion } from 'framer-motion';
+
 import { Parallax } from './components/Parallax';
-import { MooseMascot } from './components/MooseMascot';
-import './index.css';
-import type { Texts } from './types/Texts';
-import rawSentenceData from './data/sentences.json';
-import snowPNG from './assets/particles/snowflake.png?url';
-import Particles from 'react-tsparticles';
-import { useAppStatus } from './hooks/useAppStatus';
+import { StageSelect } from './components/StageSelect';
+import { PracticeScreen } from './components/PracticeScreen';
+import { ResultsScreen } from './components/ResultsScreen';
+import { usePracticeSession } from './hooks/usePracticeSession';
+import { useSpeechRecognition } from './hooks/useSpeechRecognition';
 
-const sentencePools = rawSentenceData.levels;
+/** Shown instead of the app in browsers without the Web Speech API. */
+function UnsupportedNotice() {
+    return (
+        <div className="w-full max-w-md rounded-2xl border border-white/15 bg-slate-900/55 p-7 text-center backdrop-blur-xl">
+            <div className="text-4xl" aria-hidden="true">
+                🎙️
+            </div>
+            <h1 className="mt-3 text-xl font-bold text-white">This browser cannot listen</h1>
+            <p className="mt-2 text-sm leading-relaxed text-white/65">
+                The app scores your pronunciation with the browser Web Speech API, which is only available in{' '}
+                <strong className="text-white">Chrome</strong> and <strong className="text-white">Edge</strong>.
+                Open this page in one of those to practise.
+            </p>
+        </div>
+    );
+}
 
-const TRANSLATIONS: Record<'nb' | 'en', Texts> = {
-    nb: {
-        title: 'Øv på norsk uttale',
-        languageLabel: 'Språk:',
-        start: 'Start innspilling',
-        stop: 'Stopp innspilling',
-        preview: 'Forhåndslytt',
-        expected: 'Forventet:',
-        youSaid: 'Du sa:',
-        wer: 'WER:',
-        substitutions: 'Substitusjoner:',
-        deletions: 'Slettinger:',
-        insertions: 'Innsettinger:',
-        errors: 'Feil ord:',
-        hearCorrect: 'Hør korrekt uttale',
-        success: (p) => `Hurra! Du fikk ${p} poeng!`,
-        tryAgain: '😅 Prøv igjen – sørg for at det er stille rundt deg',
-        nextSentence: '🔄 Ny setning',
-        countdown: 'Kjør!',
-    },
+export default function App() {
+    const {
+        stage,
+        currentItem,
+        threshold,
+        cleared,
+        strikes,
+        outcome,
+        lastAttempt,
+        summary,
+        bests,
+        begin,
+        submit,
+        next,
+        quit,
+    } = usePracticeSession();
 
-    en: {
-        title: 'Practise Norwegian pronunciation',
-        languageLabel: 'Language:',
-        start: 'Start recording',
-        stop: 'Stop recording',
-        preview: 'Preview',
-        expected: 'Expected:',
-        youSaid: 'You said:',
-        wer: 'WER:',
-        substitutions: 'Substitutions:',
-        deletions: 'Deletions:',
-        insertions: 'Insertions:',
-        errors: 'Wrong words:',
-        hearCorrect: 'Hear correct pronunciation',
-        success: (p) => `Great! You scored ${p} points!`,
-        tryAgain: '😅 Try again – make sure your room is quiet',
-        nextSentence: '🔄 New sentence',
-        countdown: 'Go!',
-    },
-};
+    const [showConfetti, setShowConfetti] = useState(false);
 
-const DIALECTS = ['Bokmål'];
+    const handleResult = useCallback((transcript: string) => submit(transcript), [submit]);
+    const { supported, listening, interim, error, start, stop } = useSpeechRecognition({
+        onResult: handleResult,
+    });
 
-const App: React.FC = () => {
-    const [lang, setLang] = useState<'nb' | 'en'>('nb');
-    const [dialect, setDialect] = useState(DIALECTS[0]);
-    const t = TRANSLATIONS[lang];
-    const [status] = useAppStatus();
+    // Celebrate a cleared stage.
+    useEffect(() => {
+        if (outcome !== 'completed') return;
+        setShowConfetti(true);
+        const timer = window.setTimeout(() => setShowConfetti(false), 3000);
+        return () => window.clearTimeout(timer);
+    }, [outcome]);
+
+    const showResults = stage !== null && outcome !== null && summary !== null;
+    const showPractice = stage !== null && outcome === null;
 
     return (
         <>
-            {/* Parallax background + snow particles */}
             <div id="parallax">
                 <Parallax />
             </div>
 
-            <Particles
-                id="snow"
-                className="pointer-events-none fixed inset-0 -z-20"
-                options={{
-                    fullScreen: { enable: false },
-                    fpsLimit: 60,
-                    particles: {
-                        number: { value: 120 },
-                        size: { value: { min: 2, max: 5 } },
-                        move: { enable: true, speed: 0.3, direction: 'bottom' },
-                        shape: {
-                            type: 'image',
-                            image: {
-                                src: snowPNG,
-                                width: 32,
-                                height: 32,
-                            },
-                        },
-                        opacity: { value: { min: 0.3, max: 0.9 } },
-                    },
-                }}
-            />
+            {showConfetti &&
+                Array.from({ length: 60 }).map((_, i) => (
+                    <div
+                        key={i}
+                        className="confetti"
+                        style={
+                            {
+                                '--h': Math.random() * 360,
+                                left: `${Math.random() * 100}%`,
+                                animationDelay: `${Math.random() * 0.6}s`,
+                            } as CSSProperties
+                        }
+                    />
+                ))}
 
-            {status !== 'welcome' && <MooseMascot />}
-
-            {/* z-20 beats the mascot's fixed z-10 so the header/card occlude it
-                instead of it covering the dropdowns — see .moose-default in index.css */}
-            <div className="relative z-20 flex min-h-full flex-col items-center">
-                <div className="relative w-full max-w-4xl px-3 sm:px-4">
-                    <header className="rounded-b-lg bg-white/95 px-4 py-4 shadow sm:px-8">
-                        <div className="mx-auto flex max-w-5xl flex-col items-center justify-between gap-3 sm:flex-row">
-                            <h1 className="text-center text-xl font-bold text-slate-800 sm:text-left sm:text-2xl">
-                                {t.title}
-                            </h1>
-
-                            <div className="flex items-center gap-2">
-                                <label className="text-sm text-slate-600">{t.languageLabel}</label>
-                                <select
-                                    value={lang}
-                                    onChange={e => setLang(e.target.value as 'nb' | 'en')}
-                                    className="min-h-[40px] rounded-md border border-slate-300 bg-white px-2 py-1 text-slate-800"
-                                >
-                                    <option value="nb">Norsk</option>
-                                    <option value="en">English</option>
-                                </select>
-                            </div>
+            <div className="relative z-10 flex min-h-full items-center justify-center px-4 py-8 sm:py-12">
+                <div className="w-full max-w-3xl">
+                    {!supported ? (
+                        <div className="flex justify-center">
+                            <UnsupportedNotice />
                         </div>
-                    </header>
-
-                    <main className="px-0 py-6 sm:px-2">
-                        <AudioRecorder
-                            sentencePools={sentencePools}
-                            text={t}
-                            dialects={DIALECTS}
-                            currentDialect={dialect}
-                            onDialectChange={setDialect}
-                        />
-                    </main>
+                    ) : (
+                        <AnimatePresence mode="wait">
+                            {showResults ? (
+                                <motion.div key="results" exit={{ opacity: 0, y: -12 }}>
+                                    <ResultsScreen
+                                        stage={stage}
+                                        outcome={outcome}
+                                        summary={summary}
+                                        onRetry={() => begin(stage)}
+                                        onChangeStage={quit}
+                                    />
+                                </motion.div>
+                            ) : showPractice ? (
+                                <motion.div key="practice" exit={{ opacity: 0, y: -12 }}>
+                                    <PracticeScreen
+                                        stage={stage}
+                                        item={currentItem}
+                                        threshold={threshold}
+                                        cleared={cleared}
+                                        strikes={strikes}
+                                        listening={listening}
+                                        interim={interim}
+                                        speechError={error}
+                                        lastAttempt={lastAttempt}
+                                        onListen={start}
+                                        onStopListening={stop}
+                                        onNext={next}
+                                        onQuit={quit}
+                                    />
+                                </motion.div>
+                            ) : (
+                                <motion.div key="stages" exit={{ opacity: 0, y: -12 }}>
+                                    <StageSelect bests={bests} onPick={begin} />
+                                </motion.div>
+                            )}
+                        </AnimatePresence>
+                    )}
                 </div>
             </div>
         </>
     );
-};
-
-export default App;
+}

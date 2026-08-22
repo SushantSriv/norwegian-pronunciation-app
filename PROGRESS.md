@@ -1,74 +1,91 @@
-# Improvement Progress
+# Progress & Goals
 
-Tracking the plan to make this app production-quality: fixed foundations, an advanced phoneme-level scoring engine, and a responsive Tailwind UI.
+## v2 — a focused, self-contained GitHub Pages app ✅ shipped
+
+Pivot from "wide feature surface + Python backend" to a **tight, static, free-hosted
+practice app**. Decisions made with the user:
+
+- **Hosting:** GitHub Pages. Pages is static-only, so the app must not need the
+  Python/Whisper backend at runtime.
+- **Speech engine:** browser **Web Speech API** (`nb-NO`). Zero download, instant,
+  free. Trade-off accepted: **Chrome/Edge only** (no Firefox; Safari unreliable),
+  and it needs internet.
+- **Structure:** pick a **stage**, then drill words/sentences drawn from that stage.
+- **Session rules:** the pass bar **rises as you clear items**; a limited **error
+  budget** ends the run and shows results.
+- **Visuals:** better UI + animations; **the moose mascot is removed**.
 
 Status legend: ⬜ Not started · 🟨 In progress · ✅ Done
 
-## Phase 0 — Progress tracking
-- ✅ Create this file
+### Phase A — Client-side scoring engine (no backend)
+- ✅ Ported word alignment + phoneme similarity to TS (`src/utils/scoring.ts`)
+- ✅ Rule-based Norwegian G2P (`src/utils/norwegianG2P.ts`) replacing eSpeak/phonemizer
+- ✅ Extended `pronunciationHints.ts` with schwa, ɔ, diphthongs and retroflex ɳ/ɭ
+- ✅ Tests for alignment, similarity and G2P, plus a corpus-wide invariant that
+  **every** phoneme the G2P emits across all 500 items has a learner-facing hint
 
-## Phase 1 — Repo hygiene & security
-- ✅ Untrack `.vs/` and ignore it
-- ✅ Remove stray `backend/3.0`
-- ✅ Remove duplicate root `requirements.txt`
-- ✅ Remove TLS-verification bypass in `backend/main.py`
-- ✅ Restrict CORS via `ALLOWED_ORIGINS` env var
+### Phase B — Session model
+- ✅ 5 CEFR-style stages (`src/data/stages.ts`) mapped onto the 50-level corpus
+- ✅ Rising pass threshold (+3 per clear) and a 3-life error budget
+- ✅ Per-stage best-run persistence in localStorage
 
-## Phase 2 — Deployability
-- ✅ `VITE_API_URL` env var wired into frontend fetch calls (`src/hooks/useAudioRecorder.ts`, `.env.example`)
-- ✅ Guard backend static mount / SPA route so `uvicorn main:app` runs standalone
-- ✅ `WHISPER_MODEL_SIZE` env var (default `small`), fix README mismatch
-- ✅ Upload size guard on `/upload-audio/`
+### Phase C — Speech input
+- ✅ `useSpeechRecognition` wrapping the Web Speech API, with friendly error text
+- ✅ Explicit unsupported-browser screen for Firefox/Safari
 
-## Phase 3 — Advanced pronunciation scoring (backend)
-- ✅ Real word alignment (`backend/scoring.py::align_words`, Needleman-Wunsch — catches every bad word, not just the first)
-- ✅ Phoneme-level similarity scoring (IPA edit-distance) per word
-- ✅ Composite `pronunciation_score` (0–100) replacing raw-WER threshold gating
-- ✅ New `word_scores[]` response shape
-- ✅ Difficulty thresholds flipped to intuitive "score >= X" (`usePronunciationSession.ts`)
+### Phase D — UI rebuild + animations
+- ✅ Stage select, practice and results screens with framer-motion transitions
+- ✅ Animated score ring, rising pass bar, lives, per-word chips, phoneme breakdown
+- ✅ Removed the moose mascot, AppStatus context and the name-entry gate
 
-## Phase 4 — UI rebuild (Tailwind, responsive, componentized)
-- ✅ Tailwind installed & configured (`tailwind.config.js`, `postcss.config.js`, `src/index.css`)
-- ✅ `useAudioRecorder` hook extracted
-- ✅ `usePronunciationSession` hook extracted + localStorage persistence
-- ✅ `NameGate`, `SessionSummary`, `SentenceCard`, `ScorePanel`, `RecordControls` components
-- ✅ `AudioRecorder.tsx` reduced to thin composition (~270 lines, was ~980)
-- ✅ Responsive layout (mobile header/mascot/card/grid reflow, touch targets ≥44px)
-- ✅ Accessibility pass (`aria-live`/`role="status"` on overlays, non-color bad-word marker (⚠️ icon + underline, not color alone))
-- 🧹 Removed dead files found along the way: `src/App.css`, `src/SnowTest.tsx`, duplicate `src/context/useAppStatus.tsx`
+### Phase E — Ship it
+- ✅ Vite `base` for Pages + GitHub Actions workflow (lint → test → build → deploy)
+- ✅ README rewritten for the two engines (static default, backend optional)
+- ✅ Dropped now-unused deps (`react-tsparticles`, `tsparticles-engine`) and assets
 
-## Phase 5 — Light test coverage (stretch)
-- ✅ Backend pytest for scoring/alignment function (`backend/tests/test_scoring.py`) — zero heavy deps, runs standalone
-- ✅ Frontend Vitest for the session hook (persistence, level advance, threshold logic, summary) — `src/hooks/__tests__/usePronunciationSession.test.ts`
+### Verified
+`tsc -b`, `eslint`, `vitest` (29 tests), `vite build`, plus a scripted real-browser
+pass (Edge via Playwright, Web Speech API stubbed) covering: stage select → practice
+→ correct answer clears and raises the bar → wrong answer shows the phoneme
+breakdown → lives exhausted → results, at desktop and mobile widths, with **no
+console or page errors**.
+
+Bugs caught during that browser pass and fixed:
+1. Opaque `body` background painted over the `z-index:-10` parallax, so the
+   background art was invisible.
+2. The progress bar rendered **full** at 0/10 — a `motion.div` animating `width`
+   with no `initial`.
+3. Feedback showed the word-by-word breakdown of the *previous* phrase, because
+   the session advances the item as soon as an attempt is graded.
+4. Glass cards were too translucent for reliable white-text contrast over the
+   bright sky; switched to a dark tint.
+
+### Known limitations
+- The G2P is an approximation: no pitch accent (tonelag), no compound stress, and
+  it will be wrong on loanwords. Good enough as a "which sounds did you miss" aid.
+- Web Speech API means Chrome/Edge + an internet connection.
 
 ---
 
-## What was actually verified this session
+## Ideas / not done
+- Offline engine via `transformers.js` Whisper, to drop the Chrome-only constraint
+- Recorded native audio instead of TTS for the "Hear it" button
+- Drill mode that replays only your previously missed words
 
-Node turned out to be installed (just not on the default PATH), so the frontend was verified for real rather than by review alone:
-- `npx tsc -b` — clean, no type errors
-- `npx eslint .` — clean
-- `npx vitest run` — 7/7 passing
-- `npm run build` — production build succeeds (Tailwind CSS compiles to ~17 kB)
-- Launched the real dev server and drove it with Playwright against local Edge: screenshotted the name-gate and in-session screens at desktop (1280px) and mobile (390px) widths, filled the name form, and confirmed no console/page errors.
+---
 
-Two real bugs were caught this way and fixed:
-1. `usePronunciationSession`'s `restart()` called `localStorage.removeItem` right before a state update that the persistence effect immediately re-wrote — dead code, fixed by removing the pointless call and asserting the real (reset-to-default) end state in the test instead.
-2. After the refactor, confirming your name never moved the mascot status out of `'welcome'`, so the corner mascot silently never appeared during a session. Fixed by having the name-gate submit and session-restart handlers explicitly set status to `'idle'`/`'welcome'`.
-3. (Visual only, no test could catch it) the mascot's `z-index: 100` painted over the header's dropdowns at desktop widths — fixed by lowering it below the header/card's stacking context so it peeks out from behind them instead.
+## v1 foundations
 
-Python is not installed in this environment (only an unusable Windows Store stub), so **the backend (`scoring.py`, `main.py`) could not be executed here** — it was carefully self-reviewed and hand-traced instead, plus a pytest suite was written for the pure scoring logic. Run it yourself with the commands below.
+<details>
+<summary>Backend hardening, phoneme scoring, Tailwind rebuild (commits <code>00fb053..ae80b73</code>)</summary>
 
-## How to verify the backend locally
+- Repo hygiene: untracked `.vs/`, removed stray `backend/3.0` and duplicate `requirements.txt`
+- Security: removed a process-wide TLS-verification bypass; CORS via `ALLOWED_ORIGINS`
+- Deployability: `VITE_API_URL`, guarded static mount, `WHISPER_MODEL_SIZE`, upload size cap
+- Scoring: replaced the `zip()` word comparison (only ever caught the first mismatch) with
+  real Needleman-Wunsch alignment + per-word IPA edit-distance → composite `pronunciation_score`
+- Frontend: Tailwind, responsive layout, split the ~980-line `AudioRecorder.tsx`, a11y pass
 
-```bash
-cd backend
-pip install -r requirements.txt
-uvicorn main:app --reload --port 8000   # http://localhost:8000/docs
-
-# fast, no Whisper/torch needed for the scoring tests specifically:
-pip install pytest
-pytest
-```
-
-Then with both servers running (`npm run dev` + the uvicorn command above), manually run through: name entry → record → composite score + multi-word highlighting → next sentence → finish → resize the window to confirm mobile layout.
+The FastAPI backend still lives in `backend/` as the higher-accuracy option; it is
+simply not what the Pages deployment runs.
+</details>
