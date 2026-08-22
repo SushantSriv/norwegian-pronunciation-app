@@ -8,6 +8,7 @@ import { CompareAudio } from './CompareAudio';
 import { MelodyView } from './MelodyView';
 import { VoiceVisualizer } from './VoiceVisualizer';
 import { VoicePicker } from './VoicePicker';
+import { useRecordingAnalysis } from '../hooks/useRecordingAnalysis';
 
 interface Props {
     stage: Stage;
@@ -68,6 +69,9 @@ export function PracticeScreen({
     // otherwise the word-by-word breakdown belongs to a different sentence.
     const displayedItem = lastAttempt ? lastAttempt.expected : item;
     const missedWords = lastAttempt?.wordScores.filter(w => w.status !== 'equal') ?? [];
+    // One decode of the recording feeds both the melody chart and the trimmed
+    // listen-back playback.
+    const { analysis, analysing } = useRecordingAnalysis(recordingUrl);
 
     return (
         <div className="glass w-full overflow-hidden rounded-3xl p-5 sm:p-7">
@@ -287,8 +291,9 @@ export function PracticeScreen({
                                     phrase={lastAttempt.expected}
                                     recordingUrl={recordingUrl}
                                     voiceURI={activeVoiceURI}
+                                    bounds={analysis?.bounds ?? null}
                                 />
-                                <MelodyView recordingUrl={recordingUrl} />
+                                <MelodyView contour={analysis?.contour ?? null} analysing={analysing} />
                             </motion.div>
 
                             {/* Phoneme help for the words that missed */}

@@ -1,5 +1,34 @@
 # Progress & Goals
 
+## v2.2 — Ring alignment, silence trimming, wider voice support ✅ shipped
+
+### Fixed
+- ✅ **Visualiser ring was off-centre.** Bars were laid out with `top: 0` and
+  `transform-origin: 50% 100%`, putting the rotation pivot a full bar-length *below*
+  the ring centre, so every bar orbited the wrong point. Anchoring the bar's bottom
+  edge on the centre (`top: -barLength`) makes the origin the true centre. Verified by
+  measuring every bar's distance from the mic centre in a real browser: 56 bars,
+  radius spread **0.00px**.
+- ✅ Ring now fades back when idle instead of sitting there as a ragged dashed circle.
+
+### Added
+- ✅ **Playback skips dead air.** Holding the button before speaking meant listen-back
+  started with silence. A relative-threshold RMS scan finds where speech actually
+  starts and stops (with 60ms padding so the first consonant is not clipped), and
+  playback seeks to that point and stops at the end. Shown as a "✂ trimmed" badge.
+  Covered by 5 tests over synthetic silence/tone/silence clips.
+- ✅ **Scandinavian neighbour voices** as a fallback when no Norwegian voice exists.
+  Swedish and Danish are far closer to Norwegian than the English voice a machine
+  otherwise defaults to — clearly labelled, with a note that they are not a substitute.
+- ✅ The picker now explains where voices come from and flags Edge's neural voices (✨),
+  which sound considerably more natural than older local SAPI ones.
+
+### Changed
+- Recording is decoded **once** via `analyseRecording()` and shared by the melody chart
+  and the trimmed player through `useRecordingAnalysis`, instead of decoding twice.
+
+---
+
 ## v2.1 — Listen-back, melody analysis, design pass ✅ shipped
 
 Response to feedback: the reference voice sounded wrong, there was no way to compare
@@ -89,7 +118,7 @@ Status legend: ⬜ Not started · 🟨 In progress · ✅ Done
 - ✅ Dropped now-unused deps (`react-tsparticles`, `tsparticles-engine`) and assets
 
 ### Verified
-`tsc -b`, `eslint`, `vitest` (37 tests), `vite build`, plus a scripted real-browser
+`tsc -b`, `eslint`, `vitest` (42 tests), `vite build`, plus a scripted real-browser
 pass (Edge via Playwright, Web Speech API stubbed) covering: stage select → practice
 → correct answer clears and raises the bar → wrong answer shows the phoneme
 breakdown → lives exhausted → results, at desktop and mobile widths, with **no

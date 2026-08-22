@@ -1,9 +1,9 @@
-import { useEffect, useState } from 'react';
 import { motion } from 'framer-motion';
-import { extractPitch, type PitchContour } from '../utils/pitch';
+import type { PitchContour } from '../utils/pitch';
 
 interface Props {
-    recordingUrl: string | null;
+    contour: PitchContour | null;
+    analysing: boolean;
 }
 
 const WIDTH = 420;
@@ -60,34 +60,7 @@ function buildPaths(contour: PitchContour): string[] {
     return paths;
 }
 
-export function MelodyView({ recordingUrl }: Props) {
-    const [contour, setContour] = useState<PitchContour | null>(null);
-    const [analysing, setAnalysing] = useState(false);
-
-    useEffect(() => {
-        if (!recordingUrl) {
-            setContour(null);
-            return;
-        }
-        let cancelled = false;
-        setAnalysing(true);
-        extractPitch(recordingUrl)
-            .then(result => {
-                if (!cancelled) setContour(result);
-            })
-            .catch(() => {
-                if (!cancelled) setContour(null);
-            })
-            .finally(() => {
-                if (!cancelled) setAnalysing(false);
-            });
-        return () => {
-            cancelled = true;
-        };
-    }, [recordingUrl]);
-
-    if (!recordingUrl) return null;
-
+export function MelodyView({ contour, analysing }: Props) {
     const paths = contour ? buildPaths(contour) : [];
     const range = contour?.rangeSemitones ?? null;
 

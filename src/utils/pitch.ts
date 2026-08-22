@@ -18,6 +18,20 @@ export interface PitchPoint {
     hz: number | null;
 }
 
+export interface SpeechBounds {
+    /** Seconds into the recording where speech starts. */
+    start: number;
+    /** Seconds into the recording where speech ends. */
+    end: number;
+    /** Full decoded length, so callers can tell if trimming did anything. */
+    duration: number;
+}
+
+export interface RecordingAnalysis {
+    contour: PitchContour;
+    bounds: SpeechBounds | null;
+}
+
 export interface PitchContour {
     points: PitchPoint[];
     /** Voiced frames only. */
@@ -125,14 +139,110 @@ function smooth(points: PitchPoint[]): PitchPoint[] {
     });
 }
 
-export async function extractPitch(objectUrl: string): Promise<PitchContour> {
-    const empty: PitchContour = {
-        points: [],
-        voicedCount: 0,
-        medianHz: null,
-        minHz: null,
-        maxHz: null,
-        rangeSemitones: null,
+const EMPTY_CONTOUR: PitchContour = {
+    points: [],
+    voicedCount: 0,
+    medianHz: null,
+    minHz: null,
+    maxHz: null,
+    rangeSemitones: null,
+};
+
+/** Build a pitch contour from already-decoded, already-downsampled samples. */
+function contourFrom(data: Float32Array, rate: number): PitchContour {
+    const frameSize = Math.floor(FRAME_SECONDS * rate);
+    const hopSize = Math.floor(HOP_SECONDS * rate);
+    if (data.length < frameSize) return EMPTY_CONTOUR;
+
+    const points: PitchPoint[] = [];
+    for (let start = 0; start + frameSize <= data.length; start += hopSize) {
+        points.push({
+            time: start / rate,
+            hz: detectF0(data.subarray(start, start + frameSize), rate),
+        });
+    }
+
+    const smoothed = smooth(points);
+    const voiced = smoothed.map(p => p.hz).filter((hz): hz is number => hz !== null);
+    if (voiced.length < 3) return { ...EMPTY_CONTOUR, points: smoothed };
+
+    const sorted = [...voiced].sort((a, b) => a - b);
+    const low = percentile(sorted, 0.1);
+    const high = percentile(sorted, 0.9);
+
+    return {
+        points: smoothed,
+        voicedCount: voiced.length,
+        medianHz: percentile(sorted, 0.5),
+        minHz: sorted[0],
+        maxHz: sorted[sorted.length - 1],
+        // Semitones = 12 * log2(f2 / f1)
+        rangeSemitones: low > 0 ? 12 * Math.log2(high / low) : null,
+    };
+}
+
+/**
+ * Find where speech actually starts and stops inside a recording.
+ *
+ * The learner holds the mic button before they start talking and often pauses
+ * after, so playing the raw clip back begins with dead air. Rather than
+ * re-encoding the audio we just report the boundaries and let playback seek.
+ *
+ * The threshold is relative to the clip's own peak, so it adapts to quiet and
+ * loud recordings alike instead of assuming a fixed input level.
+ */
+export function findSpeechBounds(data: Float32Array, rate: number): SpeechBounds | null {
+    const duration = data.length / rate;
+    const frame = Math.max(1, Math.floor(0.02 * rate)); // 20 ms
+    const frames: number[] = [];
+
+    let peak = 0;
+    for (let start = 0; start + frame <= data.length; start += frame) {
+        let sum = 0;
+        for (let i = start; i < start + frame; i++) sum += data[i] * data[i];
+        const rms = Math.sqrt(sum / frame);
+        frames.push(rms);
+        if (rms > peak) peak = rms;
+    }
+
+    if (!frames.length || peak <= 0) return null;
+
+    // Speech is anything above a fraction of the loudest moment, with an
+    // absolute floor so near-silent clips do not amplify their own noise.
+    const threshold = Math.max(peak * 0.12, 0.006);
+    let first = frames.findIndex(rms => rms >= threshold);
+    if (first === -1) return null;
+    let last = frames.length - 1;
+    while (last > first && frames[last] < threshold) last--;
+
+    // Keep a little air either side so the first consonant is not clipped.
+    const padFrames = Math.ceil(0.06 / 0.02);
+    first = Math.max(0, first - padFrames);
+    last = Math.min(frames.length - 1, last + padFrames);
+
+    return {
+        start: (first * frame) / rate,
+        end: Math.min(duration, ((last + 1) * frame) / rate),
+        duration,
+    };
+}
+
+/**
+ * Decode the recording once and derive everything the feedback UI needs from
+ * it — the pitch contour and the speech boundaries. Decoding is the expensive
+ * part, so the two consumers share a single pass.
+ */
+export async function analyseRecording(objectUrl: string): Promise<RecordingAnalysis> {
+    const empty: RecordingAnalysis = {
+        contour: {
+            points: [],
+            voicedCount: 0,
+            medianHz: null,
+            minHz: null,
+            maxHz: null,
+            rangeSemitones: null,
+        },
+        bounds: null,
     };
 
     const AudioCtor: typeof AudioContext | undefined =
@@ -153,34 +263,11 @@ export async function extractPitch(objectUrl: string): Promise<PitchContour> {
         void context.close();
     }
 
-    const { data, rate } = downsample(decoded.getChannelData(0), decoded.sampleRate);
-    const frameSize = Math.floor(FRAME_SECONDS * rate);
-    const hopSize = Math.floor(HOP_SECONDS * rate);
-    if (data.length < frameSize) return empty;
-
-    const points: PitchPoint[] = [];
-    for (let start = 0; start + frameSize <= data.length; start += hopSize) {
-        points.push({
-            time: start / rate,
-            hz: detectF0(data.subarray(start, start + frameSize), rate),
-        });
-    }
-
-    const smoothed = smooth(points);
-    const voiced = smoothed.map(p => p.hz).filter((hz): hz is number => hz !== null);
-    if (voiced.length < 3) return { ...empty, points: smoothed };
-
-    const sorted = [...voiced].sort((a, b) => a - b);
-    const low = percentile(sorted, 0.1);
-    const high = percentile(sorted, 0.9);
+    const channel = decoded.getChannelData(0);
+    const { data, rate } = downsample(channel, decoded.sampleRate);
 
     return {
-        points: smoothed,
-        voicedCount: voiced.length,
-        medianHz: percentile(sorted, 0.5),
-        minHz: sorted[0],
-        maxHz: sorted[sorted.length - 1],
-        // Semitones = 12 * log2(f2 / f1)
-        rangeSemitones: low > 0 ? 12 * Math.log2(high / low) : null,
+        contour: contourFrom(data, rate),
+        bounds: findSpeechBounds(data, rate),
     };
 }
