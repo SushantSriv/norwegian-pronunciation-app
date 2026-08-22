@@ -6,10 +6,11 @@ import type { WordScore } from '../utils/scoring';
 interface Props {
     word: WordScore;
     voiceURI?: string;
+    rate: number;
 }
 
 /** Side-by-side "what you should say" vs "what I heard" phoneme explanation. */
-export function PhonemeBreakdown({ word, voiceURI }: Props) {
+export function PhonemeBreakdown({ word, voiceURI, rate }: Props) {
     const advice = getAdvice(word.word);
 
     return (
@@ -19,7 +20,7 @@ export function PhonemeBreakdown({ word, voiceURI }: Props) {
                     <span aria-hidden="true">💡</span> {word.word}
                 </p>
                 <button
-                    onClick={() => void speakNorwegian(word.word, { voiceURI, rate: 0.7 })}
+                    onClick={() => void speakNorwegian(word.word, { voiceURI, rate: rate * 0.75 })}
                     aria-label={"Hear " + word.word + " pronounced slowly"}
                     className="shrink-0 rounded-full border border-white/20 px-2.5 py-1 text-xs font-semibold text-white/70 transition hover:bg-white/10 hover:text-white"
                 >

@@ -50,7 +50,7 @@ export default function App() {
     const { supported, listening, interim, error, recordingUrl, analyserRef, start, stop } = useSpeechRecognition({
         onResult: handleResult,
     });
-    const { voices, activeVoiceURI, chooseVoice } = useNorwegianVoices();
+    const { voices, activeVoiceURI, chooseVoice, rate, setRate } = useNorwegianVoices();
 
     // Celebrate a cleared stage.
     useEffect(() => {
@@ -121,6 +121,8 @@ export default function App() {
                                         voices={voices}
                                         activeVoiceURI={activeVoiceURI}
                                         onChooseVoice={chooseVoice}
+                                        rate={rate}
+                                        onRateChange={setRate}
                                         onListen={start}
                                         onStopListening={stop}
                                         onNext={next}

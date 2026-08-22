@@ -1,5 +1,35 @@
 # Progress & Goals
 
+## v2.3 — Better speech: live voice list, karaoke tracking, speed control ✅ shipped
+
+### Fixed
+- ✅ **The good voices could never appear.** `loadVoices()` cached its snapshot
+  permanently and listened for `voiceschanged` with `{ once: true }`. Edge registers
+  local SAPI voices first and its far better *online neural* voices a moment later, so
+  the neural voices were resolved past and never seen. The list is now a live
+  subscription that keeps listening, and voice selection re-reads it on every call.
+- ✅ **A rejected voice silenced playback entirely.** Assigning `utterance.voice` throws
+  if the engine rejects the object, which aborted `speak()` before it started. Now
+  caught, falling back to the `lang` hint so something is still spoken.
+
+### Added
+- ✅ **Karaoke word tracking.** The phrase highlights word by word as the reference
+  voice says it, using `SpeechSynthesisUtterance.onboundary` character offsets mapped
+  back to word indices. Ties the sound to the spelling, and the button becomes Stop
+  while speaking.
+- ✅ **Speaking-speed control** (Slow / Relaxed / Normal / Brisk), persisted, and applied
+  consistently across "Hear it", the Correct button and per-word playback. The slow
+  toggle now scales *from* the chosen speed rather than overriding it.
+- ✅ Voices warm up on mount, so the first "Hear it" is not what triggers the async
+  voice fetch.
+
+### Verified
+Ranking confirmed in a real browser with two Norwegian voices present: the neural
+"Pernille ✨" sorts above the older local "Jon". Karaoke tracking confirmed by driving
+boundary events and observing the highlight advance.
+
+---
+
 ## v2.2 — Ring alignment, silence trimming, wider voice support ✅ shipped
 
 ### Fixed

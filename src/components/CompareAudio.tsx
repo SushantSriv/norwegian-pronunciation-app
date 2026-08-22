@@ -9,6 +9,8 @@ interface Props {
     phrase: string;
     recordingUrl: string | null;
     voiceURI?: string;
+    /** The learner-chosen speaking rate; the slow toggle scales from it. */
+    rate: number;
     /** Where speech actually starts/ends, so playback skips dead air. */
     bounds: SpeechBounds | null;
 }
@@ -17,7 +19,7 @@ interface Props {
  * Side-by-side "this is how it should sound" / "this is what you said".
  * Hearing the two back to back is the point, so only one plays at a time.
  */
-export function CompareAudio({ phrase, recordingUrl, voiceURI, bounds }: Props) {
+export function CompareAudio({ phrase, recordingUrl, voiceURI, rate, bounds }: Props) {
     const [playing, setPlaying] = useState<Track>(null);
     const [slow, setSlow] = useState(false);
     const audioRef = useRef<HTMLAudioElement | null>(null);
@@ -45,7 +47,7 @@ export function CompareAudio({ phrase, recordingUrl, voiceURI, bounds }: Props) 
         if (playing === 'reference') return stopAll();
         stopAll();
         setPlaying('reference');
-        await speakNorwegian(phrase, { voiceURI, rate: slow ? 0.65 : 1 });
+        await speakNorwegian(phrase, { voiceURI, rate: slow ? rate * 0.7 : rate });
         setPlaying(current => (current === 'reference' ? null : current));
     };
 
@@ -57,7 +59,7 @@ export function CompareAudio({ phrase, recordingUrl, voiceURI, bounds }: Props) 
         const audio = audioRef.current ?? new Audio();
         audioRef.current = audio;
         if (audio.src !== recordingUrl) audio.src = recordingUrl;
-        audio.playbackRate = slow ? 0.65 : 1;
+        audio.playbackRate = slow ? 0.7 : 1;
 
         // Skip the pause before the learner started talking, and stop at the
         // point they finished, rather than playing the raw held-button clip.

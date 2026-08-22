@@ -1,12 +1,16 @@
 /**
  * Speech synthesis for reference pronunciation.
  *
- * The important subtlety: speechSynthesis.getVoices() returns an EMPTY array on
- * the first synchronous call in Chrome/Edge — the list is populated
- * asynchronously and announced via the `voiceschanged` event. Selecting a voice
- * synchronously therefore silently fails, and the browser reads Norwegian text
- * with the default (usually English) voice, which sounds nothing like Norwegian.
- * Everything here goes through the awaited `loadVoices()`.
+ * Two browser quirks drive the design here:
+ *
+ * 1. `speechSynthesis.getVoices()` returns an EMPTY array on the first
+ *    synchronous call in Chrome/Edge — the list is populated asynchronously and
+ *    announced via `voiceschanged`. Selecting a voice synchronously silently
+ *    fails, and Norwegian then gets read by the default English voice.
+ *
+ * 2. The list keeps GROWING. Edge registers local SAPI voices first and its
+ *    much better-sounding online neural voices arrive a moment later. So we
+ *    never cache a snapshot — we keep listening and always read fresh.
  */
 
 const NORWEGIAN_LANG = /^(nb|nn|no)\b/i;
@@ -17,42 +21,71 @@ const NORWEGIAN_LANG = /^(nb|nn|no)\b/i;
  */
 const NEIGHBOUR_LANG = /^(sv|da)\b/i;
 
-let voicesPromise: Promise<SpeechSynthesisVoice[]> | null = null;
+const hasSynthesis = () => typeof window !== 'undefined' && 'speechSynthesis' in window;
 
+type VoiceListener = (voices: SpeechSynthesisVoice[]) => void;
+const listeners = new Set<VoiceListener>();
+let attached = false;
+
+function currentVoices(): SpeechSynthesisVoice[] {
+    return hasSynthesis() ? window.speechSynthesis.getVoices() : [];
+}
+
+function attachVoicesListener() {
+    if (attached || !hasSynthesis()) return;
+    attached = true;
+    // Deliberately NOT `once` — late-arriving neural voices fire this again.
+    window.speechSynthesis.addEventListener('voiceschanged', () => {
+        const voices = currentVoices();
+        for (const listener of [...listeners]) listener(voices);
+    });
+}
+
+/**
+ * Subscribe to the voice list. Fires immediately with whatever is known now,
+ * then again whenever the browser registers more. Returns an unsubscribe fn.
+ */
+export function subscribeToVoices(listener: VoiceListener): () => void {
+    attachVoicesListener();
+    listeners.add(listener);
+    listener(currentVoices());
+
+    // Safety net for browsers that never fire the event.
+    const timers = [
+        window.setTimeout(() => listener(currentVoices()), 300),
+        window.setTimeout(() => listener(currentVoices()), 1500),
+    ];
+
+    return () => {
+        listeners.delete(listener);
+        timers.forEach(window.clearTimeout);
+    };
+}
+
+/** Resolves once the browser has registered at least one voice (or we give up). */
 export function loadVoices(): Promise<SpeechSynthesisVoice[]> {
-    if (voicesPromise) return voicesPromise;
+    if (!hasSynthesis()) return Promise.resolve([]);
 
-    voicesPromise = new Promise(resolve => {
-        if (typeof window === 'undefined' || !('speechSynthesis' in window)) {
-            resolve([]);
-            return;
-        }
+    const existing = currentVoices();
+    if (existing.length) return Promise.resolve(existing);
 
-        const existing = window.speechSynthesis.getVoices();
-        if (existing.length) {
-            resolve(existing);
-            return;
-        }
-
+    attachVoicesListener();
+    return new Promise(resolve => {
         let settled = false;
         const finish = () => {
             if (settled) return;
             settled = true;
-            resolve(window.speechSynthesis.getVoices());
+            listeners.delete(finish);
+            resolve(currentVoices());
         };
-
-        window.speechSynthesis.addEventListener('voiceschanged', finish, { once: true });
-        // Some browsers never fire voiceschanged; do not hang forever.
+        listeners.add(finish);
         window.setTimeout(finish, 2000);
     });
-
-    return voicesPromise;
 }
 
 /**
- * Rank Norwegian voices best-first. Neural/cloud voices (Edge "Natural",
- * Google) sound dramatically better than the older local SAPI ones, so they
- * come first.
+ * Rank voices best-first. Neural/cloud voices (Edge "Natural", Google) sound
+ * dramatically better than the older local SAPI ones, so they come first.
  */
 function quality(voice: SpeechSynthesisVoice): number {
     const name = voice.name.toLowerCase();
@@ -70,20 +103,26 @@ export function isNeighbourVoice(voice: SpeechSynthesisVoice): boolean {
     return !NORWEGIAN_LANG.test(voice.lang) && NEIGHBOUR_LANG.test(voice.lang);
 }
 
+/** Filter and rank a raw voice list. Exported so the hook can reuse it live. */
+export function rankNorwegianVoices(all: SpeechSynthesisVoice[]): SpeechSynthesisVoice[] {
+    const norwegian = all.filter(v => NORWEGIAN_LANG.test(v.lang)).sort(byQuality);
+    const neighbours = all.filter(isNeighbourVoice).sort(byQuality);
+    return [...norwegian, ...neighbours];
+}
+
 /**
  * Norwegian voices best-first. If the platform ships none, fall back to the
  * Scandinavian neighbours rather than leaving the learner with an English
  * voice mangling Norwegian orthography.
  */
 export async function norwegianVoices(): Promise<SpeechSynthesisVoice[]> {
-    const all = await loadVoices();
-    const norwegian = all.filter(v => NORWEGIAN_LANG.test(v.lang)).sort(byQuality);
-    const neighbours = all.filter(isNeighbourVoice).sort(byQuality);
-    return [...norwegian, ...neighbours];
+    return rankNorwegianVoices(await loadVoices());
 }
 
 async function pickVoice(voiceURI?: string): Promise<SpeechSynthesisVoice | undefined> {
-    const candidates = await norwegianVoices();
+    // Read fresh rather than trusting an earlier snapshot — a better voice may
+    // have registered since the last call.
+    const candidates = rankNorwegianVoices(await loadVoices());
     if (voiceURI) {
         const chosen = candidates.find(v => v.voiceURI === voiceURI);
         if (chosen) return chosen;
@@ -94,12 +133,16 @@ async function pickVoice(voiceURI?: string): Promise<SpeechSynthesisVoice | unde
 export interface SpeakOptions {
     voiceURI?: string;
     rate?: number;
+    /**
+     * Fired as each word begins, with its character offset into the text. Lets
+     * the UI follow along with the speech.
+     */
+    onBoundary?: (charIndex: number) => void;
 }
 
 /** Speak Norwegian text, resolving when playback finishes. */
 export async function speakNorwegian(text: string, options: SpeakOptions = {}): Promise<void> {
-    if (typeof window === 'undefined' || !('speechSynthesis' in window)) return;
-    if (!text.trim()) return;
+    if (!hasSynthesis() || !text.trim()) return;
 
     const voice = await pickVoice(options.voiceURI);
 
@@ -112,8 +155,22 @@ export async function speakNorwegian(text: string, options: SpeakOptions = {}): 
         // Match the voice's own locale when we have one; otherwise ask for
         // Bokmål and hope the platform obliges.
         utterance.lang = voice?.lang ?? 'nb-NO';
-        if (voice) utterance.voice = voice;
+        try {
+            if (voice) utterance.voice = voice;
+        } catch {
+            // Assigning a voice the engine rejects throws. Falling back to the
+            // lang hint alone still speaks; failing here would speak nothing.
+        }
         utterance.rate = options.rate ?? 1;
+        utterance.pitch = 1;
+
+        if (options.onBoundary) {
+            utterance.onboundary = event => {
+                // Some voices report only 'word'; others leave name empty.
+                if (!event.name || event.name === 'word') options.onBoundary?.(event.charIndex);
+            };
+        }
+
         utterance.onend = () => resolve();
         utterance.onerror = () => resolve();
         window.speechSynthesis.speak(utterance);
@@ -121,7 +178,15 @@ export async function speakNorwegian(text: string, options: SpeakOptions = {}): 
 }
 
 export function stopSpeaking() {
-    if (typeof window !== 'undefined' && 'speechSynthesis' in window) {
-        window.speechSynthesis.cancel();
-    }
+    if (hasSynthesis()) window.speechSynthesis.cancel();
+}
+
+/**
+ * Ask the browser to start populating its voice list as early as possible, so
+ * the first "Hear it" is not the thing that triggers the async fetch.
+ */
+export function warmUpVoices() {
+    if (!hasSynthesis()) return;
+    attachVoicesListener();
+    void currentVoices();
 }

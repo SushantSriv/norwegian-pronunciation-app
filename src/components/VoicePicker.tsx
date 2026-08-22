@@ -1,9 +1,12 @@
 import { isNeighbourVoice, speakNorwegian } from '../utils/audioPlayback';
+import { RATE_OPTIONS } from '../hooks/useNorwegianVoices';
 
 interface Props {
     voices: SpeechSynthesisVoice[];
     activeVoiceURI?: string;
     onChoose: (uri: string) => void;
+    rate: number;
+    onRateChange: (rate: number) => void;
 }
 
 /** Strip vendor boilerplate so the dropdown reads cleanly. */
@@ -25,7 +28,7 @@ function label(voice: SpeechSynthesisVoice): string {
     return `${name} · ${variety}`;
 }
 
-export function VoicePicker({ voices, activeVoiceURI, onChoose }: Props) {
+export function VoicePicker({ voices, activeVoiceURI, onChoose, rate, onRateChange }: Props) {
     if (voices.length === 0) {
         return (
             <p className="text-xs leading-relaxed text-amber-300/80">
@@ -57,8 +60,28 @@ export function VoicePicker({ voices, activeVoiceURI, onChoose }: Props) {
                         </option>
                     ))}
                 </select>
+                <label htmlFor="rate" className="text-xs font-semibold uppercase tracking-wide text-white/45">
+                    Speed
+                </label>
+                <select
+                    id="rate"
+                    value={rate}
+                    onChange={e => onRateChange(Number(e.target.value))}
+                    className="min-h-[36px] rounded-lg border border-white/20 bg-slate-900/90 px-2 py-1 text-sm text-white"
+                >
+                    {RATE_OPTIONS.map(option => (
+                        <option key={option.value} value={option.value}>
+                            {option.label}
+                        </option>
+                    ))}
+                </select>
                 <button
-                    onClick={() => void speakNorwegian('Hei, hvordan går det med deg i dag?', { voiceURI: activeVoiceURI })}
+                    onClick={() =>
+                        void speakNorwegian('Hei, hvordan går det med deg i dag?', {
+                            voiceURI: activeVoiceURI,
+                            rate,
+                        })
+                    }
                     className="min-h-[36px] rounded-lg border border-white/20 px-2.5 py-1 text-xs font-semibold text-white/70 transition hover:border-white/40 hover:bg-white/10 hover:text-white"
                 >
                     🔊 Test

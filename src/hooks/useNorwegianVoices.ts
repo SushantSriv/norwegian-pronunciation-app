@@ -1,48 +1,78 @@
 import { useCallback, useEffect, useState } from 'react';
-import { norwegianVoices } from '../utils/audioPlayback';
+import { rankNorwegianVoices, subscribeToVoices, warmUpVoices } from '../utils/audioPlayback';
 
 const VOICE_KEY = 'npa-voice-v1';
+const RATE_KEY = 'npa-rate-v1';
+
+export const RATE_OPTIONS = [
+    { value: 0.65, label: 'Slow' },
+    { value: 0.85, label: 'Relaxed' },
+    { value: 1, label: 'Normal' },
+    { value: 1.15, label: 'Brisk' },
+] as const;
+
+function readStored(key: string): string | null {
+    try {
+        return window.localStorage.getItem(key);
+    } catch {
+        return null;
+    }
+}
+
+function store(key: string, value: string) {
+    try {
+        window.localStorage.setItem(key, value);
+    } catch {
+        // Storage unavailable — the choice just will not persist.
+    }
+}
 
 /**
- * Available Norwegian speech-synthesis voices plus the learner's choice.
+ * Available Norwegian speech-synthesis voices plus the learner's preferences.
  *
- * Which voices exist is entirely down to the OS and browser. Many machines ship
- * only one older local Norwegian voice; Edge and Chrome additionally expose much
- * better-sounding cloud voices while online.
+ * The list is live: Edge registers its local voices first and the far better
+ * online neural voices a moment later, so this stays subscribed rather than
+ * reading once at mount.
  */
 export function useNorwegianVoices() {
     const [voices, setVoices] = useState<SpeechSynthesisVoice[]>([]);
-    const [voiceURI, setVoiceURI] = useState<string | null>(() => {
-        try {
-            return window.localStorage.getItem(VOICE_KEY);
-        } catch {
-            return null;
-        }
+    const [voiceURI, setVoiceURI] = useState<string | null>(() => readStored(VOICE_KEY));
+    const [rate, setRateState] = useState<number>(() => {
+        const stored = Number(readStored(RATE_KEY));
+        return RATE_OPTIONS.some(o => o.value === stored) ? stored : 1;
     });
 
     useEffect(() => {
-        let cancelled = false;
-        norwegianVoices().then(list => {
-            if (!cancelled) setVoices(list);
+        warmUpVoices();
+        return subscribeToVoices(all => {
+            const ranked = rankNorwegianVoices(all);
+            // Only re-render when the set actually changed, since the browser
+            // can fire voiceschanged repeatedly with identical contents.
+            setVoices(prev => {
+                const same =
+                    prev.length === ranked.length &&
+                    prev.every((v, i) => v.voiceURI === ranked[i].voiceURI);
+                return same ? prev : ranked;
+            });
         });
-        return () => {
-            cancelled = true;
-        };
     }, []);
 
     const chooseVoice = useCallback((uri: string) => {
         setVoiceURI(uri);
-        try {
-            window.localStorage.setItem(VOICE_KEY, uri);
-        } catch {
-            // Storage unavailable — the choice just will not persist.
-        }
+        store(VOICE_KEY, uri);
+    }, []);
+
+    const setRate = useCallback((next: number) => {
+        setRateState(next);
+        store(RATE_KEY, String(next));
     }, []);
 
     // Fall back to the best-ranked voice when nothing is stored, or when a
     // previously chosen voice is no longer installed.
     const activeVoiceURI =
-        voiceURI && voices.some(v => v.voiceURI === voiceURI) ? voiceURI : (voices[0]?.voiceURI ?? undefined);
+        voiceURI && voices.some(v => v.voiceURI === voiceURI)
+            ? voiceURI
+            : (voices[0]?.voiceURI ?? undefined);
 
-    return { voices, activeVoiceURI, chooseVoice };
+    return { voices, activeVoiceURI, chooseVoice, rate, setRate };
 }

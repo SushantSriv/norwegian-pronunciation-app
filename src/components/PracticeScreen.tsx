@@ -1,7 +1,6 @@
 import { AnimatePresence, motion } from 'framer-motion';
 import { ITEMS_TO_WIN, MAX_STRIKES, type Attempt } from '../hooks/usePracticeSession';
 import type { Stage } from '../data/stages';
-import { speakNorwegian } from '../utils/audioPlayback';
 import { ScoreRing } from './ScoreRing';
 import { PhonemeBreakdown } from './PhonemeBreakdown';
 import { CompareAudio } from './CompareAudio';
@@ -9,6 +8,7 @@ import { MelodyView } from './MelodyView';
 import { VoiceVisualizer } from './VoiceVisualizer';
 import { VoicePicker } from './VoicePicker';
 import { useRecordingAnalysis } from '../hooks/useRecordingAnalysis';
+import { useSpokenPhrase } from '../hooks/useSpokenPhrase';
 
 interface Props {
     stage: Stage;
@@ -26,6 +26,8 @@ interface Props {
     voices: SpeechSynthesisVoice[];
     activeVoiceURI?: string;
     onChooseVoice: (uri: string) => void;
+    rate: number;
+    onRateChange: (rate: number) => void;
     onListen: () => void;
     onStopListening: () => void;
     onNext: () => void;
@@ -58,6 +60,8 @@ export function PracticeScreen({
     voices,
     activeVoiceURI,
     onChooseVoice,
+    rate,
+    onRateChange,
     onListen,
     onStopListening,
     onNext,
@@ -72,6 +76,9 @@ export function PracticeScreen({
     // One decode of the recording feeds both the melody chart and the trimmed
     // listen-back playback.
     const { analysis, analysing } = useRecordingAnalysis(recordingUrl);
+    // Follows the reference voice word by word so the learner can see which
+    // part of the phrase is being said.
+    const { speak, stop: stopSpeaking, speaking, speakingIndex } = useSpokenPhrase();
 
     return (
         <div className="glass w-full overflow-hidden rounded-3xl p-5 sm:p-7">
@@ -194,7 +201,11 @@ export function PracticeScreen({
                                         transition: { type: 'spring', stiffness: 320, damping: 24 },
                                     },
                                 }}
-                                className="inline-block"
+                                className={
+                                    speakingIndex === i
+                                        ? 'inline-block rounded-md bg-sky-400/25 px-1 text-sky-100 ring-1 ring-sky-300/40 transition-colors'
+                                        : 'inline-block rounded-md px-1 transition-colors'
+                                }
                             >
                                 {word}
                             </motion.span>
@@ -205,10 +216,19 @@ export function PracticeScreen({
                 <motion.button
                     whileHover={{ scale: 1.05 }}
                     whileTap={{ scale: 0.96 }}
-                    onClick={() => void speakNorwegian(displayedItem, { voiceURI: activeVoiceURI })}
-                    className="mt-5 inline-flex min-h-[42px] items-center gap-2 rounded-full border border-white/15 bg-white/[0.07] px-5 py-2 text-sm font-semibold text-white/85 transition hover:border-white/30 hover:bg-white/15"
+                    onClick={() =>
+                        speaking
+                            ? stopSpeaking()
+                            : void speak(displayedItem, { voiceURI: activeVoiceURI, rate })
+                    }
+                    className={
+                        speaking
+                            ? 'mt-5 inline-flex min-h-[42px] items-center gap-2 rounded-full border border-sky-300/40 bg-sky-400/20 px-5 py-2 text-sm font-semibold text-sky-100'
+                            : 'mt-5 inline-flex min-h-[42px] items-center gap-2 rounded-full border border-white/15 bg-white/[0.07] px-5 py-2 text-sm font-semibold text-white/85 transition hover:border-white/30 hover:bg-white/15'
+                    }
                 >
-                    <span aria-hidden="true">🔊</span> Hear it
+                    <span aria-hidden="true">{speaking ? '⏹' : '🔊'}</span>
+                    {speaking ? 'Stop' : 'Hear it'}
                 </motion.button>
             </div>
 
@@ -291,6 +311,7 @@ export function PracticeScreen({
                                     phrase={lastAttempt.expected}
                                     recordingUrl={recordingUrl}
                                     voiceURI={activeVoiceURI}
+                                    rate={rate}
                                     bounds={analysis?.bounds ?? null}
                                 />
                                 <MelodyView contour={analysis?.contour ?? null} analysing={analysing} />
@@ -304,6 +325,7 @@ export function PracticeScreen({
                                             key={word.index}
                                             word={word}
                                             voiceURI={activeVoiceURI}
+                                            rate={rate}
                                         />
                                     ))}
                                 </motion.div>
@@ -370,7 +392,13 @@ export function PracticeScreen({
             </AnimatePresence>
 
             <div className="mt-6 border-t border-white/10 pt-4">
-                <VoicePicker voices={voices} activeVoiceURI={activeVoiceURI} onChoose={onChooseVoice} />
+                <VoicePicker
+                    voices={voices}
+                    activeVoiceURI={activeVoiceURI}
+                    onChoose={onChooseVoice}
+                    rate={rate}
+                    onRateChange={onRateChange}
+                />
             </div>
         </div>
     );
