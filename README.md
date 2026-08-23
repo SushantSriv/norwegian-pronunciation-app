@@ -6,7 +6,7 @@
 
 **Say Norwegian out loud. See your intonation, phoneme by phoneme.**
 
-[**▶ Open the app**](https://sushantsriv.github.io/norwegian-pronunciation-app/) · Free · No sign-up · Runs entirely in your browser
+[**▶ Open the app**](https://norsk-uttale.pages.dev) · Free · No sign-up · Runs entirely in your browser
 
 </div>
 
@@ -118,7 +118,28 @@ Then set one environment variable so link previews point at the right origin:
 
 | Variable | Value |
 |---|---|
-| `VITE_SITE_URL` | `https://your-domain.example` |
+| `VITE_SITE_URL` | `https://norsk-uttale.pages.dev` (or your domain) |
+| `VITE_FEEDBACK_URL` | Optional. Where the in-app feedback link points. Leave unset to hide it — GitHub issues are unreachable once the repo is private. |
+
+### The domain
+
+The app runs on Cloudflare's free subdomain, **`norsk-uttale.pages.dev`** — free
+forever, HTTPS included, no registration. The name comes from the Pages project
+name, so pick `norsk-uttale` when creating the project. Subdomains are globally
+unique; if it is taken, `norskuttale`, `uttale-app` or `snakk-norsk` all read
+fine, and `VITE_SITE_URL` is the only thing to update.
+
+A paid domain is worth it later for credibility, not now:
+
+| Option | Cost | Notes |
+|---|---|---|
+| `*.pages.dev` | Free | What this uses. Perfectly respectable to share. |
+| `.com` / `.app` | ~$10–15/yr | Add under Pages → Custom domains; Cloudflare issues the certificate. |
+| `.no` | ~$15/yr | Requires a Norwegian address or organisation number (Norid rule). |
+
+Genuinely free *custom* TLDs are not worth chasing: Freenom (`.tk`, `.ml`, `.ga`)
+stopped free registrations and is unreliable, while `js.org` and `is-a.dev`
+require a public open-source repo, which this is not.
 
 For a custom domain: Pages project → Custom domains → add it, and Cloudflare
 issues the certificate. If the domain already uses Cloudflare DNS this is a
