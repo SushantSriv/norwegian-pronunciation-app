@@ -6,7 +6,7 @@
 
 **Say Norwegian out loud. See your intonation, phoneme by phoneme.**
 
-[**▶ Open the app**](https://norwegian-pronunciation-app.sushantsrivastava198.workers.dev) · Free · No sign-up · Runs entirely in your browser
+[**▶ Open the app**](https://sushantsriv.github.io/norwegian-pronunciation-app/) · Free · No sign-up · Runs entirely in your browser
 
 </div>
 
@@ -100,80 +100,6 @@ identifiers are stored, and audio never leaves the browser regardless.
 it will be wrong on loanwords. Pitch detection returns nothing rather than guessing on
 unvoiced or quiet frames.
 
-## Deploying
-
-Hosted on **Cloudflare**, which builds straight from this repo — including when
-it is private — with free HTTPS and an optional custom domain.
-
-Cloudflare now offers two flavours under *Workers & Pages*, and they differ in
-the URL you get:
-
-| | Free URL | |
-|---|---|---|
-| **Worker** (what this uses) | `<worker>.<account>.workers.dev` | Newer path; Cloudflare steers you here by default |
-| **Pages** | `<project>.pages.dev` | Shorter, no account name in it |
-
-Build settings for either:
-
-| Setting | Value |
-|---|---|
-| Build command | `npm run build` |
-| Output directory | `dist` |
-| Node version | `20` (env var `NODE_VERSION`) |
-
-### Environment variables
-
-`VITE_SITE_URL` defaults to the deployed URL in `vite.config.ts`, so **nothing
-needs setting for the site to work**. Override it only when moving to a custom
-domain — otherwise link previews keep pointing at the old origin.
-
-To set one:
-
-- **Worker:** project → *Settings* → *Variables and Secrets* → add under
-  **Build** variables (build-time, not runtime — `VITE_*` values are baked in
-  during `npm run build`, so a runtime variable would have no effect).
-- **Pages:** project → *Settings* → *Environment variables* → *Production*.
-
-Then redeploy, since these are compiled into the bundle.
-
-| Variable | Purpose |
-|---|---|
-| `VITE_SITE_URL` | Absolute origin for Open Graph link previews. |
-| `VITE_FEEDBACK_URL` | Optional. Where the in-app feedback link points; hidden when unset. GitHub issues stop working once the repo is private. |
-| `VITE_ANALYTICS_URL` | Optional. Cookie-less page counter; no tracking at all when unset. |
-| `VITE_BASE_PATH` | Only for sub-path hosting such as GitHub Pages. |
-
-### A custom domain
-
-Add it under the project's *Domains* tab (Worker) or *Custom domains* (Pages);
-Cloudflare issues the certificate. If the domain already uses Cloudflare DNS
-this is a couple of clicks, otherwise point the nameservers there first. Then
-update `VITE_SITE_URL` and redeploy.
-
-### Getting a shorter URL
-
-The current `*.workers.dev` address includes the account name, which makes it
-long to share. Two ways to shorten it, both free:
-
-- **Rename the Worker** (Settings → General → Name) to something like `uttale`,
-  giving `uttale.<account>.workers.dev`.
-- **Recreate as a Pages project** instead, giving `norsk-uttale.pages.dev` with
-  no account name at all.
-
-Either way, update `VITE_SITE_URL` afterwards so link previews follow.
-
-A paid domain is worth it later for credibility, not now:
-
-| Option | Cost | Notes |
-|---|---|---|
-| `*.workers.dev` / `*.pages.dev` | Free | What this uses. Fine to share. |
-| `.com` / `.app` | ~$10–15/yr | Add under the project's domain tab; Cloudflare issues the certificate. |
-| `.no` | ~$15/yr | Requires a Norwegian address or organisation number (Norid rule). |
-
-Genuinely free *custom* TLDs are not worth chasing: Freenom (`.tk`, `.ml`, `.ga`)
-stopped free registrations and is unreliable, while `js.org` and `is-a.dev`
-require a public open-source repo, which this is not.
-
 ## Feedback
 
 Found a bug or a phrase that scores wrongly?
@@ -181,6 +107,6 @@ Found a bug or a phrase that scores wrongly?
 
 ## Licence
 
-**All rights reserved.** This is source-available, not open source — see [LICENSE](LICENSE).
-You may read the code; you may not use, copy, modify or redistribute it without
-written permission. Contact me if you would like to.
+**All rights reserved.** This is source-available, not open source — see
+[LICENSE](LICENSE). You may read the code; you may not use, copy, modify or
+redistribute it without written permission. Contact me if you would like to.

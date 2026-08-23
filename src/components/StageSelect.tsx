@@ -2,10 +2,6 @@ import { motion } from 'framer-motion';
 import { STAGES, type Stage } from '../data/stages';
 import { ITEMS_TO_WIN, MAX_STRIKES } from '../hooks/usePracticeSession';
 
-// A private repo makes GitHub issues unreachable for visitors, so the feedback
-// destination is configurable. Unset means the link is simply not shown.
-const FEEDBACK_URL = import.meta.env.VITE_FEEDBACK_URL;
-
 interface Props {
     bests: Record<string, number>;
     onPick: (stage: Stage) => void;
@@ -143,10 +139,9 @@ export function StageSelect({ bests, onPick }: Props) {
 
             <motion.div variants={card} className="mt-9 space-y-1.5 text-center text-xs text-white/30">
                 <p>Chrome &amp; Edge · your voice is analysed in your browser, never uploaded</p>
-                {FEEDBACK_URL && (
                 <p>
                     <a
-                        href={FEEDBACK_URL}
+                        href="https://github.com/SushantSriv/norwegian-pronunciation-app/issues/new"
                         target="_blank"
                         rel="noopener noreferrer"
                         className="underline decoration-white/25 underline-offset-2 transition hover:text-white/60"
@@ -154,7 +149,6 @@ export function StageSelect({ bests, onPick }: Props) {
                         Something wrong? Tell me
                     </a>
                 </p>
-                )}
             </motion.div>
         </motion.div>
     );
