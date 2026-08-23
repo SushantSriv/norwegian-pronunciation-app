@@ -27,7 +27,7 @@ your attempt, extracts the pitch contour, and draws it.
 | 🎙️ **Live scoring** | Say the phrase; every word is aligned and scored, so a dropped or inserted word does not throw off everything after it. |
 | 🔤 **Phoneme feedback** | Each missed word is broken into IPA sounds, with a plain-language explanation of the target sound and what you actually said. |
 | 📈 **Melody view** | Your pitch contour, measured from your own recording, drawn against the *expected* shape for that word's tonelag. Flat delivery gets flagged. |
-| 🗣️ **Dialects** | Østnorsk, Vest-/sørvestnorsk or Trøndersk/nordnorsk — real per-region transcriptions, not one accent relabelled. |
+| 🗣️ **Dialects** | Østnorsk, Vest-/sørvestnorsk or Trøndersk/nordnorsk. The transcription under every phrase updates live, so the choice is visible rather than buried in error feedback. |
 | 🎧 **Listen back** | Play the reference and your own attempt back to back. Silence before and after you speak is trimmed automatically. |
 | 🎯 **Rising difficulty** | Clear 10 phrases before losing 3 lives. The pass bar climbs with every one you get right. |
 | 📚 **13 tracks** | Five CEFR levels from A1 words to B2 clusters, plus eight occupation tracks — helse, bygg, barnehage, butikk, restaurant, transport, renhold, kontor. |
@@ -50,7 +50,7 @@ in Chrome/Edge, open the app and choose **Install** from the address bar or menu
 ```bash
 npm install
 npm run dev        # http://localhost:5173
-npm test           # 75 unit tests
+npm test           # 77 unit tests
 npm run build      # production build
 ```
 
@@ -117,7 +117,7 @@ where Norwegian learners most often actually work:
 | 🧼 Renhold | products, equipment, finishing a shift |
 | 💻 Kontor og IT | access, deadlines, screen sharing |
 
-Every word in these was checked against the NB Uttale lexicon: **97.8% resolve to
+Every word in these was checked against the NB Uttale lexicon: **98.7% resolve to
 real pronunciation data**, so occupation vocabulary gets the same IPA, tonelag and
 phoneme feedback as the general corpus. The handful that do not are ordinary
 Norwegian compounds — `skiftetøy`, `hentetid`, `tørkepapir` — which no lexicon can

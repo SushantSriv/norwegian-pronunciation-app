@@ -39,6 +39,11 @@ export function DialectPicker({ dialect, onChange, ready }: Props) {
             </div>
 
             <p className="text-[11px] leading-relaxed text-white/35">{active.trait}</p>
+            <p className="text-[11px] leading-relaxed text-white/30">
+                Changes the transcription under each phrase and the phoneme feedback. It does not
+                change the sentences or the reference voice, which follows whatever Norwegian voice
+                your device has.
+            </p>
         </div>
     );
 }

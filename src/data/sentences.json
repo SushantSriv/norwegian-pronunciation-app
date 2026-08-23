@@ -10,7 +10,126 @@
             "sol",
             "hus",
             "mat",
-            "god natt"
+            "god natt",
+            "bok",
+            "bil",
+            "vann",
+            "melk",
+            "brød",
+            "dag",
+            "natt",
+            "venn",
+            "barn",
+            "by"
+        ],
+        "2": [
+            "hvordan går det?",
+            "jeg heter Ola",
+            "god morgen",
+            "ha det bra",
+            "en katt",
+            "en hund",
+            "jeg liker kaffe",
+            "det er fint vær",
+            "hva heter du?",
+            "god kveld",
+            "vi ses",
+            "unnskyld",
+            "vær så god",
+            "jeg er sulten",
+            "hvor er du?",
+            "det går bra"
+        ],
+        "3": [
+            "jeg bor i Oslo",
+            "hvor er du fra?",
+            "kan du hjelpe meg?",
+            "jeg forstår ikke",
+            "tusen takk",
+            "jeg snakker norsk",
+            "hva er klokka?",
+            "god helg",
+            "jeg elsker deg",
+            "vi sees i morgen",
+            "jeg kommer fra Norge",
+            "hun heter Kari",
+            "vi bor i Oslo",
+            "det er kaldt i dag",
+            "han er trøtt",
+            "klokka er ti",
+            "vi går hjem nå"
+        ],
+        "4": [
+            "dette er vanskelig",
+            "jeg lærer norsk",
+            "kan du gjenta det?",
+            "jeg vil spise nå",
+            "har du tid i dag?",
+            "hvordan staver du det?",
+            "vær så snill",
+            "det var hyggelig",
+            "jeg må gå nå",
+            "kan jeg få vann?"
+        ],
+        "5": [
+            "jeg skal på jobb",
+            "hvor ligger butikken?",
+            "snakker du engelsk?",
+            "jeg trenger hjelp",
+            "hva gjør du?",
+            "er du ledig i morgen?",
+            "jeg har en søster",
+            "hun leser en bok",
+            "det regner mye i dag",
+            "hvor gammel er du?"
+        ],
+        "6": [
+            "jeg liker å gå tur",
+            "kan du snakke saktere?",
+            "jeg bor sammen med en venn",
+            "hva skal vi gjøre?",
+            "jeg skal reise i morgen",
+            "vi lager middag sammen",
+            "jeg liker å lese bøker",
+            "det snør ute",
+            "jeg er veldig trøtt",
+            "kan jeg låne denne boken?"
+        ],
+        "7": [
+            "hva jobber du med?",
+            "jeg trener hver dag",
+            "kan du anbefale en restaurant?",
+            "jeg liker norsk mat",
+            "bussen kommer snart",
+            "hva er favorittfilmen din?",
+            "jeg vil ha en kopp te",
+            "vi går på kino i kveld",
+            "jeg mistet nøklene mine",
+            "hva er adressen din?"
+        ],
+        "8": [
+            "jeg studerer på universitetet",
+            "vi skal til Bergen neste uke",
+            "kan jeg betale med kort?",
+            "jeg har vondt i hodet",
+            "det er varmt ute i dag",
+            "hvor lang tid tar det?",
+            "jeg skal møte en venn",
+            "vi må handle matvarer",
+            "hun jobber på sykehuset",
+            "hva betyr dette ordet?"
+        ],
+        "9": [
+            "jeg liker å reise til utlandet",
+            "kan du vise meg veien til hotellet?",
+            "jeg spiller fotball hver lørdag",
+            "dette er min første gang her",
+            "hvor kan jeg finne en minibank?",
+            "vi besøker familien min ofte",
+            "jeg vil gjerne lære mer norsk",
+            "du har en fin jakke",
+            "vi drar på ferie neste måned",
+            "jeg skal ringe deg senere"
         ],
         "10": [
             "hun snakker tre forskjellige språk",
@@ -132,18 +251,6 @@
             "dataene ble lagret på serveren",
             "rapporten ble gjennomgått av lederen"
         ],
-        "2": [
-            "hvordan går det?",
-            "jeg heter Ola",
-            "god morgen",
-            "ha det bra",
-            "en katt",
-            "en hund",
-            "jeg liker kaffe",
-            "det er fint vær",
-            "hva heter du?",
-            "god kveld"
-        ],
         "20": [
             "hvis jeg hadde mer tid, ville jeg lært spansk",
             "om det er ledig plass, kan du reservere en stol?",
@@ -263,18 +370,6 @@
             "ledelsesfilosofi varierer mellom ulike organisasjoner",
             "et empirisk grunnlag styrker forskningsresultatene",
             "konkurranseanalysen viser nye aktører i markedet"
-        ],
-        "3": [
-            "jeg bor i Oslo",
-            "hvor er du fra?",
-            "kan du hjelpe meg?",
-            "jeg forstår ikke",
-            "tusen takk",
-            "jeg snakker norsk",
-            "hva er klokka?",
-            "god helg",
-            "jeg elsker deg",
-            "vi sees i morgen"
         ],
         "30": [
             "arbeidsmarkedet krever stadig oppdatering av kompetanse",
@@ -396,18 +491,6 @@
             "cache-optimalisering forbedrer programvareytelsen",
             "databaseindeksering akselererer spørringer betydelig"
         ],
-        "4": [
-            "dette er vanskelig",
-            "jeg lærer norsk",
-            "kan du gjenta det?",
-            "jeg vil spise nå",
-            "har du tid i dag?",
-            "hvordan staver du det?",
-            "vær så snill",
-            "det var hyggelig",
-            "jeg må gå nå",
-            "kan jeg få vann?"
-        ],
         "40": [
             "økonomiske modeller hjelper til med å forutsi trender",
             "sensitivitetsanalyse vurderer parameteres påvirkning",
@@ -505,7 +588,7 @@
             "innovasjonsrapporter dokumenterer fremdrift og resultater"
         ],
         "48": [
-            "analyse av store datamengder krever effektive beregningsmetoder",
+            "kvalitetssikring av data er en forutsetning for gode analyser",
             "strukturert datalagring forbedrer søkbarhet og gjenfinning",
             "datamodellering definerer relasjoner mellom informasjonselementer",
             "datavarehus konsoliderer informasjon fra flere kilder",
@@ -528,18 +611,6 @@
             "stakeholderengasjement fremmer aksept for endringer",
             "tverrfaglig etikkkomité vurderer forskningsprosjekter"
         ],
-        "5": [
-            "jeg skal på jobb",
-            "hvor ligger butikken?",
-            "snakker du engelsk?",
-            "jeg trenger hjelp",
-            "hva gjør du?",
-            "er du ledig i morgen?",
-            "jeg har en søster",
-            "hun leser en bok",
-            "det regner mye i dag",
-            "hvor gammel er du?"
-        ],
         "50": [
             "byråkratiets irrganger utfordrer selv erfarne fagfolk",
             "grunnlovsendringen vakte betydelig offentlig debatt",
@@ -551,54 +622,6 @@
             "klimaforhandlingene resulterte i ambisiøse målsetninger",
             "politiske kompromisser er nødvendige i demokratiske samfunn",
             "etikk og moral spiller en sentral rolle i beslutningstaking"
-        ],
-        "6": [
-            "jeg liker å gå tur",
-            "kan du snakke saktere?",
-            "jeg bor sammen med en venn",
-            "hva skal vi gjøre?",
-            "jeg skal reise i morgen",
-            "vi lager middag sammen",
-            "jeg liker å lese bøker",
-            "det snør ute",
-            "jeg er veldig trøtt",
-            "kan jeg låne denne boken?"
-        ],
-        "7": [
-            "hva jobber du med?",
-            "jeg trener hver dag",
-            "kan du anbefale en restaurant?",
-            "jeg liker norsk mat",
-            "bussen kommer snart",
-            "hva er favorittfilmen din?",
-            "jeg vil ha en kopp te",
-            "vi går på kino i kveld",
-            "jeg mistet nøklene mine",
-            "hva er adressen din?"
-        ],
-        "8": [
-            "jeg studerer på universitetet",
-            "vi skal til Bergen neste uke",
-            "kan jeg betale med kort?",
-            "jeg har vondt i hodet",
-            "det er varmt ute i dag",
-            "hvor lang tid tar det?",
-            "jeg skal møte en venn",
-            "vi må handle matvarer",
-            "hun jobber på sykehuset",
-            "hva betyr dette ordet?"
-        ],
-        "9": [
-            "jeg liker å reise til utlandet",
-            "kan du vise meg veien til hotellet?",
-            "jeg spiller fotball hver lørdag",
-            "dette er min første gang her",
-            "hvor kan jeg finne en minibank?",
-            "vi besøker familien min ofte",
-            "jeg vil gjerne lære mer norsk",
-            "du har en fin jakke",
-            "vi drar på ferie neste måned",
-            "jeg skal ringe deg senere"
         ]
     }
 }

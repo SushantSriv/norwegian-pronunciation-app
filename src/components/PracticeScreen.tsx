@@ -96,9 +96,18 @@ export function PracticeScreen({
     // Pitch accent is a property of a word, so the melody target is only shown
     // when the item IS one word. A phrase has one accent per word and drawing
     // a single target across all of them would be misleading.
-    const attemptWords = lastAttempt ? lastAttempt.expected.trim().split(/s+/) : [];
+    const attemptWords = lastAttempt ? lastAttempt.expected.trim().split(/\s+/) : [];
     const soleWord = attemptWords.length === 1 ? attemptWords[0] : null;
     const soleWordEntry = soleWord ? lookup(soleWord) : null;
+
+    // Dialect transcription of the whole phrase. Words the lexicon does not
+    // carry fall back to the rule engine, which emits no stress marks, so the
+    // line stays readable either way.
+    const phraseIpa = displayedItem
+        .split(/\s+/)
+        .map(w => lookup(w).ipa)
+        .filter(Boolean)
+        .join(' ');
 
     return (
         <div className="glass w-full overflow-hidden rounded-3xl p-5 sm:p-7">
@@ -232,6 +241,23 @@ export function PracticeScreen({
                         ))}
                     </motion.p>
                 </AnimatePresence>
+
+                {/* How this phrase sounds in the chosen dialect. Shown for every
+                    phrase, not just missed words — otherwise the dialect setting
+                    is invisible to anyone pronouncing well. */}
+                {phraseIpa && (
+                    <motion.p
+                        key={dialect + displayedItem}
+                        initial={{ opacity: 0 }}
+                        animate={{ opacity: 1 }}
+                        transition={{ duration: 0.3, delay: 0.2 }}
+                        className="mt-3 text-base text-white/45 sm:text-lg"
+                        lang="nb"
+                        aria-label={'Pronunciation: ' + phraseIpa}
+                    >
+                        {phraseIpa}
+                    </motion.p>
+                )}
 
                 <motion.button
                     whileHover={{ scale: 1.05 }}

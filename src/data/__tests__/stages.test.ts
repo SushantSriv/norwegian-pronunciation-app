@@ -80,3 +80,27 @@ describe('occupation content', () => {
         }
     });
 });
+
+describe('content variety', () => {
+    // A run draws ITEMS_TO_WIN passes plus room for MAX_STRIKES misses. If a
+    // pool is barely bigger than that, the learner sees the same items every
+    // single run — which is exactly the complaint this guards against.
+    const PER_RUN = ITEMS_TO_WIN + MAX_STRIKES;
+
+    it('keeps every pool at least 3x a single run, so runs differ', () => {
+        for (const stage of STAGES) {
+            const size = poolForStage(stage, LEVELS, OCCUPATIONS).length;
+            expect(
+                size,
+                `${stage.id} has only ${size} items (${((100 * PER_RUN) / size).toFixed(0)}% used per run)`
+            ).toBeGreaterThanOrEqual(PER_RUN * 3);
+        }
+    });
+
+    it('has no duplicate items inside a pool', () => {
+        for (const stage of STAGES) {
+            const pool = poolForStage(stage, LEVELS, OCCUPATIONS);
+            expect(new Set(pool).size, `${stage.id} repeats items`).toBe(pool.length);
+        }
+    });
+});
