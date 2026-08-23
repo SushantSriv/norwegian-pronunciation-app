@@ -4,6 +4,7 @@ import type { PitchContour } from '../utils/pitch';
 interface Props {
     contour: PitchContour | null;
     analysing: boolean;
+    recordingAvailable: boolean;
 }
 
 const WIDTH = 420;
@@ -60,7 +61,7 @@ function buildPaths(contour: PitchContour): string[] {
     return paths;
 }
 
-export function MelodyView({ contour, analysing }: Props) {
+export function MelodyView({ contour, analysing, recordingAvailable }: Props) {
     const paths = contour ? buildPaths(contour) : [];
     const range = contour?.rangeSemitones ?? null;
 
@@ -81,7 +82,9 @@ export function MelodyView({ contour, analysing }: Props) {
 
             {!analysing && paths.length === 0 && (
                 <p className="py-6 text-center text-sm text-white/40">
-                    Not enough clear voiced sound to read a pitch contour.
+                    {recordingAvailable
+                        ? 'Not enough clear voiced sound to read a pitch contour.'
+                        : 'Needs your recorded audio, which this browser reserves for speech recognition.'}
                 </p>
             )}
 

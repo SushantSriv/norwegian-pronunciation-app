@@ -28,13 +28,27 @@ function label(voice: SpeechSynthesisVoice): string {
     return `${name} · ${variety}`;
 }
 
+/** Where to get a Norwegian voice differs per platform, so say the right thing. */
+function installHint(): string {
+    const ua = typeof navigator === 'undefined' ? '' : navigator.userAgent;
+    if (/Android/i.test(ua)) {
+        return 'On Android: Settings → General management → Text-to-speech, then add Norwegian to Google Speech Services and download its voice data.';
+    }
+    if (/iPhone|iPad|iPod/i.test(ua)) {
+        return 'On iPhone/iPad: Settings → Accessibility → Spoken Content → Voices → Norsk.';
+    }
+    if (/Mac OS X/i.test(ua)) {
+        return 'On macOS: System Settings → Accessibility → Spoken Content → System Voice → Manage Voices → Norwegian.';
+    }
+    return 'On Windows: Settings → Time & language → Language & region → add Norsk bokmål, then install its Speech feature.';
+}
+
 export function VoicePicker({ voices, activeVoiceURI, onChoose, rate, onRateChange }: Props) {
     if (voices.length === 0) {
         return (
             <p className="text-xs leading-relaxed text-amber-300/80">
-                No Norwegian voice is installed, so playback will use a non-Norwegian voice. On Windows:
-                Settings → Time &amp; language → Language &amp; region → add <strong>Norsk bokmål</strong>,
-                then install its Speech feature.
+                No Norwegian voice is available on this device, so playback would use a non-Norwegian
+                voice. {installHint()}
             </p>
         );
     }

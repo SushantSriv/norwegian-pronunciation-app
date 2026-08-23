@@ -48,6 +48,10 @@ function getRecognitionCtor(): SpeechRecognitionCtor | null {
     return w.SpeechRecognition ?? w.webkitSpeechRecognition ?? null;
 }
 
+/** Coarse mobile check — only used to decide whether to risk a parallel recorder. */
+const IS_MOBILE =
+    typeof navigator !== 'undefined' && /Android|iPhone|iPad|iPod|Mobile/i.test(navigator.userAgent);
+
 const FRIENDLY_ERRORS: Record<string, string> = {
     'no-speech': 'I did not catch anything — try speaking a little louder.',
     'audio-capture': 'No microphone found. Check that one is connected.',
@@ -76,6 +80,18 @@ export function useSpeechRecognition({ lang = 'nb-NO', onResult }: Options) {
     const mediaRecorderRef = useRef<MediaRecorder | null>(null);
     const chunksRef = useRef<BlobPart[]>([]);
     const recordingUrlRef = useRef<string | null>(null);
+    /**
+     * Whether we can hold a MediaRecorder open alongside SpeechRecognition.
+     * Android Chrome routes recognition through the system speech service,
+     * which wants the microphone to itself — a concurrent getUserMedia stream
+     * makes recognition fail with a permission error. Recognition is the
+     * essential feature, so on mobile we do not record by default, and we turn
+     * recording off anywhere it turns out to conflict.
+     */
+    const canRecordRef = useRef(!IS_MOBILE);
+    // Mirrored as state so the UI can explain why listen-back is unavailable.
+    const [recordingAvailable, setRecordingAvailable] = useState(!IS_MOBILE);
+    const wasRecordingRef = useRef(false);
     // Live analyser over the same mic stream, so the UI can render the learner's
     // voice as they speak. Exposed as a ref so the visualiser can drive its own
     // requestAnimationFrame loop without re-rendering this hook every frame.
@@ -141,6 +157,20 @@ export function useSpeechRecognition({ lang = 'nb-NO', onResult }: Options) {
         };
 
         recognition.onerror = (event: SpeechRecognitionErrorEventLike) => {
+            const micProblem = event.error === 'not-allowed' || event.error === 'audio-capture';
+
+            // If recognition was denied the microphone while we were also
+            // recording, the recorder is the likely culprit. Give that up
+            // rather than the core feature, and invite an immediate retry.
+            if (micProblem && wasRecordingRef.current && canRecordRef.current) {
+                canRecordRef.current = false;
+                setRecordingAvailable(false);
+                stopRecorder();
+                setError('Freeing the microphone for speech recognition — tap the mic to try again.');
+                setListening(false);
+                return;
+            }
+
             const message = FRIENDLY_ERRORS[event.error] ?? `Speech recognition failed (${event.error}).`;
             if (message) setError(message);
             setListening(false);
@@ -168,10 +198,12 @@ export function useSpeechRecognition({ lang = 'nb-NO', onResult }: Options) {
         if (!recognition || listening) return;
         setError(null);
 
-        // Start capturing audio first so we do not miss the opening syllable.
-        // A failure here is not fatal: recognition (and therefore scoring)
-        // still works, the learner just cannot play their attempt back.
+        // Capture audio first so we do not miss the opening syllable. A failure
+        // here is not fatal: recognition (and therefore scoring) still works,
+        // the learner just cannot play their attempt back.
+        wasRecordingRef.current = false;
         try {
+            if (!canRecordRef.current) throw new Error('recording disabled on this device');
             const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
             const recorder = new MediaRecorder(stream);
             chunksRef.current = [];
@@ -190,6 +222,7 @@ export function useSpeechRecognition({ lang = 'nb-NO', onResult }: Options) {
             };
             recorder.start();
             mediaRecorderRef.current = recorder;
+            wasRecordingRef.current = true;
 
             // Tap the same stream for live level data.
             const AudioCtor =
@@ -220,5 +253,15 @@ export function useSpeechRecognition({ lang = 'nb-NO', onResult }: Options) {
         stopRecorder();
     }, [stopRecorder]);
 
-    return { supported, listening, interim, error, recordingUrl, analyserRef, start, stop };
+    return {
+        supported,
+        listening,
+        interim,
+        error,
+        recordingUrl,
+        recordingAvailable,
+        analyserRef,
+        start,
+        stop,
+    };
 }

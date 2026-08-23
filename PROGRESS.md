@@ -1,5 +1,40 @@
 # Progress & Goals
 
+## v2.4 — Mobile fixes ✅ shipped
+
+Reported from Android Chrome: "microphone is blocked by browser", and no voice audible.
+
+### Fixed
+- ✅ **Microphone blocked on mobile — a regression from v2.1.** The parallel
+  `MediaRecorder` added for listen-back grabbed the mic via `getUserMedia`, then
+  `SpeechRecognition` tried to grab it too. Android Chrome routes recognition through
+  the system speech service, which wants the microphone to itself, so recognition
+  failed with a permission error. Recognition is the essential feature, so the
+  recorder is now skipped on mobile, and disabled automatically anywhere it turns out
+  to conflict (mic error while recording → drop recording, invite a retry).
+  Verified under an Android user agent: **0 `getUserMedia` calls**.
+- ✅ **No speech audible on mobile.** `speakNorwegian()` awaited a voice lookup and a
+  60ms timer before calling `speak()`, which breaks the user-gesture chain — mobile
+  browsers only allow synthesis to start inside the task that triggered it, so
+  playback was silently blocked. `speak()` is now called **synchronously**, reading
+  voices from the already-warmed cache. The Chrome "dropped utterance after cancel()"
+  workaround became a re-queue 250ms later, which no longer needs the gesture.
+  Verified: `navigator.userActivation.isActive` is **true** at `speak()` time.
+
+### Changed
+- Listen-back and the melody chart now say *why* they are unavailable on a device that
+  reserves the mic, instead of showing a dead button and a misleading
+  "not enough voiced sound" message.
+- "No Norwegian voice" guidance is platform-aware (Android / iOS / macOS / Windows) —
+  `Microsoft Jon` is a Windows voice and does not exist on a phone.
+
+### Known constraint for sharing
+Still Chrome/Edge only; Firefox and most iOS browsers get the unsupported screen.
+On mobile the trade-off is explicit: scoring works everywhere the mic does, but
+listen-back and melody analysis are desktop-only.
+
+---
+
 ## v2.3 — Better speech: live voice list, karaoke tracking, speed control ✅ shipped
 
 ### Fixed

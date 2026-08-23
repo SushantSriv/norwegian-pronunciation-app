@@ -119,10 +119,10 @@ export async function norwegianVoices(): Promise<SpeechSynthesisVoice[]> {
     return rankNorwegianVoices(await loadVoices());
 }
 
-async function pickVoice(voiceURI?: string): Promise<SpeechSynthesisVoice | undefined> {
-    // Read fresh rather than trusting an earlier snapshot — a better voice may
-    // have registered since the last call.
-    const candidates = rankNorwegianVoices(await loadVoices());
+function pickFrom(
+    candidates: SpeechSynthesisVoice[],
+    voiceURI?: string
+): SpeechSynthesisVoice | undefined {
     if (voiceURI) {
         const chosen = candidates.find(v => v.voiceURI === voiceURI);
         if (chosen) return chosen;
@@ -140,41 +140,67 @@ export interface SpeakOptions {
     onBoundary?: (charIndex: number) => void;
 }
 
-/** Speak Norwegian text, resolving when playback finishes. */
-export async function speakNorwegian(text: string, options: SpeakOptions = {}): Promise<void> {
-    if (!hasSynthesis() || !text.trim()) return;
+function buildUtterance(text: string, voice: SpeechSynthesisVoice | undefined, options: SpeakOptions) {
+    const utterance = new SpeechSynthesisUtterance(text);
+    // Match the voice's own locale when we have one; otherwise ask for Bokmål,
+    // which is often enough for a platform to pick the right voice by itself.
+    utterance.lang = voice?.lang ?? 'nb-NO';
+    try {
+        if (voice) utterance.voice = voice;
+    } catch {
+        // Assigning a voice the engine rejects throws. Falling back to the
+        // lang hint alone still speaks; failing here would speak nothing.
+    }
+    utterance.rate = options.rate ?? 1;
+    utterance.pitch = 1;
 
-    const voice = await pickVoice(options.voiceURI);
+    if (options.onBoundary) {
+        utterance.onboundary = event => {
+            // Some voices report only 'word'; others leave name empty.
+            if (!event.name || event.name === 'word') options.onBoundary?.(event.charIndex);
+        };
+    }
+    return utterance;
+}
 
-    window.speechSynthesis.cancel();
-    // Chrome drops an utterance queued in the same tick as cancel().
-    await new Promise(resolve => window.setTimeout(resolve, 60));
+/**
+ * Speak Norwegian text, resolving when playback finishes.
+ *
+ * CRITICAL: speak() is called SYNCHRONOUSLY. Mobile browsers only allow
+ * speech synthesis to begin inside the user-gesture task that triggered it, so
+ * awaiting anything first (voice lookup, a timer) silently blocks playback on
+ * Android and iOS. Voices are read from the already-warmed cache instead.
+ */
+export function speakNorwegian(text: string, options: SpeakOptions = {}): Promise<void> {
+    if (!hasSynthesis() || !text.trim()) return Promise.resolve();
 
-    return new Promise<void>(resolve => {
-        const utterance = new SpeechSynthesisUtterance(text);
-        // Match the voice's own locale when we have one; otherwise ask for
-        // Bokmål and hope the platform obliges.
-        utterance.lang = voice?.lang ?? 'nb-NO';
-        try {
-            if (voice) utterance.voice = voice;
-        } catch {
-            // Assigning a voice the engine rejects throws. Falling back to the
-            // lang hint alone still speaks; failing here would speak nothing.
-        }
-        utterance.rate = options.rate ?? 1;
-        utterance.pitch = 1;
+    const synth = window.speechSynthesis;
+    const voice = pickFrom(rankNorwegianVoices(currentVoices()), options.voiceURI);
 
-        if (options.onBoundary) {
-            utterance.onboundary = event => {
-                // Some voices report only 'word'; others leave name empty.
-                if (!event.name || event.name === 'word') options.onBoundary?.(event.charIndex);
-            };
-        }
+    synth.cancel();
+    const utterance = buildUtterance(text, voice, options);
 
+    const finished = new Promise<void>(resolve => {
         utterance.onend = () => resolve();
         utterance.onerror = () => resolve();
-        window.speechSynthesis.speak(utterance);
     });
+
+    synth.speak(utterance);
+
+    // Chrome occasionally drops an utterance queued in the same tick as
+    // cancel(). If nothing started shortly after, queue it once more — this
+    // runs outside the gesture but by then speech is already unlocked.
+    window.setTimeout(() => {
+        if (!synth.speaking && !synth.pending) {
+            try {
+                synth.speak(utterance);
+            } catch {
+                // Nothing more we can do.
+            }
+        }
+    }, 250);
+
+    return finished;
 }
 
 export function stopSpeaking() {

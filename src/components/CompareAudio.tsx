@@ -11,6 +11,8 @@ interface Props {
     voiceURI?: string;
     /** The learner-chosen speaking rate; the slow toggle scales from it. */
     rate: number;
+    /** False when this device will not let us record alongside recognition. */
+    recordingAvailable: boolean;
     /** Where speech actually starts/ends, so playback skips dead air. */
     bounds: SpeechBounds | null;
 }
@@ -19,7 +21,7 @@ interface Props {
  * Side-by-side "this is how it should sound" / "this is what you said".
  * Hearing the two back to back is the point, so only one plays at a time.
  */
-export function CompareAudio({ phrase, recordingUrl, voiceURI, rate, bounds }: Props) {
+export function CompareAudio({ phrase, recordingUrl, voiceURI, rate, recordingAvailable, bounds }: Props) {
     const [playing, setPlaying] = useState<Track>(null);
     const [slow, setSlow] = useState(false);
     const audioRef = useRef<HTMLAudioElement | null>(null);
@@ -147,9 +149,16 @@ export function CompareAudio({ phrase, recordingUrl, voiceURI, rate, bounds }: P
                     }
                 >
                     <span aria-hidden="true">{playing === 'mine' ? '⏹' : '🎧'}</span>
-                    {recordingUrl ? 'You' : 'No audio'}
+                    {recordingUrl ? 'You' : recordingAvailable ? 'No audio' : 'Unavailable'}
                 </motion.button>
             </div>
+
+            {!recordingAvailable && (
+                <p className="mt-2 text-[11px] leading-relaxed text-white/40">
+                    Your browser gives speech recognition exclusive use of the microphone, so your own
+                    attempt cannot be recorded here. Scoring still works.
+                </p>
+            )}
         </div>
     );
 }

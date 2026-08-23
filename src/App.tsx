@@ -47,7 +47,17 @@ export default function App() {
     const [showConfetti, setShowConfetti] = useState(false);
 
     const handleResult = useCallback((transcript: string) => submit(transcript), [submit]);
-    const { supported, listening, interim, error, recordingUrl, analyserRef, start, stop } = useSpeechRecognition({
+    const {
+        supported,
+        listening,
+        interim,
+        error,
+        recordingUrl,
+        recordingAvailable,
+        analyserRef,
+        start,
+        stop,
+    } = useSpeechRecognition({
         onResult: handleResult,
     });
     const { voices, activeVoiceURI, chooseVoice, rate, setRate } = useNorwegianVoices();
@@ -117,6 +127,7 @@ export default function App() {
                                         speechError={error}
                                         lastAttempt={lastAttempt}
                                         recordingUrl={recordingUrl}
+                                        recordingAvailable={recordingAvailable}
                                         analyserRef={analyserRef}
                                         voices={voices}
                                         activeVoiceURI={activeVoiceURI}

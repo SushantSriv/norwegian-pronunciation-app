@@ -22,6 +22,7 @@ interface Props {
     speechError: string | null;
     lastAttempt: Attempt | null;
     recordingUrl: string | null;
+    recordingAvailable: boolean;
     analyserRef: React.RefObject<AnalyserNode | null>;
     voices: SpeechSynthesisVoice[];
     activeVoiceURI?: string;
@@ -56,6 +57,7 @@ export function PracticeScreen({
     speechError,
     lastAttempt,
     recordingUrl,
+    recordingAvailable,
     analyserRef,
     voices,
     activeVoiceURI,
@@ -312,9 +314,14 @@ export function PracticeScreen({
                                     recordingUrl={recordingUrl}
                                     voiceURI={activeVoiceURI}
                                     rate={rate}
+                                    recordingAvailable={recordingAvailable}
                                     bounds={analysis?.bounds ?? null}
                                 />
-                                <MelodyView contour={analysis?.contour ?? null} analysing={analysing} />
+                                <MelodyView
+                                    contour={analysis?.contour ?? null}
+                                    analysing={analysing}
+                                    recordingAvailable={recordingAvailable}
+                                />
                             </motion.div>
 
                             {/* Phoneme help for the words that missed */}
