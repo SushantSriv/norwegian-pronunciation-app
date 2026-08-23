@@ -13,7 +13,7 @@ import { VitePWA } from 'vite-plugin-pwa';
 const DEFAULT_BASE = '/';
 
 /** Absolute origin, needed because social crawlers do not resolve relative URLs. */
-const DEFAULT_SITE_URL = 'https://norsk-uttale.pages.dev';
+const DEFAULT_SITE_URL = 'https://norwegian-pronunciation-app.sushantsrivastava198.workers.dev';
 
 export default defineConfig(({ command, mode }) => {
     const env = loadEnv(mode, '.', 'VITE_');
