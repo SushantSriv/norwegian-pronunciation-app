@@ -1,138 +1,110 @@
-# Norwegian Pronunciation Coach 🗣️
+<div align="center">
 
-Practise Norwegian out loud, get **instant phoneme-level feedback**, and clear
-levels one phrase at a time — entirely in your browser.
+<img src="public/icon-192.png" width="96" alt="" />
 
-> **Live:** https://sushantsriv.github.io/norwegian-pronunciation-app/
-> Requires **Chrome or Edge** (see [Browser support](#-browser-support)).
+# Norsk uttale
 
----
+**Say Norwegian out loud. See your intonation, phoneme by phoneme.**
 
-## Why I Built This 🎯
+[**▶ Open the app**](https://sushantsriv.github.io/norwegian-pronunciation-app/) · Free · No sign-up · Runs entirely in your browser
 
-When I was learning Norwegian I found pronunciation especially challenging. None of
-the apps I tried gave me **phrase-level feedback on my speaking**, so I built my own
-— first for myself, then for friends going through the same struggle.
-
-## 🎮 How it works
-
-1. **Pick a stage** — five levels from *First Words* (A1) to *Advanced* (B2), drawn
-   from a 500-phrase corpus.
-2. **Say the phrase.** The browser transcribes what you said.
-3. **Get scored 0–100.** Not just right/wrong: each word is compared *by sound*, so
-   a near-miss scores better than a completely different word.
-4. **Clear 10 phrases before you lose 3 lives.** The pass bar **rises by 3 points
-   every time you clear one**, so it gets harder as you go.
-5. **Missed a word?** You get its IPA breakdown — the sounds you should have made
-   versus the ones you did — plus a plain-language tip.
-
-## 🧠 How the scoring actually works
-
-| Step | What happens |
-|---|---|
-| **Transcribe** | Web Speech API (`nb-NO`) turns your speech into text |
-| **Align** | Needleman-Wunsch word alignment (`src/utils/scoring.ts`) — re-syncs after a dropped or extra word instead of cascading every later word out of position |
-| **Phonemise** | Each word → IPA via a rule-based Norwegian G2P (`src/utils/norwegianG2P.ts`) |
-| **Compare** | Normalised edit distance between expected and heard IPA → a per-word similarity in [0, 1] |
-| **Composite** | Per-word scores averaged, minus a small penalty per spurious extra word → the 0–100 score |
-
-The G2P covers vowel length, diphthongs, the `kj`/`sj`/`skj` series, retroflex
-`rt`/`rd`/`rn`/`rl`/`rs`, silent letters, schwa-reduced endings, and a table of
-high-frequency irregulars (`jeg`, `og`, `det`, `hvordan`, …).
-
-**It is an approximation** — no pitch accent (tonelag), no compound-word stress, and
-it will be wrong on loanwords. It is a teaching aid for *"which sounds did you
-miss"*, not a reference transcription.
-
-## 🌐 Browser support
-
-The app uses the **Web Speech API**, which today means:
-
-| Browser | Works? |
-|---|---|
-| Chrome (desktop & Android) | ✅ |
-| Edge | ✅ |
-| Safari | ⚠️ Unreliable |
-| Firefox | ❌ Not implemented |
-
-Unsupported browsers get an explanatory screen rather than a broken mic button.
-Recognition is cloud-backed, so it **needs an internet connection**.
+</div>
 
 ---
 
-## 🚀 Run it locally
+Most pronunciation apps tell you *whether* you were right. This one shows you **why**,
+including the thing that most often gives a non-native speaker away in Norwegian:
+**melody**.
+
+Norwegian is a *pitch-accent* language. Speaking it with flat, English-style intonation
+is instantly recognisable — and virtually no learning app measures it. This one records
+your attempt, extracts the pitch contour, and draws it.
+
+## What it does
+
+| | |
+|---|---|
+| 🎙️ **Live scoring** | Say the phrase; every word is aligned and scored, so a dropped or inserted word does not throw off everything after it. |
+| 🔤 **Phoneme feedback** | Each missed word is broken into IPA sounds, with a plain-language explanation of the target sound and what you actually said. |
+| 📈 **Melody view** | Your pitch contour, measured from your own recording, with a semitone-range readout. Flat delivery gets flagged. |
+| 🎧 **Listen back** | Play the reference and your own attempt back to back. Silence before and after you speak is trimmed automatically. |
+| 🎯 **Rising difficulty** | Clear 10 phrases before losing 3 lives. The pass bar climbs with every one you get right. |
+| 📚 **5 levels** | A1 single words through B2 consonant clusters, drawn from a 500-phrase corpus. |
+
+Your voice is analysed **in your browser**. No audio and no transcript is ever uploaded.
+
+## Requirements
+
+- **Chrome or Edge.** Speech recognition uses the Web Speech API, which Firefox and iOS browsers do not implement. Other browsers get a clear message rather than a broken page.
+- **A Norwegian text-to-speech voice** for the reference audio. Most systems have one; the app tells you how to add one if not.
+- On phones, scoring works, but **listen-back and the melody chart are desktop-only** — mobile browsers reserve the microphone for speech recognition.
+
+## Install it
+
+It is a PWA, so you can add it to your home screen or desktop and use it offline:
+in Chrome/Edge, open the app and choose **Install** from the address bar or menu.
+
+## Running it yourself
 
 ```bash
 npm install
-npm run dev      # http://localhost:5173
+npm run dev        # http://localhost:5173
+npm test           # 42 unit tests
+npm run build      # production build
 ```
 
-Other scripts:
+There is no backend to run. Everything — word alignment, Norwegian grapheme-to-phoneme
+conversion, pitch detection — happens client-side in TypeScript.
 
-```bash
-npm run test     # vitest — 29 tests (scoring, G2P, session rules)
-npm run lint     # eslint
-npm run build    # tsc -b && vite build
-```
+<details>
+<summary><strong>Optional: the original FastAPI backend</strong></summary>
 
-## 📦 Deploying
-
-Pushing to `main` triggers `.github/workflows/deploy.yml`, which lints, tests,
-builds and publishes to GitHub Pages. Enable it once under
-**Settings → Pages → Build and deployment → Source: GitHub Actions**.
-
-If you fork this under a different repo name, update `base` in `vite.config.ts` to
-match — GitHub Pages serves projects from `/<repo-name>/`.
-
----
-
-## 🗂️ Project structure
-
-```
-├── src/
-│   ├── components/          # StageSelect, PracticeScreen, ResultsScreen,
-│   │                        # ScoreRing, PhonemeBreakdown, Parallax
-│   ├── hooks/
-│   │   ├── usePracticeSession.ts   # stages, rising bar, lives, persistence
-│   │   └── useSpeechRecognition.ts # Web Speech API wrapper
-│   ├── utils/
-│   │   ├── scoring.ts              # alignment + composite scoring
-│   │   ├── norwegianG2P.ts         # grapheme → IPA
-│   │   └── pronunciationHints.ts   # IPA → plain-language explanation
-│   ├── data/
-│   │   ├── sentences.json          # 50 levels × 10 phrases
-│   │   └── stages.ts               # the 5 pickable stages
-│   └── App.tsx
-└── backend/                 # OPTIONAL — see below
-```
-
-## 🐍 The optional Whisper backend
-
-`backend/` holds a FastAPI + **Whisper** service that does the same scoring
-server-side with far better transcription accuracy. It is **not** used by the
-deployed Pages app (Pages cannot run Python) and is kept for local/self-hosted use.
+`backend/` still holds the original Whisper-based scoring service, which is more
+accurate than browser speech recognition. It is not what the hosted app uses.
 
 ```bash
 cd backend
 pip install -r requirements.txt
-uvicorn main:app --reload --port 8000   # http://localhost:8000/docs
-pytest                                  # scoring tests, no model download needed
+uvicorn main:app --reload --port 8000
 ```
 
-Env vars: `WHISPER_MODEL_SIZE` (default `small`), `ALLOWED_ORIGINS`
-(default `http://localhost:5173`), `MAX_UPLOAD_BYTES` (default 15 MB).
+| Variable | Default | Purpose |
+|---|---|---|
+| `WHISPER_MODEL_SIZE` | `small` | Whisper model to load |
+| `ALLOWED_ORIGINS` | `http://localhost:5173` | CORS allow-list |
+| `MAX_UPLOAD_BYTES` | 15 MB | Upload size cap |
 
-`backend/scoring.py` and `src/utils/scoring.ts` implement the same algorithm and are
-covered by parallel test suites — keep them in sync if you change one.
+</details>
 
----
+<details>
+<summary><strong>Optional: analytics</strong></summary>
 
-## 🔮 Ideas
+The app ships with **no tracking**. Set `VITE_ANALYTICS_URL` at build time to enable a
+cookie-less page counter (GoatCounter, Plausible, etc.). Do Not Track is respected, no
+identifiers are stored, and audio never leaves the browser regardless.
 
-* Offline recognition via `transformers.js` Whisper, to drop the Chrome-only limit.
-* Recorded native audio instead of TTS for the "Hear it" button.
-* A drill mode that replays only the words you have missed before.
+</details>
 
----
+## How the scoring works
 
-📋 See [PROGRESS.md](PROGRESS.md) for the build log and known limitations.
+1. The browser transcribes your speech (`nb-NO`).
+2. Expected and heard words are **aligned** with Needleman–Wunsch, so inserted or
+   dropped words do not cascade into false errors.
+3. Each mismatched word is converted to IPA by a rule-based Norwegian G2P and compared
+   by normalised edit distance — a near-miss scores higher than a completely wrong word.
+4. Per-word scores roll into one 0–100 composite, which the rising pass bar tests.
+5. Your recording is separately run through autocorrelation pitch detection for the
+   melody chart.
+
+**Known limits:** the G2P is an approximation — no tone accent, no compound stress, and
+it will be wrong on loanwords. Pitch detection returns nothing rather than guessing on
+unvoiced or quiet frames.
+
+## Feedback
+
+Found a bug or a phrase that scores wrongly?
+[Open an issue](https://github.com/SushantSriv/norwegian-pronunciation-app/issues/new).
+
+## Licence
+
+MIT — see [LICENSE](LICENSE).

@@ -8,6 +8,7 @@ import { ResultsScreen } from './components/ResultsScreen';
 import { usePracticeSession } from './hooks/usePracticeSession';
 import { useSpeechRecognition } from './hooks/useSpeechRecognition';
 import { useNorwegianVoices } from './hooks/useNorwegianVoices';
+import { countVisit } from './utils/analytics';
 
 /** Shown instead of the app in browsers without the Web Speech API. */
 function UnsupportedNotice() {
@@ -61,6 +62,9 @@ export default function App() {
         onResult: handleResult,
     });
     const { voices, activeVoiceURI, chooseVoice, rate, setRate } = useNorwegianVoices();
+
+    // Opt-in, cookie-less visit count; a no-op unless VITE_ANALYTICS_URL is set.
+    useEffect(countVisit, []);
 
     // Celebrate a cleared stage.
     useEffect(() => {

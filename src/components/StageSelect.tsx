@@ -137,9 +137,19 @@ export function StageSelect({ bests, onPick }: Props) {
                 })}
             </div>
 
-            <motion.p variants={card} className="mt-9 text-center text-xs text-white/30">
-                Chrome &amp; Edge · your voice is analysed in your browser
-            </motion.p>
+            <motion.div variants={card} className="mt-9 space-y-1.5 text-center text-xs text-white/30">
+                <p>Chrome &amp; Edge · your voice is analysed in your browser, never uploaded</p>
+                <p>
+                    <a
+                        href="https://github.com/SushantSriv/norwegian-pronunciation-app/issues/new"
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        className="underline decoration-white/25 underline-offset-2 transition hover:text-white/60"
+                    >
+                        Something wrong? Tell me
+                    </a>
+                </p>
+            </motion.div>
         </motion.div>
     );
 }
