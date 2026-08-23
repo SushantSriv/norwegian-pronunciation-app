@@ -100,6 +100,42 @@ identifiers are stored, and audio never leaves the browser regardless.
 it will be wrong on loanwords. Pitch detection returns nothing rather than guessing on
 unvoiced or quiet frames.
 
+## Deploying
+
+Hosted on **Cloudflare Pages**, which builds straight from this repo — including
+when it is private — with a free custom domain and HTTPS.
+
+One-time setup in the Cloudflare dashboard (Workers & Pages → Create → Pages →
+Connect to Git):
+
+| Setting | Value |
+|---|---|
+| Build command | `npm run build` |
+| Output directory | `dist` |
+| Node version | `20` (set env var `NODE_VERSION`) |
+
+Then set one environment variable so link previews point at the right origin:
+
+| Variable | Value |
+|---|---|
+| `VITE_SITE_URL` | `https://your-domain.example` |
+
+For a custom domain: Pages project → Custom domains → add it, and Cloudflare
+issues the certificate. If the domain already uses Cloudflare DNS this is a
+couple of clicks; otherwise point the nameservers there first.
+
+`public/_headers` sets caching and security headers. Hashed assets are cached for
+a year; HTML and the service worker are never cached, so a deploy takes effect
+immediately instead of leaving people on a stale build.
+
+<details>
+<summary><strong>Serving from a sub-path instead (e.g. GitHub Pages)</strong></summary>
+
+Asset URLs default to the site root. To serve from `/<repo-name>/`, set
+`VITE_BASE_PATH=/norwegian-pronunciation-app/` at build time.
+
+</details>
+
 ## Feedback
 
 Found a bug or a phrase that scores wrongly?
@@ -107,4 +143,6 @@ Found a bug or a phrase that scores wrongly?
 
 ## Licence
 
-MIT — see [LICENSE](LICENSE).
+**All rights reserved.** This is source-available, not open source — see [LICENSE](LICENSE).
+You may read the code; you may not use, copy, modify or redistribute it without
+written permission. Contact me if you would like to.
