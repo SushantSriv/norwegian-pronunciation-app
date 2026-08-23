@@ -30,7 +30,7 @@ your attempt, extracts the pitch contour, and draws it.
 | 🗣️ **Dialects** | Østnorsk, Vest-/sørvestnorsk or Trøndersk/nordnorsk — real per-region transcriptions, not one accent relabelled. |
 | 🎧 **Listen back** | Play the reference and your own attempt back to back. Silence before and after you speak is trimmed automatically. |
 | 🎯 **Rising difficulty** | Clear 10 phrases before losing 3 lives. The pass bar climbs with every one you get right. |
-| 📚 **5 levels** | A1 single words through B2 consonant clusters, drawn from a 500-phrase corpus. |
+| 📚 **13 tracks** | Five CEFR levels from A1 words to B2 clusters, plus eight occupation tracks — helse, bygg, barnehage, butikk, restaurant, transport, renhold, kontor. |
 
 Your voice is analysed **in your browser**. No audio and no transcript is ever uploaded.
 
@@ -50,7 +50,7 @@ in Chrome/Edge, open the app and choose **Install** from the address bar or menu
 ```bash
 npm install
 npm run dev        # http://localhost:5173
-npm test           # 66 unit tests
+npm test           # 75 unit tests
 npm run build      # production build
 ```
 
@@ -100,6 +100,29 @@ identifiers are stored, and audio never leaves the browser regardless.
 **Known limits:** the fallback G2P used outside the lexicon is an approximation — no
 tone accent, no compound stress, and it will be wrong on loanwords. Pitch detection returns nothing rather than guessing on
 unvoiced or quiet frames.
+
+## Yrkesnorsk
+
+Alongside the five CEFR stages there are eight occupation tracks — the sectors
+where Norwegian learners most often actually work:
+
+| | |
+|---|---|
+| 🏥 Helse og omsorg | pain, medication, next of kin, discharge |
+| 🏗️ Bygg og anlegg | scaffolding, protective gear, drawings, safety |
+| 🧸 Barnehage og skole | parents, outdoor clothes, pick-up times |
+| 🛒 Butikk og service | receipts, returns, opening hours |
+| 🍽️ Restaurant og kjøkken | orders, allergies, closing time |
+| 🚚 Transport og logistikk | loads, routes, paperwork |
+| 🧼 Renhold | products, equipment, finishing a shift |
+| 💻 Kontor og IT | access, deadlines, screen sharing |
+
+Every word in these was checked against the NB Uttale lexicon: **97.8% resolve to
+real pronunciation data**, so occupation vocabulary gets the same IPA, tonelag and
+phoneme feedback as the general corpus. The handful that do not are ordinary
+Norwegian compounds — `skiftetøy`, `hentetid`, `tørkepapir` — which no lexicon can
+enumerate, since Norwegian forms compounds freely. Those fall back to the rule
+engine, whose weakest point happens to be compound stress.
 
 ## Pronunciation data
 

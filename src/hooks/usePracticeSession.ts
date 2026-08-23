@@ -2,8 +2,10 @@ import { useCallback, useMemo, useState } from 'react';
 import { scoreAttempt, type AttemptScore, type IpaResolver } from '../utils/scoring';
 import { poolForStage, type Stage } from '../data/stages';
 import rawSentenceData from '../data/sentences.json';
+import occupationData from '../data/occupations.json';
 
 const LEVELS = (rawSentenceData as { levels: Record<string, string[]> }).levels;
+const OCCUPATIONS = occupationData as Record<string, string[]>;
 
 /** Items you must clear to finish a run. */
 export const ITEMS_TO_WIN = 10;
@@ -74,7 +76,7 @@ export function usePracticeSession(toIpa?: IpaResolver) {
     const [lastAttempt, setLastAttempt] = useState<Attempt | null>(null);
 
     const begin = useCallback((stage: Stage) => {
-        const pool = poolForStage(stage, LEVELS);
+        const pool = poolForStage(stage, LEVELS, OCCUPATIONS);
         // A run needs ITEMS_TO_WIN passes plus room for up to MAX_STRIKES
         // misses, so draw enough that we never run dry mid-run.
         const needed = ITEMS_TO_WIN + MAX_STRIKES;

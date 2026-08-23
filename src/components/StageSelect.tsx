@@ -1,5 +1,5 @@
 import { motion } from 'framer-motion';
-import { STAGES, type Stage } from '../data/stages';
+import { stagesInTrack, type Stage, type Track } from '../data/stages';
 import { ITEMS_TO_WIN, MAX_STRIKES } from '../hooks/usePracticeSession';
 
 interface Props {
@@ -9,7 +9,7 @@ interface Props {
 
 const container = {
     hidden: {},
-    show: { transition: { staggerChildren: 0.075, delayChildren: 0.12 } },
+    show: { transition: { staggerChildren: 0.12, delayChildren: 0.1 } },
 };
 
 const card = {
@@ -20,6 +20,17 @@ const card = {
         scale: 1,
         transition: { type: 'spring' as const, stiffness: 270, damping: 24 },
     },
+};
+
+/** The picker is split so workplace language is findable, not buried. */
+const SECTIONS: { track: Track; title: string; subtitle: string }[] = [
+    { track: 'general', title: 'Generelt', subtitle: 'everyday Norwegian, A1 to B2' },
+    { track: 'occupation', title: 'Yrkesnorsk', subtitle: 'language for your line of work' },
+];
+
+const sectionStagger = {
+    hidden: {},
+    show: { transition: { staggerChildren: 0.05 } },
 };
 
 const fadeUp = {
@@ -61,12 +72,25 @@ export function StageSelect({ bests, onPick }: Props) {
                 </p>
             </motion.header>
 
-            <div className="grid auto-rows-fr gap-4 sm:grid-cols-2 lg:grid-cols-3">
-                {STAGES.map(stage => {
-                    const best = bests[stage.id] ?? 0;
-                    const mastered = best >= ITEMS_TO_WIN;
+            {SECTIONS.map(section => (
+                <motion.section
+                    key={section.track}
+                    variants={sectionStagger}
+                    className="mb-9 last:mb-0"
+                >
+                    <motion.div variants={card} className="mb-3 flex items-baseline gap-3">
+                        <h2 className="text-sm font-bold uppercase tracking-[0.15em] text-white/70">
+                            {section.title}
+                        </h2>
+                        <span className="text-xs text-white/35">{section.subtitle}</span>
+                    </motion.div>
 
-                    return (
+                    <div className="grid auto-rows-fr gap-4 sm:grid-cols-2 lg:grid-cols-3">
+                        {stagesInTrack(section.track).map(stage => {
+                            const best = bests[stage.id] ?? 0;
+                            const mastered = best >= ITEMS_TO_WIN;
+
+                            return (
                         <motion.button
                             key={stage.id}
                             variants={card}
@@ -132,10 +156,12 @@ export function StageSelect({ bests, onPick }: Props) {
                                     </motion.span>
                                 )}
                             </div>
-                        </motion.button>
-                    );
-                })}
-            </div>
+                                </motion.button>
+                            );
+                        })}
+                    </div>
+                </motion.section>
+            ))}
 
             <motion.div variants={card} className="mt-9 space-y-1.5 text-center text-xs text-white/30">
                 <p>Chrome &amp; Edge · your voice is analysed in your browser, never uploaded</p>
