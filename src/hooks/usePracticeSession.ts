@@ -1,5 +1,5 @@
 import { useCallback, useMemo, useState } from 'react';
-import { scoreAttempt, type AttemptScore } from '../utils/scoring';
+import { scoreAttempt, type AttemptScore, type IpaResolver } from '../utils/scoring';
 import { poolForStage, type Stage } from '../data/stages';
 import rawSentenceData from '../data/sentences.json';
 
@@ -63,7 +63,11 @@ function writeBest(stageId: string, cleared: number) {
     }
 }
 
-export function usePracticeSession() {
+/**
+ * @param toIpa How words become IPA for scoring. Defaults to the rule engine;
+ * the app supplies a resolver backed by the NB Uttale lexicon.
+ */
+export function usePracticeSession(toIpa?: IpaResolver) {
     const [session, setSession] = useState<SessionState | null>(null);
     const [bests, setBests] = useState<Record<string, number>>(readBests);
     /** The most recent graded attempt, shown as feedback before moving on. */
@@ -95,7 +99,7 @@ export function usePracticeSession() {
         (heard: string) => {
             if (!session || session.outcome) return;
 
-            const graded = scoreAttempt(currentItem, heard);
+            const graded = scoreAttempt(currentItem, heard, toIpa);
             const bar = session.stage.baseThreshold + session.cleared * THRESHOLD_STEP;
             const passed = graded.score >= bar;
             const attempt: Attempt = { ...graded, threshold: bar, passed };
@@ -130,7 +134,7 @@ export function usePracticeSession() {
                 cursor: (session.cursor + 1) % session.queue.length,
             });
         },
-        [session, currentItem]
+        [session, currentItem, toIpa]
     );
 
     /** Dismiss the feedback card and move to the next item. */

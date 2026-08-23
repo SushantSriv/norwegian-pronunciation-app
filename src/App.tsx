@@ -8,6 +8,7 @@ import { ResultsScreen } from './components/ResultsScreen';
 import { usePracticeSession } from './hooks/usePracticeSession';
 import { useSpeechRecognition } from './hooks/useSpeechRecognition';
 import { useNorwegianVoices } from './hooks/useNorwegianVoices';
+import { useDialect } from './hooks/useDialect';
 import { countVisit } from './utils/analytics';
 
 /** Shown instead of the app in browsers without the Web Speech API. */
@@ -28,6 +29,8 @@ function UnsupportedNotice() {
 }
 
 export default function App() {
+    const { dialect, setDialect, ready: dialectReady, toIpa, lookup } = useDialect();
+
     const {
         stage,
         currentItem,
@@ -43,7 +46,7 @@ export default function App() {
         submit,
         next,
         quit,
-    } = usePracticeSession();
+    } = usePracticeSession(toIpa);
 
     const [showConfetti, setShowConfetti] = useState(false);
 
@@ -136,6 +139,10 @@ export default function App() {
                                         voices={voices}
                                         activeVoiceURI={activeVoiceURI}
                                         onChooseVoice={chooseVoice}
+                                        dialect={dialect}
+                                        onDialectChange={setDialect}
+                                        dialectReady={dialectReady}
+                                        lookup={lookup}
                                         rate={rate}
                                         onRateChange={setRate}
                                         onListen={start}

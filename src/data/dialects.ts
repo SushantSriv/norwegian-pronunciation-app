@@ -1,12 +1,16 @@
 /**
- * The five dialect areas covered by NB Uttale.
+ * The dialect areas offered for pronunciation.
  *
- * These are the Language Bank's own regional groupings, not a full dialect
- * map — Norwegian has far more variation than five buckets. They are the
- * granularity the pronunciation data actually supports, so they are what we
- * offer rather than inventing distinctions we cannot back with data.
+ * NB Uttale distinguishes five areas — East, Southwest, West, Trøndelag and
+ * North. Across this app's ~1,350-word corpus, two of those pairs transcribe
+ * IDENTICALLY (west == southwest, north == trøndelag), so they are presented
+ * together rather than as separate choices that would change nothing when
+ * selected. The five-way split is real in the full 785k-word source; it just
+ * does not surface in this vocabulary.
+ *
+ * The id is the data file backing the group.
  */
-export type DialectId = 'east' | 'southwest' | 'west' | 'trondelag' | 'north';
+export type DialectId = 'east' | 'southwest' | 'trondelag';
 
 export interface Dialect {
     id: DialectId;
@@ -28,32 +32,18 @@ export const DIALECTS: Dialect[] = [
         trait: 'The standard you hear in national media. Uses retroflex "rs" — norsk sounds like "noʂk".',
     },
     {
-        id: 'west',
-        name: 'Vestnorsk',
-        english: 'West Norwegian',
-        where: 'Bergen and the west coast',
-        trait: 'Keeps "rs" separate — norsk stays "norsk". Often a guttural R.',
-    },
-    {
         id: 'southwest',
-        name: 'Sørvestnorsk',
-        english: 'Southwest Norwegian',
-        where: 'Stavanger and the southwest',
-        trait: 'Also keeps "rs" separate, with its own vowel colouring.',
+        name: 'Vest- og sørvestnorsk',
+        english: 'West & Southwest',
+        where: 'Bergen and Stavanger',
+        trait: 'Keeps "rs" separate — norsk stays "norsk". Differs from Oslo on about 1 word in 9 here.',
     },
     {
         id: 'trondelag',
-        name: 'Trøndersk',
-        english: 'Trøndelag',
-        where: 'Trondheim and around',
-        trait: 'Retroflex like the east, but with widespread vowel apocope.',
-    },
-    {
-        id: 'north',
-        name: 'Nordnorsk',
-        english: 'North Norwegian',
-        where: 'Nordland, Troms and Finnmark',
-        trait: 'Retroflex, and drops many final vowels.',
+        name: 'Trøndersk og nordnorsk',
+        english: 'Trøndelag & North',
+        where: 'Trondheim and northwards',
+        trait: 'Retroflex like Oslo, so very close to it — only a handful of words differ in this corpus.',
     },
 ];
 

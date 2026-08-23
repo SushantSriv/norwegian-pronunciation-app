@@ -11,8 +11,8 @@
  * Both remain as the fallback for words the lexicon does not carry (proper
  * nouns, rarer inflections) — roughly 11% of the corpus.
  *
- * Each dialect is a separate chunk loaded on demand, so choosing one costs a
- * ~60 KB fetch rather than bundling all five up front.
+ * Each dialect group is a separate chunk loaded on demand, so choosing one
+ * costs a single ~24 KB gzipped fetch rather than bundling them all up front.
  */
 import type { DialectId } from '../data/dialects';
 import { pitchAccentFor, type PitchAccent } from '../data/tonelag';
@@ -27,9 +27,7 @@ type RawLexicon = Record<string, RawEntry[]>;
 const LOADERS: Record<DialectId, () => Promise<{ default: unknown }>> = {
     east: () => import('../data/pronunciation/east.json'),
     southwest: () => import('../data/pronunciation/southwest.json'),
-    west: () => import('../data/pronunciation/west.json'),
     trondelag: () => import('../data/pronunciation/trondelag.json'),
-    north: () => import('../data/pronunciation/north.json'),
 };
 
 const loaded = new Map<DialectId, RawLexicon>();

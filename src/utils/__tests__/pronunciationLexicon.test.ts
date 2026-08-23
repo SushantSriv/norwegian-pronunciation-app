@@ -67,10 +67,10 @@ describe('pronunciationFor (with the east lexicon loaded)', () => {
 
 describe('dialect variation', () => {
     it('gives genuinely different transcriptions where dialects differ', async () => {
-        await Promise.all([loadDialect('east'), loadDialect('west')]);
+        await Promise.all([loadDialect('east'), loadDialect('southwest')]);
         // Retroflex /rs/ is an east/west isogloss: noʂk vs norsk.
         const east = stripProsody(pronunciationFor('norsk', 'east').ipa);
-        const west = stripProsody(pronunciationFor('norsk', 'west').ipa);
+        const west = stripProsody(pronunciationFor('norsk', 'southwest').ipa);
         expect(east).not.toBe(west);
         expect(east).toContain('ʂ');
         expect(west).toContain('r');

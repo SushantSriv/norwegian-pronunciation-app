@@ -26,7 +26,8 @@ your attempt, extracts the pitch contour, and draws it.
 |---|---|
 | 🎙️ **Live scoring** | Say the phrase; every word is aligned and scored, so a dropped or inserted word does not throw off everything after it. |
 | 🔤 **Phoneme feedback** | Each missed word is broken into IPA sounds, with a plain-language explanation of the target sound and what you actually said. |
-| 📈 **Melody view** | Your pitch contour, measured from your own recording, with a semitone-range readout. Flat delivery gets flagged. |
+| 📈 **Melody view** | Your pitch contour, measured from your own recording, drawn against the *expected* shape for that word's tonelag. Flat delivery gets flagged. |
+| 🗣️ **Dialects** | Østnorsk, Vest-/sørvestnorsk or Trøndersk/nordnorsk — real per-region transcriptions, not one accent relabelled. |
 | 🎧 **Listen back** | Play the reference and your own attempt back to back. Silence before and after you speak is trimmed automatically. |
 | 🎯 **Rising difficulty** | Clear 10 phrases before losing 3 lives. The pass bar climbs with every one you get right. |
 | 📚 **5 levels** | A1 single words through B2 consonant clusters, drawn from a 500-phrase corpus. |
@@ -96,8 +97,8 @@ identifiers are stored, and audio never leaves the browser regardless.
 5. Your recording is separately run through autocorrelation pitch detection for the
    melody chart.
 
-**Known limits:** the G2P is an approximation — no tone accent, no compound stress, and
-it will be wrong on loanwords. Pitch detection returns nothing rather than guessing on
+**Known limits:** the fallback G2P used outside the lexicon is an approximation — no
+tone accent, no compound stress, and it will be wrong on loanwords. Pitch detection returns nothing rather than guessing on
 unvoiced or quiet frames.
 
 ## Pronunciation data
@@ -116,8 +117,14 @@ It supplies, per word and per dialect area:
   from `avtale` the verb (accent 1)
 
 `scripts/build-pronunciation.mjs` filters the 785,000-word source down to the
-~1,350 words this app actually uses, giving ~60 KB per dialect. Each dialect is
-a separate lazy-loaded chunk, so picking one costs a single small fetch.
+~1,350 words this app actually uses. Each dialect group is a lazy-loaded chunk,
+so picking one costs a single ~24 KB gzipped fetch.
+
+NB Uttale distinguishes five areas, but across this corpus two pairs transcribe
+**identically** — west matches southwest, and north matches Trøndelag — so they
+are offered as three groups rather than five choices that would change nothing
+when selected. The build script detects and skips those duplicates. East differs
+from west/southwest on 133 of 1,205 words, and from Trøndelag/north on just 11.
 
 Coverage is about 89%. Words the lexicon does not carry — mostly proper nouns —
 fall back to the rule-based engines in `src/utils/norwegianG2P.ts` and

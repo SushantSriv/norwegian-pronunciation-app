@@ -7,6 +7,9 @@ import { CompareAudio } from './CompareAudio';
 import { MelodyView } from './MelodyView';
 import { VoiceVisualizer } from './VoiceVisualizer';
 import { VoicePicker } from './VoicePicker';
+import { DialectPicker } from './DialectPicker';
+import type { DialectId } from '../data/dialects';
+import type { Pronunciation } from '../utils/pronunciationLexicon';
 import { useRecordingAnalysis } from '../hooks/useRecordingAnalysis';
 import { useSpokenPhrase } from '../hooks/useSpokenPhrase';
 
@@ -29,6 +32,10 @@ interface Props {
     onChooseVoice: (uri: string) => void;
     rate: number;
     onRateChange: (rate: number) => void;
+    dialect: DialectId;
+    onDialectChange: (id: DialectId) => void;
+    dialectReady: boolean;
+    lookup: (word: string) => Pronunciation;
     onListen: () => void;
     onStopListening: () => void;
     onNext: () => void;
@@ -64,6 +71,10 @@ export function PracticeScreen({
     onChooseVoice,
     rate,
     onRateChange,
+    dialect,
+    onDialectChange,
+    dialectReady,
+    lookup,
     onListen,
     onStopListening,
     onNext,
@@ -81,6 +92,13 @@ export function PracticeScreen({
     // Follows the reference voice word by word so the learner can see which
     // part of the phrase is being said.
     const { speak, stop: stopSpeaking, speaking, speakingIndex } = useSpokenPhrase();
+
+    // Pitch accent is a property of a word, so the melody target is only shown
+    // when the item IS one word. A phrase has one accent per word and drawing
+    // a single target across all of them would be misleading.
+    const attemptWords = lastAttempt ? lastAttempt.expected.trim().split(/s+/) : [];
+    const soleWord = attemptWords.length === 1 ? attemptWords[0] : null;
+    const soleWordEntry = soleWord ? lookup(soleWord) : null;
 
     return (
         <div className="glass w-full overflow-hidden rounded-3xl p-5 sm:p-7">
@@ -321,6 +339,8 @@ export function PracticeScreen({
                                     contour={analysis?.contour ?? null}
                                     analysing={analysing}
                                     recordingAvailable={recordingAvailable}
+                                    targetAccent={soleWordEntry?.accent}
+                                    accentSource={soleWordEntry?.source}
                                 />
                             </motion.div>
 
@@ -399,6 +419,7 @@ export function PracticeScreen({
             </AnimatePresence>
 
             <div className="mt-6 border-t border-white/10 pt-4">
+                <DialectPicker dialect={dialect} onChange={onDialectChange} ready={dialectReady} />
                 <VoicePicker
                     voices={voices}
                     activeVoiceURI={activeVoiceURI}

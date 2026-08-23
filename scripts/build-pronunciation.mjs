@@ -16,7 +16,7 @@
  *
  * The 158 MB source is deliberately NOT committed; only the filtered output is.
  */
-import { createReadStream, readFileSync, writeFileSync, mkdirSync } from 'fs';
+import { createReadStream, readFileSync, writeFileSync, mkdirSync, rmSync } from 'fs';
 import { createInterface } from 'readline';
 import { fileURLToPath } from 'url';
 
@@ -141,13 +141,28 @@ async function buildDialect(prefix, name) {
     const path = `${OUT_DIR}/${name}.json`;
     writeFileSync(path, JSON.stringify(compact));
     const kb = (readFileSync(path).length / 1024).toFixed(0);
+    const serialised = JSON.stringify(compact);
     console.log(
         `${name.padEnd(11)} words=${String(Object.keys(compact).length).padStart(5)}  ${kb} KB`
     );
-    return Object.keys(compact).length;
+    return serialised;
 }
 
+/**
+ * Several NB Uttale areas transcribe this corpus identically - the areas do
+ * differ across the full 785k vocabulary, but not within these ~1,350 words.
+ * Writing byte-identical files would ship dead chunks and let the UI offer
+ * choices that change nothing, so duplicates are reported and skipped.
+ */
+const written = new Map();
 for (const [prefix, name] of Object.entries(DIALECTS)) {
-    await buildDialect(prefix, name);
+    const json = await buildDialect(prefix, name);
+    const twin = written.get(json);
+    if (twin) {
+        rmSync(OUT_DIR + name + '.json');
+        console.log(name.padEnd(11) + 'identical to ' + twin + ' - skipped');
+    } else {
+        written.set(json, name);
+    }
 }
 console.log('done');

@@ -129,7 +129,18 @@ const INSERTION_PENALTY = 3;
 
 const stripPunct = (w: string): string => w.replace(/[.,!?;:«»"]/g, '').toLowerCase();
 
-export function scoreAttempt(expected: string, heard: string): AttemptScore {
+/**
+ * How a word is turned into IPA. Injected so the module stays pure and
+ * testable: the app passes a resolver backed by the NB Uttale lexicon for the
+ * chosen dialect, while tests and the fallback path use the rule engine.
+ */
+export type IpaResolver = (word: string) => string;
+
+export function scoreAttempt(
+    expected: string,
+    heard: string,
+    toIpa: IpaResolver = wordToIPA
+): AttemptScore {
     const expectedWords = expected.split(/\s+/).filter(Boolean);
     const heardWords = heard.split(/\s+/).filter(Boolean);
 
@@ -162,8 +173,8 @@ export function scoreAttempt(expected: string, heard: string): AttemptScore {
         }
 
         const heardWord = chunk.hypIdx !== null ? heardWords[chunk.hypIdx] : '';
-        const expectedIpa = wordToIPA(refWord);
-        const heardIpa = heardWord ? wordToIPA(heardWord) : '';
+        const expectedIpa = toIpa(refWord);
+        const heardIpa = heardWord ? toIpa(heardWord) : '';
         const similarity = heardWord ? phonemeSimilarity(expectedIpa, heardIpa) : 0;
 
         wordScores.push({
