@@ -49,7 +49,7 @@ in Chrome/Edge, open the app and choose **Install** from the address bar or menu
 ```bash
 npm install
 npm run dev        # http://localhost:5173
-npm test           # 42 unit tests
+npm test           # 66 unit tests
 npm run build      # production build
 ```
 
@@ -99,6 +99,31 @@ identifiers are stored, and audio never leaves the browser regardless.
 **Known limits:** the G2P is an approximation — no tone accent, no compound stress, and
 it will be wrong on loanwords. Pitch detection returns nothing rather than guessing on
 unvoiced or quiet frames.
+
+## Pronunciation data
+
+Pronunciation and pitch-accent data comes from **[NB Uttale](https://www.nb.no/sprakbanken/en/resource-catalogue/oai-nb-no-sbr-79/)**,
+the Norwegian Language Bank's pronunciation lexicon, published by
+Nasjonalbiblioteket under **[CC0](https://creativecommons.org/publicdomain/zero/1.0/)**
+(public domain). Credit is given because it is deserved, not because CC0 requires it.
+
+It supplies, per word and per dialect area:
+
+- broad IPA with stress and syllable structure
+- **tonelag** — pitch accent 1 vs 2, which is what `bønder` (farmers) and
+  `bønner` (beans) differ by, and nothing else
+- part of speech, which separates senses such as `avtale` the noun (accent 2)
+  from `avtale` the verb (accent 1)
+
+`scripts/build-pronunciation.mjs` filters the 785,000-word source down to the
+~1,350 words this app actually uses, giving ~60 KB per dialect. Each dialect is
+a separate lazy-loaded chunk, so picking one costs a single small fetch.
+
+Coverage is about 89%. Words the lexicon does not carry — mostly proper nouns —
+fall back to the rule-based engines in `src/utils/norwegianG2P.ts` and
+`src/data/tonelag.ts`. Those rules are demonstrably weaker: on a sample of five
+words the accent heuristic got `mistet` and `morgen` wrong, which is exactly why
+real data is preferred wherever it exists.
 
 ## Feedback
 
