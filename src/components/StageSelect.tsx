@@ -1,4 +1,6 @@
+import { useState } from 'react';
 import { motion } from 'framer-motion';
+import { AboutDialog } from './AboutDialog';
 import { stagesInTrack, type Stage, type Track } from '../data/stages';
 import { ITEMS_TO_WIN, MAX_STRIKES } from '../hooks/usePracticeSession';
 
@@ -39,6 +41,7 @@ const fadeUp = {
 };
 
 export function StageSelect({ bests, onPick }: Props) {
+    const [aboutOpen, setAboutOpen] = useState(false);
     return (
         <motion.div initial="hidden" animate="show" variants={container} className="w-full">
             <motion.header variants={fadeUp} className="mb-10 text-center">
@@ -164,7 +167,15 @@ export function StageSelect({ bests, onPick }: Props) {
             ))}
 
             <motion.div variants={card} className="mt-9 space-y-1.5 text-center text-xs text-white/30">
-                <p>Chrome &amp; Edge · your voice is analysed in your browser, never uploaded</p>
+                <p>Chrome &amp; Edge · free · no account</p>
+                <p>
+                    <button
+                        onClick={() => setAboutOpen(true)}
+                        className="underline decoration-white/25 underline-offset-2 transition hover:text-white/60"
+                    >
+                        About this app &amp; how to use it
+                    </button>
+                </p>
                 <p>
                     <a
                         href="https://github.com/SushantSriv/norwegian-pronunciation-app/issues/new"
@@ -176,6 +187,8 @@ export function StageSelect({ bests, onPick }: Props) {
                     </a>
                 </p>
             </motion.div>
+
+            <AboutDialog open={aboutOpen} onClose={() => setAboutOpen(false)} />
         </motion.div>
     );
 }

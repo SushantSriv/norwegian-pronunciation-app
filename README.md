@@ -81,8 +81,13 @@ uvicorn main:app --reload --port 8000
 <summary><strong>Optional: analytics</strong></summary>
 
 The app ships with **no tracking**. Set `VITE_ANALYTICS_URL` at build time to enable a
-cookie-less page counter (GoatCounter, Plausible, etc.). Do Not Track is respected, no
-identifiers are stored, and audio never leaves the browser regardless.
+cookie-less page counter (GoatCounter, Plausible, etc.). Do Not Track is respected and no
+identifiers are stored. Recordings are never sent to any analytics endpoint.
+
+Note that speech **recognition** is performed by the browser's own service, not by this
+app — in Chrome and Edge the audio goes to Google's or Microsoft's servers, as it does for
+any site using the Web Speech API. Scoring, pitch analysis and transcription all run
+locally.
 
 </details>
 
