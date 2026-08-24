@@ -144,15 +144,17 @@ export function AboutDialog({ open, onClose }: Props) {
 
                             <Section title="What you need">
                                 <p>
-                                    <strong className="text-white/80">Chrome or Edge</strong>, on a computer or
-                                    Android phone, plus a microphone and an internet connection. Firefox and
-                                    browsers on iPhone and iPad do not support the speech API this relies on, so
-                                    the app cannot listen there.
+                                    <strong className="text-white/80">Chrome, Edge or Safari</strong>, on a
+                                    computer, phone or tablet, plus a microphone and an internet connection.
+                                    Safari uses Apple&rsquo;s speech services rather than Google&rsquo;s, so it
+                                    works on iPhone, iPad and Mac. Firefox does not implement speech
+                                    recognition at all, and several Chromium forks ship the API without access
+                                    to a service behind it.
                                 </p>
                                 <p>
-                                    On phones, listen-back and the melody chart are unavailable: the recogniser
-                                    insists on having the microphone to itself, so there is no second stream to
-                                    record from. Scoring still works normally.
+                                    Some browsers hand the microphone exclusively to the speech recogniser. On
+                                    those, listen-back and the melody chart are unavailable and the app says so
+                                    once it has actually detected it. Scoring works either way.
                                 </p>
                             </Section>
 
@@ -164,8 +166,8 @@ export function AboutDialog({ open, onClose }: Props) {
                                 <p className="rounded-lg border border-amber-400/25 bg-amber-400/10 p-3 text-amber-100/80">
                                     <strong className="text-amber-100">One thing to be aware of:</strong> the
                                     speech recognition is not done by this app but by your browser&rsquo;s own
-                                    service. In Chrome and Edge that means your audio is sent to Google&rsquo;s
-                                    or Microsoft&rsquo;s servers to be transcribed, exactly as with any site
+                                    service. In Chrome and Edge that means your audio goes to Google&rsquo;s
+                                    or Microsoft&rsquo;s servers to be transcribed, and in Safari to Apple&rsquo;s — exactly as with any site
                                     using the Web Speech API. That part is outside my control. Everything else —
                                     the scoring, the pitch analysis and the transcriptions — runs on your own
                                     device.

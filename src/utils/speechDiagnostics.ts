@@ -22,26 +22,39 @@ export function isStandalone(): boolean {
 }
 
 /**
- * Chromium browsers other than Chrome itself frequently ship the Web Speech API
- * without access to the speech service behind it, which surfaces as
- * `service-not-allowed` no matter what the user permits.
+ * Which engine a browser can reach differs, and getting this wrong sends a
+ * learner to a browser they do not have. Safari implements the API against
+ * Apple's own speech services and works; Firefox does not implement it at all;
+ * several Chromium forks ship the API without access to the service behind it,
+ * which surfaces as `service-not-allowed` no matter what the user permits.
  */
 function browserNote(): SpeechDiagnostic | null {
     const ua = navigator.userAgent;
-    const isChromium = /Chrome|Chromium|CriOS/i.test(ua);
-    const knownLimited = /SamsungBrowser|Brave|Vivaldi|OPR|YaBrowser|DuckDuckGo|Firefox|FxiOS/i.test(ua);
+    // Safari must be tested before Chromium: Chrome on iOS is WebKit underneath
+    // and every iOS browser carries "Safari" in its user agent.
+    const isSafari = /^((?!chrome|android|crios|fxios|edgios).)*safari/i.test(ua);
+    const isChromium = /Chrome|Chromium|CriOS|Edg/i.test(ua);
+    const cannotReachService = /SamsungBrowser|Brave|Vivaldi|OPR|YaBrowser|DuckDuckGo/i.test(ua);
+    const noImplementation = /Firefox|FxiOS/i.test(ua);
 
-    if (knownLimited) {
+    if (noImplementation) {
         return {
             label: 'Browser',
             ok: false,
-            fix: 'This browser usually cannot reach the speech service. Open the site in Chrome.',
+            fix: 'Firefox does not implement speech recognition. Use Chrome, Edge or Safari.',
         };
     }
-    if (!isChromium) {
-        return { label: 'Browser', ok: false, fix: 'Speech recognition needs Chrome or Edge.' };
+    if (cannotReachService) {
+        return {
+            label: 'Browser',
+            ok: false,
+            fix: 'This browser usually cannot reach a speech service. Try Chrome, Edge or Safari.',
+        };
     }
-    return { label: 'Browser', ok: true };
+    // Safari and the Chromium family both work; anything else is unknown rather
+    // than known-broken, so do not claim it fails.
+    if (isSafari || isChromium) return { label: 'Browser', ok: true };
+    return null;
 }
 
 export async function collectSpeechDiagnostics(): Promise<SpeechDiagnostic[]> {

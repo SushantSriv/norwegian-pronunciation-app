@@ -20,9 +20,9 @@ function UnsupportedNotice() {
             </div>
             <h1 className="mt-3 text-xl font-bold text-white">This browser cannot listen</h1>
             <p className="mt-2 text-sm leading-relaxed text-white/65">
-                The app scores your pronunciation with the browser Web Speech API, which is only available in{' '}
-                <strong className="text-white">Chrome</strong> and <strong className="text-white">Edge</strong>.
-                Open this page in one of those to practise.
+                This browser does not provide the Web Speech API. Open the page in{' '}
+                <strong className="text-white">Chrome</strong>, <strong className="text-white">Edge</strong>{' '}
+                or <strong className="text-white">Safari</strong> to practise.
             </p>
         </div>
     );

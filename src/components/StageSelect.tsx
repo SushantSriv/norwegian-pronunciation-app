@@ -167,7 +167,7 @@ export function StageSelect({ bests, onPick }: Props) {
             ))}
 
             <motion.div variants={card} className="mt-9 space-y-1.5 text-center text-xs text-white/30">
-                <p>Chrome &amp; Edge · free · no account</p>
+                <p>Chrome, Edge &amp; Safari · free · no account</p>
                 <p>
                     <button
                         onClick={() => setAboutOpen(true)}
