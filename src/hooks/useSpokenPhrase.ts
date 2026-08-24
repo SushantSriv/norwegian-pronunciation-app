@@ -9,6 +9,9 @@ import { speakNorwegian, stopSpeaking } from '../utils/audioPlayback';
 export function useSpokenPhrase() {
     const [speakingIndex, setSpeakingIndex] = useState(-1);
     const [speaking, setSpeaking] = useState(false);
+    // Online voices are fetched from a server, so there is a real gap between
+    // asking for speech and hearing it. Surfaced so the button can say so.
+    const [preparing, setPreparing] = useState(false);
     const runIdRef = useRef(0);
 
     // Silence the voice if the hook goes away mid-phrase. No need to touch the
@@ -30,10 +33,14 @@ export function useSpokenPhrase() {
         }
 
         setSpeaking(true);
+        setPreparing(true);
         setSpeakingIndex(-1);
 
         await speakNorwegian(phrase, {
             ...options,
+            onStart: () => {
+                if (runIdRef.current === runId) setPreparing(false);
+            },
             onBoundary: charIndex => {
                 if (runIdRef.current !== runId) return;
                 // The last word whose start is at or before this offset.
@@ -48,6 +55,7 @@ export function useSpokenPhrase() {
 
         if (runIdRef.current !== runId) return;
         setSpeaking(false);
+        setPreparing(false);
         setSpeakingIndex(-1);
     }, []);
 
@@ -55,8 +63,9 @@ export function useSpokenPhrase() {
         runIdRef.current++;
         stopSpeaking();
         setSpeaking(false);
+        setPreparing(false);
         setSpeakingIndex(-1);
     }, []);
 
-    return { speak, stop, speaking, speakingIndex };
+    return { speak, stop, speaking, preparing, speakingIndex };
 }

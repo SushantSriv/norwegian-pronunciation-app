@@ -98,6 +98,15 @@ function byQuality(a: SpeechSynthesisVoice, b: SpeechSynthesisVoice) {
     return quality(a) - quality(b) || a.name.localeCompare(b.name);
 }
 
+/**
+ * Online voices are synthesised on a server. They sound far better than the
+ * older on-device ones, but the audio has to arrive over the network, so they
+ * start with a delay and can break up mid-phrase on a weak connection.
+ */
+export function isOnlineVoice(voice: SpeechSynthesisVoice): boolean {
+    return !voice.localService;
+}
+
 /** True when this voice is a neighbouring language rather than Norwegian. */
 export function isNeighbourVoice(voice: SpeechSynthesisVoice): boolean {
     return !NORWEGIAN_LANG.test(voice.lang) && NEIGHBOUR_LANG.test(voice.lang);
@@ -138,6 +147,9 @@ export interface SpeakOptions {
      * the UI follow along with the speech.
      */
     onBoundary?: (charIndex: number) => void;
+    /** Fires when audio actually begins, which for an online voice is well
+     *  after speak() was called. Lets the UI show that it is loading. */
+    onStart?: () => void;
 }
 
 function buildUtterance(text: string, voice: SpeechSynthesisVoice | undefined, options: SpeakOptions) {
@@ -177,28 +189,60 @@ export function speakNorwegian(text: string, options: SpeakOptions = {}): Promis
     const synth = window.speechSynthesis;
     const voice = pickFrom(rankNorwegianVoices(currentVoices()), options.voiceURI);
 
-    synth.cancel();
+    // Only cancel when something is actually queued. An unconditional cancel()
+    // right before speak() is itself what makes Chrome drop the new utterance.
+    if (synth.speaking || synth.pending) synth.cancel();
+
     const utterance = buildUtterance(text, voice, options);
 
+    let started = false;
+    let retryTimer = 0;
+    let keepAlive = 0;
+
+    const cleanUp = () => {
+        window.clearTimeout(retryTimer);
+        window.clearInterval(keepAlive);
+    };
+
     const finished = new Promise<void>(resolve => {
-        utterance.onend = () => resolve();
-        utterance.onerror = () => resolve();
+        utterance.onstart = () => {
+            started = true;
+            window.clearTimeout(retryTimer);
+            options.onStart?.();
+        };
+        utterance.onend = () => {
+            cleanUp();
+            resolve();
+        };
+        utterance.onerror = () => {
+            cleanUp();
+            resolve();
+        };
     });
 
     synth.speak(utterance);
 
-    // Chrome occasionally drops an utterance queued in the same tick as
-    // cancel(). If nothing started shortly after, queue it once more — this
-    // runs outside the gesture but by then speech is already unlocked.
-    window.setTimeout(() => {
-        if (!synth.speaking && !synth.pending) {
+    // Chrome can drop an utterance queued moments after a cancel. Re-queue only
+    // if it genuinely never began — an online voice needs a network round trip
+    // before it starts, and retrying inside that window makes it speak twice.
+    retryTimer = window.setTimeout(() => {
+        if (!started && !synth.speaking && !synth.pending) {
             try {
                 synth.speak(utterance);
             } catch {
                 // Nothing more we can do.
             }
         }
-    }, 250);
+    }, 1500);
+
+    // Chrome stalls synthesis part-way through longer utterances; nudging it
+    // with pause/resume is the long-standing workaround. Only runs while audio
+    // is actually playing, and stops as soon as it is not.
+    keepAlive = window.setInterval(() => {
+        if (!synth.speaking) return;
+        synth.pause();
+        synth.resume();
+    }, 5000);
 
     return finished;
 }

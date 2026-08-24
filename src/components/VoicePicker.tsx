@@ -1,4 +1,4 @@
-import { isNeighbourVoice, speakNorwegian } from '../utils/audioPlayback';
+import { isNeighbourVoice, isOnlineVoice, speakNorwegian } from '../utils/audioPlayback';
 import { RATE_OPTIONS } from '../hooks/useNorwegianVoices';
 
 interface Props {
@@ -25,7 +25,9 @@ function label(voice: SpeechSynthesisVoice): string {
     else if (tag.startsWith('da')) variety = 'Danish';
     else variety = 'Bokmål';
 
-    return `${name} · ${variety}`;
+    // Say where the voice comes from: it decides whether playback is instant.
+    const source = isOnlineVoice(voice) ? 'online' : 'on device';
+    return `${name} · ${variety} · ${source}`;
 }
 
 /** Where to get a Norwegian voice differs per platform, so say the right thing. */

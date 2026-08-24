@@ -91,7 +91,7 @@ export function PracticeScreen({
     const { analysis, analysing } = useRecordingAnalysis(recordingUrl);
     // Follows the reference voice word by word so the learner can see which
     // part of the phrase is being said.
-    const { speak, stop: stopSpeaking, speaking, speakingIndex } = useSpokenPhrase();
+    const { speak, stop: stopSpeaking, speaking, preparing, speakingIndex } = useSpokenPhrase();
 
     // Pitch accent is a property of a word, so the melody target is only shown
     // when the item IS one word. A phrase has one accent per word and drawing
@@ -273,8 +273,8 @@ export function PracticeScreen({
                             : 'mt-5 inline-flex min-h-[42px] items-center gap-2 rounded-full border border-white/15 bg-white/[0.07] px-5 py-2 text-sm font-semibold text-white/85 transition hover:border-white/30 hover:bg-white/15'
                     }
                 >
-                    <span aria-hidden="true">{speaking ? '⏹' : '🔊'}</span>
-                    {speaking ? 'Stop' : 'Hear it'}
+                    <span aria-hidden="true">{preparing ? '⏳' : speaking ? '⏹' : '🔊'}</span>
+                    {preparing ? 'Loading voice…' : speaking ? 'Stop' : 'Hear it'}
                 </motion.button>
             </div>
 
