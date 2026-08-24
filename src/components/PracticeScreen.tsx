@@ -213,6 +213,7 @@ export function PracticeScreen({
                     <motion.p
                         key={displayedItem}
                         data-testid="phrase"
+                        lang="nb"
                         initial="hidden"
                         animate="show"
                         exit={{ opacity: 0, y: -12, transition: { duration: 0.15 } }}
