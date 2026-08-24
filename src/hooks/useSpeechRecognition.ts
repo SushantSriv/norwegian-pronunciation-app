@@ -52,11 +52,42 @@ function getRecognitionCtor(): SpeechRecognitionCtor | null {
 const IS_MOBILE =
     typeof navigator !== 'undefined' && /Android|iPhone|iPad|iPod|Mobile/i.test(navigator.userAgent);
 
+/**
+ * Obtain microphone permission without holding the device.
+ *
+ * On mobile we deliberately never open a recorder, because the recogniser
+ * wants the microphone to itself. The side effect is that nothing ever asks
+ * for permission, and a site with no microphone grant can have speech
+ * recognition refused outright. Requesting a stream and releasing it straight
+ * away grants the permission and leaves the microphone free.
+ */
+async function ensureMicPermission(): Promise<void> {
+    try {
+        const perms = navigator.permissions as Permissions | undefined;
+        if (perms?.query) {
+            const status = await perms.query({ name: 'microphone' as PermissionName });
+            // Already granted: skip the request so we do not add latency.
+            if (status.state === 'granted') return;
+        }
+    } catch {
+        // Not every browser supports querying the microphone permission.
+    }
+
+    try {
+        const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+        stream.getTracks().forEach(t => t.stop());
+    } catch {
+        // Denied or no device. Let recognition report the real reason.
+    }
+}
+
 const FRIENDLY_ERRORS: Record<string, string> = {
     'no-speech': 'I did not catch anything — try speaking a little louder.',
     'audio-capture': 'No microphone found. Check that one is connected.',
-    'not-allowed': 'Microphone access was blocked. Enable it in your browser settings.',
-    'service-not-allowed': 'Speech recognition was blocked by your browser.',
+    'not-allowed':
+        'Microphone access was blocked. Allow it for this site, then tap the mic again.',
+    'service-not-allowed':
+        'Your browser refused the speech service. Open the site directly in Chrome (not an installed shortcut), and allow the microphone for it in site settings.',
     network: 'Speech recognition needs an internet connection.',
     aborted: '',
 };
@@ -239,6 +270,9 @@ export function useSpeechRecognition({ lang = 'nb-NO', onResult }: Options) {
             }
         } catch {
             mediaRecorderRef.current = null;
+            // No recorder means nothing has asked for the microphone, so make
+            // sure the permission exists before the recogniser needs it.
+            await ensureMicPermission();
         }
 
         try {

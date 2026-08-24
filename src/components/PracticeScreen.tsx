@@ -8,6 +8,7 @@ import { MelodyView } from './MelodyView';
 import { VoiceVisualizer } from './VoiceVisualizer';
 import { VoicePicker } from './VoicePicker';
 import { DialectPicker } from './DialectPicker';
+import { SpeechTrouble } from './SpeechTrouble';
 import type { DialectId } from '../data/dialects';
 import type { Pronunciation } from '../utils/pronunciationLexicon';
 import { useRecordingAnalysis } from '../hooks/useRecordingAnalysis';
@@ -438,7 +439,7 @@ export function PracticeScreen({
                             ) : (
                                 <p className="text-sm text-white/45">Tap the mic, then say the phrase</p>
                             )}
-                            {speechError && <p className="mt-1 text-sm text-amber-300">{speechError}</p>}
+                            <SpeechTrouble error={speechError} />
                         </div>
                     </motion.div>
                 )}
