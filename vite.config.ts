@@ -11,7 +11,8 @@ export default defineConfig(({ command }) => ({
         react(),
         VitePWA({
             registerType: 'autoUpdate',
-            includeAssets: ['icon-192.png', 'icon-512.png', 'icon-maskable-512.png', 'og-image.png'],
+            // og-image.png is deliberately absent: only crawlers fetch it.
+            includeAssets: ['icon-192.png', 'icon-512.png', 'icon-maskable-512.png'],
             manifest: {
                 name: 'Norsk uttale — Norwegian pronunciation practice',
                 short_name: 'Norsk uttale',

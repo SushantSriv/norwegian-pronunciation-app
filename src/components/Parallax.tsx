@@ -1,8 +1,8 @@
 // src/components/Parallax.tsx
 import React from 'react';
-import bgFar from '../assets/bg/bg_far.png';
-import bgMid from '../assets/bg/bg_mid.png';
-import bgFore from '../assets/bg/bg_fore.png';
+import bgFar from '../assets/bg/bg_far.webp';
+import bgMid from '../assets/bg/bg_mid.webp';
+import bgFore from '../assets/bg/bg_fore.webp';
 
 
 export const Parallax: React.FC = () => (
