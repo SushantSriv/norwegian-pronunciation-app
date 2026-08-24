@@ -48,9 +48,32 @@ function getRecognitionCtor(): SpeechRecognitionCtor | null {
     return w.SpeechRecognition ?? w.webkitSpeechRecognition ?? null;
 }
 
-/** Coarse mobile check — only used to decide whether to risk a parallel recorder. */
-const IS_MOBILE =
-    typeof navigator !== 'undefined' && /Android|iPhone|iPad|iPod|Mobile/i.test(navigator.userAgent);
+const RECORDING_BLOCKED_KEY = 'npa-recording-blocked-v1';
+
+/**
+ * Whether this device has already proved it cannot record while recognising.
+ *
+ * Android Chrome hands the microphone exclusively to the speech service, but
+ * that is not true of every phone or tablet, so assuming it from the user
+ * agent needlessly removed listen-back and the melody chart on devices that
+ * cope fine. We now try, and only stand down where it genuinely conflicts —
+ * remembering the answer so the cost is one attempt per device, ever.
+ */
+function recordingKnownBlocked(): boolean {
+    try {
+        return window.localStorage.getItem(RECORDING_BLOCKED_KEY) === '1';
+    } catch {
+        return false;
+    }
+}
+
+function rememberRecordingBlocked() {
+    try {
+        window.localStorage.setItem(RECORDING_BLOCKED_KEY, '1');
+    } catch {
+        // Storage unavailable; we simply re-learn it next time.
+    }
+}
 
 /**
  * Obtain microphone permission without holding the device.
@@ -119,9 +142,9 @@ export function useSpeechRecognition({ lang = 'nb-NO', onResult }: Options) {
      * essential feature, so on mobile we do not record by default, and we turn
      * recording off anywhere it turns out to conflict.
      */
-    const canRecordRef = useRef(!IS_MOBILE);
+    const canRecordRef = useRef(!recordingKnownBlocked());
     // Mirrored as state so the UI can explain why listen-back is unavailable.
-    const [recordingAvailable, setRecordingAvailable] = useState(!IS_MOBILE);
+    const [recordingAvailable, setRecordingAvailable] = useState(!recordingKnownBlocked());
     const wasRecordingRef = useRef(false);
     // Live analyser over the same mic stream, so the UI can render the learner's
     // voice as they speak. Exposed as a ref so the visualiser can drive its own
@@ -195,6 +218,7 @@ export function useSpeechRecognition({ lang = 'nb-NO', onResult }: Options) {
             // rather than the core feature, and invite an immediate retry.
             if (micProblem && wasRecordingRef.current && canRecordRef.current) {
                 canRecordRef.current = false;
+                rememberRecordingBlocked();
                 setRecordingAvailable(false);
                 stopRecorder();
                 setError('Freeing the microphone for speech recognition — tap the mic to try again.');
