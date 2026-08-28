@@ -127,7 +127,103 @@ export interface AttemptScore {
 /** Penalty applied to the composite score for each spurious extra word. */
 const INSERTION_PENALTY = 3;
 
-const stripPunct = (w: string): string => w.replace(/[.,!?;:«»"]/g, '').toLowerCase();
+// ---------------------------------------------------------------------------
+// Reconciling how a speech model writes Norwegian with how the corpus does
+//
+// A learner can say exactly the right thing and still be marked wrong, because
+// the transcript spells it differently from the phrase. Neither of these is the
+// learner's mistake, and both are common enough to cost a life.
+// ---------------------------------------------------------------------------
+
+/**
+ * Norwegian number words and the digits a speech model writes instead.
+ *
+ * Whisper transcribes "fem" as "5" and "tolv" as "12" — it is transcribing, not
+ * dictating — while the corpus spells them out. Nothing in the corpus contains a
+ * digit, so mapping words to digits only ever brings the two sides together.
+ */
+const NUMBER_WORDS: Record<string, string> = {
+    null: '0', en: '1', ein: '1', ett: '1', to: '2', tre: '3', fire: '4',
+    fem: '5', seks: '6', sju: '7', syv: '7', åtte: '8', ni: '9', ti: '10',
+    elleve: '11', tolv: '12', tretten: '13', fjorten: '14', femten: '15',
+    seksten: '16', sytten: '17', atten: '18', nitten: '19', tjue: '20',
+    tretti: '30', førti: '40', femti: '50', seksti: '60', sytti: '70',
+    åtti: '80', nitti: '90', hundre: '100', tusen: '1000',
+};
+
+/** The first spelling listed wins, so "7" reads back as "sju" rather than "syv". */
+const DIGIT_WORDS: Record<string, string> = Object.entries(NUMBER_WORDS).reduce(
+    (out, [word, digits]) => (digits in out ? out : { ...out, [digits]: word }),
+    {} as Record<string, string>
+);
+
+/** The form two words are compared in: punctuation gone, numbers as digits. */
+export const canonicalWord = (word: string): string => {
+    const bare = word
+        .toLowerCase()
+        .replace(/[.,!?;:«»"'’“”\-–—()]/g, '')
+        .replace(/é/g, 'e');
+    return NUMBER_WORDS[bare] ?? bare;
+};
+
+/**
+ * What a token would have sounded like, for the phoneme comparison.
+ *
+ * "5" has no pronunciation the G2P can derive — every character is stripped as
+ * punctuation — so a learner who said "fem" perfectly would score zero on it.
+ */
+export const spokenForm = (word: string): string => DIGIT_WORDS[word.trim()] ?? word;
+
+/**
+ * Rejoin compound members the transcript wrote apart.
+ *
+ * Norwegian writes compounds as one word and speech models are unreliable about
+ * it: "skiftetøy" comes back as "skifte tøy" perhaps as often as not. Word
+ * alignment then sees one expected word against two heard ones and charges the
+ * learner a substitution plus an insertion for a phrase they said correctly.
+ * That matters more here than in most apps, since the compounds ARE the
+ * exercise in the occupation tracks.
+ *
+ * Only joins where the result is a word actually being asked for, so it can
+ * never invent a match that was not already in the phrase.
+ */
+export function rejoinCompounds(expected: string[], heard: string[]): string[] {
+    const wanted = new Set(expected.map(canonicalWord));
+    const out: string[] = [];
+
+    for (let i = 0; i < heard.length; i++) {
+        const pair = heard[i] + heard[i + 1];
+        if (i + 1 < heard.length && wanted.has(canonicalWord(pair))) {
+            out.push(pair);
+            i++;
+            continue;
+        }
+        out.push(heard[i]);
+    }
+    return out;
+}
+
+/**
+ * And the reverse: a compound the transcript ran together that the phrase
+ * spells apart. Rarer, but the same unfairness.
+ */
+export function splitRunTogether(expected: string[], heard: string[]): string[] {
+    const canonicalExpected = expected.map(canonicalWord);
+    const out: string[] = [];
+
+    for (const word of heard) {
+        const bare = canonicalWord(word);
+        let split: string[] | null = null;
+        for (let i = 0; i + 1 < canonicalExpected.length && !split; i++) {
+            if (canonicalExpected[i] + canonicalExpected[i + 1] === bare) {
+                split = [expected[i], expected[i + 1]];
+            }
+        }
+        if (split) out.push(...split);
+        else out.push(word);
+    }
+    return out;
+}
 
 /**
  * How a word is turned into IPA. Injected so the module stays pure and
@@ -142,9 +238,17 @@ export function scoreAttempt(
     toIpa: IpaResolver = wordToIPA
 ): AttemptScore {
     const expectedWords = expected.split(/\s+/).filter(Boolean);
-    const heardWords = heard.split(/\s+/).filter(Boolean);
+    // Reconcile the two spellings of the same utterance before aligning, so a
+    // learner is never charged for the transcript's choices.
+    const heardWords = splitRunTogether(
+        expectedWords,
+        rejoinCompounds(expectedWords, heard.split(/\s+/).filter(Boolean))
+    );
 
-    const chunks = alignWords(expectedWords.map(stripPunct), heardWords.map(stripPunct));
+    const chunks = alignWords(
+        expectedWords.map(canonicalWord),
+        heardWords.map(canonicalWord)
+    );
 
     const wordScores: WordScore[] = [];
     let weightedTotal = 0;
@@ -173,8 +277,8 @@ export function scoreAttempt(
         }
 
         const heardWord = chunk.hypIdx !== null ? heardWords[chunk.hypIdx] : '';
-        const expectedIpa = toIpa(refWord);
-        const heardIpa = heardWord ? toIpa(heardWord) : '';
+        const expectedIpa = toIpa(spokenForm(refWord));
+        const heardIpa = heardWord ? toIpa(spokenForm(heardWord)) : '';
         const similarity = heardWord ? phonemeSimilarity(expectedIpa, heardIpa) : 0;
 
         wordScores.push({

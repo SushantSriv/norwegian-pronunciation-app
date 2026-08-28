@@ -1,5 +1,7 @@
+import { useMemo } from 'react';
 import { motion } from 'framer-motion';
 import type { PitchContour } from '../utils/pitch';
+import { classifyAccent, scoreMelody, type MelodyScore } from '../utils/melodyScore';
 import { ACCENT_HINT, ACCENT_LABEL, targetContour, type PitchAccent } from '../data/tonelag';
 
 interface Props {
@@ -11,8 +13,8 @@ interface Props {
      * word — a phrase has one accent per word, so the caller passes NONE there.
      */
     targetAccent?: PitchAccent;
-    /** Whether the accent came from real data or our fallback rules. */
-    accentSource?: 'lexicon' | 'rule';
+    /** Whether the accent came from real data, a compound split, or our rules. */
+    accentSource?: 'lexicon' | 'compound' | 'rule';
 }
 
 const WIDTH = 420;
@@ -46,11 +48,28 @@ function verdict(range: number): { text: string; tone: string } {
     return { text: 'Very melodic. Lively is good, as long as it still sounds like speech.', tone: 'text-sky-300' };
 }
 
+/** How closely the melody tracked the target, in plain words. */
+function matchVerdict(score: number): { text: string; tone: string } {
+    if (score >= 65) {
+        return { text: 'Melody shape matches the target closely.', tone: 'text-emerald-300' };
+    }
+    if (score >= 30) {
+        return {
+            text: 'The shape is roughly right — push the rise and fall further.',
+            tone: 'text-amber-300',
+        };
+    }
+    return {
+        text: 'The shape is not there yet — this reads closer to a flat delivery than to the target.',
+        tone: 'text-amber-300',
+    };
+}
+
 /**
  * Both curves are drawn on one axis of semitones relative to the speaker's own
- * median. Absolute pitch is meaningless for comparison — a bass and a soprano
- * saying the same word share a melodic shape but no frequencies — so the
- * target contour is only comparable once normalised this way.
+ * median, which pitch.ts has already normalised. Absolute pitch is meaningless
+ * for comparison — a bass and a soprano saying the same word share a melodic
+ * shape but no frequencies.
  */
 function toY(semitones: number, halfRange: number): number {
     const usable = HEIGHT / 2 - PAD;
@@ -63,21 +82,22 @@ interface Plot {
     halfRange: number;
 }
 
-function buildPlot(contour: PitchContour | null, targetAccent: PitchAccent | undefined): Plot {
+function buildPlot(
+    contour: PitchContour | null,
+    targetAccent: PitchAccent | undefined,
+    melody: MelodyScore | null
+): Plot {
     const empty: Plot = { userPaths: [], targetPath: null, halfRange: MIN_HALF_RANGE };
     if (!contour?.points.length || contour.medianHz === null) return empty;
 
-    const median = contour.medianHz;
-    const semitonesOf = (hz: number) => 12 * Math.log2(hz / median);
-
-    const target = targetAccent ? targetContour(targetAccent) : [];
+    const idealised = targetAccent ? targetContour(targetAccent) : [];
 
     // One axis wide enough for whichever of the two curves swings further.
     let extreme = MIN_HALF_RANGE;
     for (const p of contour.points) {
-        if (p.hz !== null) extreme = Math.max(extreme, Math.abs(semitonesOf(p.hz)));
+        if (p.semitones !== null) extreme = Math.max(extreme, Math.abs(p.semitones));
     }
-    for (const p of target) extreme = Math.max(extreme, Math.abs(p.semitones));
+    for (const p of idealised) extreme = Math.max(extreme, Math.abs(p.semitones));
     const halfRange = extreme * 1.1;
 
     const lastTime = contour.points[contour.points.length - 1]?.time || 1;
@@ -85,25 +105,31 @@ function buildPlot(contour: PitchContour | null, targetAccent: PitchAccent | und
     let current: string[] = [];
 
     for (const point of contour.points) {
-        if (point.hz === null) {
+        if (point.semitones === null) {
             // Break the line across unvoiced gaps rather than inventing pitch.
             if (current.length > 1) userPaths.push(current.join(' '));
             current = [];
             continue;
         }
         const x = (point.time / lastTime) * WIDTH;
-        const y = toY(semitonesOf(point.hz), halfRange);
+        const y = toY(point.semitones, halfRange);
         current.push(`${current.length ? 'L' : 'M'}${x.toFixed(1)},${y.toFixed(1)}`);
     }
     if (current.length > 1) userPaths.push(current.join(' '));
 
-    const targetPath = target.length
-        ? target
-              .map(
-                  (p, i) =>
-                      `${i ? 'L' : 'M'}${(p.t * WIDTH).toFixed(1)},${toY(p.semitones, halfRange).toFixed(1)}`
-              )
-              .join(' ')
+    // Prefer the DTW-aligned target. Drawn on the learner's own timeline it
+    // shows what they should have been doing at each moment of THEIR delivery,
+    // rather than an idealised shape stretched evenly across the clip that
+    // lines up with nothing they actually said.
+    const targetPoints = melody
+        ? melody.alignedTarget.map(p => ({
+              x: (p.time / lastTime) * WIDTH,
+              y: toY(p.semitones, halfRange),
+          }))
+        : idealised.map(p => ({ x: p.t * WIDTH, y: toY(p.semitones, halfRange) }));
+
+    const targetPath = targetPoints.length
+        ? targetPoints.map((p, i) => `${i ? 'L' : 'M'}${p.x.toFixed(1)},${p.y.toFixed(1)}`).join(' ')
         : null;
 
     return { userPaths, targetPath, halfRange };
@@ -116,9 +142,21 @@ export function MelodyView({
     targetAccent,
     accentSource,
 }: Props) {
-    const { userPaths, targetPath } = buildPlot(contour, targetAccent);
+    // Aligning the two contours is the expensive part (a 64x64 cost matrix),
+    // and neither input changes between renders of a graded attempt.
+    const melody = useMemo(
+        () => scoreMelody(contour, targetAccent ?? 'NONE'),
+        [contour, targetAccent]
+    );
+    // Which accent the delivery actually fits, regardless of which was asked
+    // for. Naming the one they produced is far more useful than a number: it is
+    // the difference between "72/100" and "you said the hands one".
+    const produced = useMemo(() => classifyAccent(contour), [contour]);
+    const { userPaths, targetPath } = buildPlot(contour, targetAccent, melody);
     const range = contour?.rangeSemitones ?? null;
     const showAccent = targetAccent && targetAccent !== 'NONE';
+    const saidTheOtherOne =
+        showAccent && produced?.clear === true && produced.accent !== targetAccent;
 
     return (
         <div className="rounded-xl border border-white/10 bg-white/[0.04] p-4">
@@ -139,12 +177,16 @@ export function MelodyView({
                         <span className="rounded-full bg-violet-400/25 px-2 py-0.5 text-xs font-bold text-violet-100">
                             {ACCENT_LABEL[targetAccent]}
                         </span>
-                        {accentSource === 'rule' && (
+                        {accentSource && accentSource !== 'lexicon' && (
                             <span
                                 className="text-[10px] font-semibold uppercase tracking-wide text-white/35"
-                                title="Derived from spelling rules, not the pronunciation lexicon"
+                                title={
+                                    accentSource === 'compound'
+                                        ? 'Derived from the compound’s parts, not a lexicon entry for the whole word'
+                                        : 'Derived from spelling rules, not the pronunciation lexicon'
+                                }
                             >
-                                estimated
+                                {accentSource === 'compound' ? 'from parts' : 'estimated'}
                             </span>
                         )}
                     </div>
@@ -238,9 +280,27 @@ export function MelodyView({
                                             'repeating-linear-gradient(90deg,rgba(196,181,253,.9) 0 4px,transparent 4px 7px)',
                                     }}
                                 />
-                                target shape
+                                target shape, time-aligned
                             </span>
                         </div>
+                    )}
+
+                    {saidTheOtherOne && (
+                        <p className="mt-2 rounded-lg border border-amber-400/25 bg-amber-400/10 px-3 py-2 text-sm text-amber-100">
+                            That came out as <strong>{ACCENT_LABEL[produced.accent]}</strong>, but this
+                            word takes <strong>{ACCENT_LABEL[targetAccent]}</strong>.{' '}
+                            {ACCENT_HINT[targetAccent]}
+                        </p>
+                    )}
+
+                    {melody && (
+                        <p className={`mt-2 text-sm ${matchVerdict(melody.score).tone}`}>
+                            <strong className="tabular-nums">{melody.score}/100</strong> melody match —{' '}
+                            {matchVerdict(melody.score).text}
+                            <span className="ml-1 text-white/35">
+                                ({melody.distance.toFixed(1)} semitones off once time-aligned)
+                            </span>
+                        </p>
                     )}
 
                     {range !== null && (

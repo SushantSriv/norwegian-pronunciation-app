@@ -1,6 +1,7 @@
 import { AnimatePresence, motion } from 'framer-motion';
 import { ITEMS_TO_WIN, MAX_STRIKES, type Attempt } from '../hooks/usePracticeSession';
 import type { Stage } from '../data/stages';
+import { ACCENT_LABEL } from '../data/tonelag';
 import { ScoreRing } from './ScoreRing';
 import { PhonemeBreakdown } from './PhonemeBreakdown';
 import { CompareAudio } from './CompareAudio';
@@ -10,7 +11,8 @@ import { VoicePicker } from './VoicePicker';
 import { DialectPicker } from './DialectPicker';
 import { SpeechTrouble } from './SpeechTrouble';
 import type { DialectId } from '../data/dialects';
-import type { Pronunciation } from '../utils/pronunciationLexicon';
+import type { AsrStatus } from '../utils/asr';
+import { POS_LABEL, toneTwin, type Pronunciation } from '../utils/pronunciationLexicon';
 import { useRecordingAnalysis } from '../hooks/useRecordingAnalysis';
 import { useSpokenPhrase } from '../hooks/useSpokenPhrase';
 
@@ -22,7 +24,10 @@ interface Props {
     strikes: number;
     streak: number;
     listening: boolean;
-    interim: string;
+    /** The clip has been captured and the model is reading it. */
+    transcribing: boolean;
+    /** Download/readiness of the on-device speech model. */
+    model: AsrStatus;
     speechError: string | null;
     lastAttempt: Attempt | null;
     recordingUrl: string | null;
@@ -61,7 +66,8 @@ export function PracticeScreen({
     strikes,
     streak,
     listening,
-    interim,
+    transcribing,
+    model,
     speechError,
     lastAttempt,
     recordingUrl,
@@ -100,6 +106,9 @@ export function PracticeScreen({
     const attemptWords = lastAttempt ? lastAttempt.expected.trim().split(/\s+/) : [];
     const soleWord = attemptWords.length === 1 ? attemptWords[0] : null;
     const soleWordEntry = soleWord ? lookup(soleWord) : null;
+    // Some spellings are two different words that only the melody separates.
+    // Nothing demonstrates that tonelag carries meaning quite as well.
+    const twin = soleWordEntry ? toneTwin(soleWordEntry) : null;
 
     // Dialect transcription of the whole phrase. Words the lexicon does not
     // carry fall back to the rule engine, which emits no stress marks, so the
@@ -363,6 +372,19 @@ export function PracticeScreen({
                                     recordingAvailable={recordingAvailable}
                                     bounds={analysis?.bounds ?? null}
                                 />
+                                {twin && soleWordEntry && (
+                                    <div className="mb-3 rounded-lg border border-sky-400/20 bg-sky-400/10 px-3 py-2 text-xs leading-relaxed text-sky-100/80">
+                                        <strong className="text-sky-100">
+                                            “{soleWord}” is two different words.
+                                        </strong>{' '}
+                                        The melody is the only thing telling them apart — the{' '}
+                                        {POS_LABEL[soleWordEntry.pos ?? ''] ?? 'one'} takes{' '}
+                                        {ACCENT_LABEL[soleWordEntry.accent]} and the{' '}
+                                        {POS_LABEL[twin.pos ?? ''] ?? 'other'} takes{' '}
+                                        {ACCENT_LABEL[twin.accent]}.
+                                    </div>
+                                )}
+
                                 <MelodyView
                                     contour={analysis?.contour ?? null}
                                     analysing={analysing}
@@ -410,6 +432,7 @@ export function PracticeScreen({
                             <VoiceVisualizer analyserRef={analyserRef} active={listening} />
                             <motion.button
                                 onClick={listening ? onStopListening : onListen}
+                                disabled={transcribing}
                                 aria-label={listening ? 'Stop listening' : 'Start speaking'}
                                 whileHover={{ scale: 1.06 }}
                                 whileTap={{ scale: 0.94 }}
@@ -434,13 +457,26 @@ export function PracticeScreen({
 
                         <div className="min-h-[3rem] text-center" role="status" aria-live="polite">
                             {listening ? (
-                                <p className="text-sm text-white/70">
-                                    Listening… {interim && <em className="text-white">{interim}</em>}
-                                </p>
+                                <p className="text-sm text-white/70">Listening… pause when you are done</p>
+                            ) : transcribing ? (
+                                <p className="text-sm text-white/70">Reading what you said…</p>
+                            ) : model.state === 'loading' ? (
+                                // The model is ~40 MB on the first visit and
+                                // cached after that. Saying so beats a mic
+                                // button that quietly does nothing yet.
+                                <div className="text-sm text-white/50">
+                                    <p>Downloading the speech model — one time only, then it works offline.</p>
+                                    <div className="mx-auto mt-1.5 h-1 w-40 overflow-hidden rounded-full bg-white/10">
+                                        <div
+                                            className="h-full rounded-full bg-sky-400 transition-[width] duration-300"
+                                            style={{ width: `${Math.round(model.progress * 100)}%` }}
+                                        />
+                                    </div>
+                                </div>
                             ) : (
                                 <p className="text-sm text-white/45">Tap the mic, then say the phrase</p>
                             )}
-                            <SpeechTrouble error={speechError} />
+                            <SpeechTrouble error={speechError ?? (model.state === 'failed' ? model.error ?? null : null)} />
                         </div>
                     </motion.div>
                 )}

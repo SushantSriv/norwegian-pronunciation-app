@@ -16,6 +16,11 @@ export interface PitchPoint {
     time: number;
     /** Estimated F0 in Hz, or null when the frame is silent/unvoiced. */
     hz: number | null;
+    /**
+     * The same pitch in semitones relative to this speaker's median, which is
+     * the only form worth comparing or plotting. Null wherever `hz` is.
+     */
+    semitones: number | null;
 }
 
 export interface SpeechBounds {
@@ -41,6 +46,19 @@ export interface PitchContour {
     maxHz: number | null;
     /** Pitch movement in semitones between the 10th and 90th percentile. */
     rangeSemitones: number | null;
+}
+
+/**
+ * Pitch distance in semitones: ST = 12 · log₂(f / reference).
+ *
+ * Absolute frequency says nothing about melody. A bass at 95 Hz and a soprano
+ * at 240 Hz saying the same word share a shape and no frequencies at all, so
+ * everything downstream — the chart, the target contours, the DTW scoring —
+ * works in semitones relative to the speaker's own median instead.
+ */
+export function toSemitones(hz: number, reference: number): number {
+    if (hz <= 0 || reference <= 0) return 0;
+    return 12 * Math.log2(hz / reference);
 }
 
 const TARGET_RATE = 16_000;
@@ -148,8 +166,11 @@ const EMPTY_CONTOUR: PitchContour = {
     rangeSemitones: null,
 };
 
-/** Build a pitch contour from already-decoded, already-downsampled samples. */
-function contourFrom(data: Float32Array, rate: number): PitchContour {
+/**
+ * Build a pitch contour from already-decoded, already-downsampled samples.
+ * Exported for the tests.
+ */
+export function contourFrom(data: Float32Array, rate: number): PitchContour {
     const frameSize = Math.floor(FRAME_SECONDS * rate);
     const hopSize = Math.floor(HOP_SECONDS * rate);
     if (data.length < frameSize) return EMPTY_CONTOUR;
@@ -159,6 +180,7 @@ function contourFrom(data: Float32Array, rate: number): PitchContour {
         points.push({
             time: start / rate,
             hz: detectF0(data.subarray(start, start + frameSize), rate),
+            semitones: null,
         });
     }
 
@@ -169,15 +191,20 @@ function contourFrom(data: Float32Array, rate: number): PitchContour {
     const sorted = [...voiced].sort((a, b) => a - b);
     const low = percentile(sorted, 0.1);
     const high = percentile(sorted, 0.9);
+    const medianHz = percentile(sorted, 0.5);
 
     return {
-        points: smoothed,
+        // Normalise once, here, so every consumer works in the same units and
+        // none of them has to know the speaker's baseline.
+        points: smoothed.map(point => ({
+            ...point,
+            semitones: point.hz === null ? null : toSemitones(point.hz, medianHz),
+        })),
         voicedCount: voiced.length,
-        medianHz: percentile(sorted, 0.5),
+        medianHz,
         minHz: sorted[0],
         maxHz: sorted[sorted.length - 1],
-        // Semitones = 12 * log2(f2 / f1)
-        rangeSemitones: low > 0 ? 12 * Math.log2(high / low) : null,
+        rangeSemitones: low > 0 ? toSemitones(high, low) : null,
     };
 }
 

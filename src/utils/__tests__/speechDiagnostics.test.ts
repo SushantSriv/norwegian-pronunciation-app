@@ -1,54 +1,98 @@
-import { describe, expect, it, vi, afterEach } from 'vitest';
+import { afterEach, describe, expect, it, vi } from 'vitest';
+import { collectSpeechDiagnostics } from '../speechDiagnostics';
 
-/** Swap the user agent, then load the module fresh so it reads the new value. */
-async function noteFor(ua: string) {
-    vi.stubGlobal('navigator', { ...navigator, userAgent: ua });
-    vi.resetModules();
-    const mod = await import('../speechDiagnostics');
-    vi.stubGlobal('window', { ...window, isSecureContext: true, matchMedia: () => ({ matches: false }) });
-    const checks = await mod.collectSpeechDiagnostics();
-    return checks.find(c => c.label === 'Browser') ?? null;
+const find = (checks: Awaited<ReturnType<typeof collectSpeechDiagnostics>>, prefix: string) =>
+    checks.find(c => c.label.startsWith(prefix));
+
+/**
+ * jsdom has neither the Cache API nor Worker, both of which a real browser has.
+ * Tests that are not about those supply them here.
+ */
+function stubBrowser(open: () => Promise<unknown> = async () => ({})) {
+    vi.stubGlobal('caches', { open });
+    vi.stubGlobal('Worker', class {});
 }
-
-const SAFARI_MAC =
-    'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/17.0 Safari/605.1.15';
-const SAFARI_IPAD =
-    'Mozilla/5.0 (iPad; CPU OS 17_0 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/17.0 Mobile/15E148 Safari/604.1';
-const CHROME =
-    'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/131.0.0.0 Safari/537.36';
-const FIREFOX = 'Mozilla/5.0 (Windows NT 10.0; Win64; x64; rv:133.0) Gecko/20100101 Firefox/133.0';
-const BRAVE =
-    'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/131.0.0.0 Safari/537.36 Brave/131';
 
 afterEach(() => vi.unstubAllGlobals());
 
-describe('browser diagnosis', () => {
-    // Safari implements the API against Apple's speech services. Telling a
-    // Safari user to go and install Chrome would be wrong, and was the bug.
-    it.each([
-        ['Safari on macOS', SAFARI_MAC],
-        ['Safari on iPad', SAFARI_IPAD],
-        ['Chrome', CHROME],
-    ])('does not report %s as unsupported', async (_name, ua) => {
-        const note = await noteFor(ua);
-        expect(note?.ok).toBe(true);
+describe('collectSpeechDiagnostics', () => {
+    it('passes a browser that can actually run the model', async () => {
+        stubBrowser();
+        vi.stubGlobal('window', { ...window, isSecureContext: true });
+        vi.stubGlobal('navigator', {
+            ...navigator,
+            onLine: true,
+            mediaDevices: { getUserMedia: () => Promise.resolve({}) },
+            permissions: { query: async () => ({ state: 'granted' }) },
+        });
+
+        const checks = await collectSpeechDiagnostics();
+        expect(checks.every(c => c.ok)).toBe(true);
+        // Nothing to fix means nothing is offered as a fix.
+        expect(checks.every(c => c.fix === undefined)).toBe(true);
     });
 
-    it('flags Firefox, which has no implementation at all', async () => {
-        const note = await noteFor(FIREFOX);
-        expect(note?.ok).toBe(false);
-        expect(note?.fix).toMatch(/Firefox/i);
+    /**
+     * The bug this replaces: the old checks told Firefox users to install
+     * Chrome, because the Web Speech API did not exist there. The model does.
+     */
+    it('does not judge the browser at all', async () => {
+        stubBrowser();
+        vi.stubGlobal('window', { ...window, isSecureContext: true });
+        vi.stubGlobal('navigator', {
+            ...navigator,
+            userAgent: 'Mozilla/5.0 (Windows NT 10.0; Win64; x64; rv:133.0) Gecko/20100101 Firefox/133.0',
+            onLine: true,
+            mediaDevices: { getUserMedia: () => Promise.resolve({}) },
+            permissions: { query: async () => ({ state: 'granted' }) },
+        });
+
+        const checks = await collectSpeechDiagnostics();
+        // Nothing may name another browser to go and install — that was the bug.
+        expect(checks.some(c => /chrome|edge|safari|firefox/i.test(c.fix ?? ''))).toBe(false);
+        expect(checks.every(c => c.ok)).toBe(true);
     });
 
-    it('flags Chromium forks that cannot reach a speech service', async () => {
-        const note = await noteFor(BRAVE);
-        expect(note?.ok).toBe(false);
+    it('flags a denied microphone with the fix', async () => {
+        stubBrowser();
+        vi.stubGlobal('window', { ...window, isSecureContext: true });
+        vi.stubGlobal('navigator', {
+            ...navigator,
+            onLine: true,
+            mediaDevices: { getUserMedia: () => Promise.resolve({}) },
+            permissions: { query: async () => ({ state: 'denied' }) },
+        });
+
+        const check = find(await collectSpeechDiagnostics(), 'Microphone permission');
+        expect(check?.ok).toBe(false);
+        expect(check?.fix).toMatch(/Site settings/i);
     });
 
-    it('never tells a working browser to switch to a different one', async () => {
-        for (const ua of [SAFARI_MAC, SAFARI_IPAD, CHROME]) {
-            const note = await noteFor(ua);
-            expect(note?.fix).toBeUndefined();
-        }
+    it('flags an insecure origin, which no microphone will work on', async () => {
+        stubBrowser();
+        vi.stubGlobal('window', { ...window, isSecureContext: false });
+        const check = find(await collectSpeechDiagnostics(), 'Secure connection');
+        expect(check?.ok).toBe(false);
+        expect(check?.fix).toMatch(/HTTPS/i);
+    });
+
+    it('warns when the model cannot be cached between visits', async () => {
+        stubBrowser(() => Promise.reject(new Error('blocked')));
+        vi.stubGlobal('window', { ...window, isSecureContext: true });
+        const check = find(await collectSpeechDiagnostics(), 'Model storage');
+        expect(check?.ok).toBe(false);
+        expect(check?.fix).toMatch(/downloaded again/i);
+    });
+
+    it('mentions the network only while offline, since that is the one thing it blocks', async () => {
+        stubBrowser();
+        vi.stubGlobal('window', { ...window, isSecureContext: true });
+        vi.stubGlobal('navigator', { ...navigator, onLine: false });
+        const offline = find(await collectSpeechDiagnostics(), 'Network');
+        expect(offline?.ok).toBe(false);
+        expect(offline?.fix).toMatch(/first download/i);
+
+        vi.stubGlobal('navigator', { ...navigator, onLine: true });
+        expect(find(await collectSpeechDiagnostics(), 'Network')).toBeUndefined();
     });
 });

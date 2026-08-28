@@ -6,12 +6,19 @@ import { StageSelect } from './components/StageSelect';
 import { PracticeScreen } from './components/PracticeScreen';
 import { ResultsScreen } from './components/ResultsScreen';
 import { usePracticeSession } from './hooks/usePracticeSession';
-import { useSpeechRecognition } from './hooks/useSpeechRecognition';
+import { useVoiceInput } from './hooks/useVoiceInput';
 import { useNorwegianVoices } from './hooks/useNorwegianVoices';
 import { useDialect } from './hooks/useDialect';
 import { countVisit } from './utils/analytics';
 
-/** Shown instead of the app in browsers without the Web Speech API. */
+/**
+ * Shown instead of the app when the device cannot run recognition at all.
+ *
+ * This is now a much rarer screen than it was. Recognition used to need the
+ * Web Speech API, which ruled out Firefox and most of iOS; it now needs a
+ * microphone, WebAssembly and web workers, which is close to every browser
+ * still in use.
+ */
 function UnsupportedNotice() {
     return (
         <div className="glass w-full max-w-md rounded-3xl p-7 text-center">
@@ -20,9 +27,10 @@ function UnsupportedNotice() {
             </div>
             <h1 className="mt-3 text-xl font-bold text-white">This browser cannot listen</h1>
             <p className="mt-2 text-sm leading-relaxed text-white/65">
-                This browser does not provide the Web Speech API. Open the page in{' '}
+                Practising needs a microphone, WebAssembly and web workers, and this browser is missing
+                one of them. A current <strong className="text-white">Firefox</strong>,{' '}
                 <strong className="text-white">Chrome</strong>, <strong className="text-white">Edge</strong>{' '}
-                or <strong className="text-white">Safari</strong> to practise.
+                or <strong className="text-white">Safari</strong> will work.
             </p>
         </div>
     );
@@ -54,16 +62,15 @@ export default function App() {
     const {
         supported,
         listening,
-        interim,
+        transcribing,
         error,
         recordingUrl,
         recordingAvailable,
         analyserRef,
+        model,
         start,
         stop,
-    } = useSpeechRecognition({
-        onResult: handleResult,
-    });
+    } = useVoiceInput({ onResult: handleResult });
     const { voices, activeVoiceURI, chooseVoice, rate, setRate } = useNorwegianVoices();
 
     // Opt-in, cookie-less visit count; a no-op unless VITE_ANALYTICS_URL is set.
@@ -130,7 +137,8 @@ export default function App() {
                                         strikes={strikes}
                                         streak={streak}
                                         listening={listening}
-                                        interim={interim}
+                                        transcribing={transcribing}
+                                        model={model}
                                         speechError={error}
                                         lastAttempt={lastAttempt}
                                         recordingUrl={recordingUrl}

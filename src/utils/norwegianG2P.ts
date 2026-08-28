@@ -6,9 +6,13 @@
  * common cases well, which is all the learner-facing feedback needs.
  *
  * This is deliberately an APPROXIMATION. It does not model pitch accent
- * (tonelag), compound-word stress, or dialect variation, and it will be wrong
- * on loanwords. It is a teaching aid for "which sounds did you miss", not a
- * reference transcription.
+ * (tonelag) or dialect variation, and it will be wrong on loanwords. It is a
+ * teaching aid for "which sounds did you miss", not a reference transcription.
+ *
+ * The one structural thing it does model is compounding — see
+ * `decomposeCompound` at the bottom of the file. Norwegian compounds are
+ * written as one word, and transcribing them whole runs the vowel-length rules
+ * straight across a seam where they do not apply.
  */
 
 const VOWELS = new Set(['a', 'e', 'i', 'o', 'u', 'y', 'æ', 'ø', 'å']);
@@ -146,4 +150,172 @@ export function wordToIPA(word: string): string {
 /** Convert a whole phrase, preserving word boundaries as spaces. */
 export function phraseToIPA(phrase: string): string {
     return phrase.split(/\s+/).map(wordToIPA).filter(Boolean).join(' ');
+}
+
+// ---------------------------------------------------------------------------
+// Compound decomposition
+//
+// Norwegian writes compounds as a single word and forms them freely, so any
+// corpus outruns any lexicon: "skiftetøy", "hentetid", "vaskerommet". Splitting
+// an unknown word into members we do know gives us two things the rules alone
+// cannot — a transcription that does not run vowel-length rules across the
+// seam, and the pitch accent, which is a property of the FIRST member.
+//
+// The splitter is deliberately inventory-agnostic: it asks a caller-supplied
+// predicate whether a candidate member is a word. pronunciationLexicon.ts backs
+// that with NB Uttale; tests back it with a handful of strings.
+// ---------------------------------------------------------------------------
+
+/**
+ * A linking morpheme between two members.
+ *
+ * `-s-` (arbeid**s**plass) adds a consonant, `-e-` (barn**e**hage) adds a whole
+ * unstressed syllable — which is why they are tracked separately rather than
+ * being absorbed into the member: the extra syllable decides the pitch accent
+ * when the first member is monosyllabic.
+ */
+export type CompoundLink = '' | 's' | 'e';
+
+const LINKS: readonly CompoundLink[] = ['', 's', 'e'];
+
+export interface CompoundPart {
+    /** The member, as the inventory spells it. */
+    word: string;
+    /** Linking morpheme joining this member to the next; empty on the last. */
+    link: CompoundLink;
+}
+
+/**
+ * Whether `sub` is a usable member. `isFinal` is passed so a caller can be
+ * stricter about non-final members — the last member carries the compound's
+ * inflection ("rom" → "vaskerom**met**") and closed-class words such as "til"
+ * or "for" must never head a compound, because they are unstressed prefixes
+ * rather than members.
+ */
+export type MemberPredicate = (sub: string, isFinal: boolean) => boolean;
+
+export interface CompoundOptions {
+    /** Shortest accepted member. Below three letters the matches are noise. */
+    minPartLength?: number;
+    /** Deepest split attempted. Three covers essentially every real compound. */
+    maxParts?: number;
+}
+
+/**
+ * How good a candidate split is. Higher wins.
+ *
+ * Summing the SQUARE of each member's length is what makes this behave: it
+ * prefers few long members over many short ones, so "skifte + tøy" (36+9) beats
+ * "skift + e + tøy" (25+9), and "vaske + rommet" beats "vask + e + rommet".
+ * That matters beyond tidiness — "skifte" is disyllabic and carries accent 2,
+ * "skift" is monosyllabic and would hand the compound accent 1.
+ */
+/**
+ * A member has to be pronounceable on its own, which means it needs a vowel.
+ *
+ * NB Uttale lists spelled-out abbreviations, so an inventory built from it
+ * contains things like "rds" — whose transcription is the letters R, D and S
+ * read aloud. Without this, "dashboards" splits as dash + boa + rds and the
+ * learner is shown a transcription that spells the end of the word out.
+ */
+const hasNucleus = (word: string): boolean => /[aeiouyæøå]/.test(word);
+
+function splitScore(parts: CompoundPart[]): number {
+    let score = 0;
+    for (const part of parts) {
+        score += part.word.length * part.word.length;
+        if (part.link) score -= 1;
+    }
+    return score - parts.length * 4;
+}
+
+/**
+ * Split `word` into known members, or return null if it does not decompose.
+ *
+ * Recursive with memoisation on (offset, members left), so the whole search is
+ * linear in the word length rather than exponential.
+ */
+export function decomposeCompound(
+    word: string,
+    isKnown: MemberPredicate,
+    options: CompoundOptions = {}
+): CompoundPart[] | null {
+    const min = options.minPartLength ?? 3;
+    const maxParts = options.maxParts ?? 3;
+    const w = normalize(word);
+    // Two members at minimum length is the shortest thing worth trying.
+    if (w.length < min * 2) return null;
+
+    const memo = new Map<string, CompoundPart[] | null>();
+
+    /**
+     * Best cover of w.slice(start) using at most `budget` members.
+     *
+     * `allowSingle` is false only at the top level. Without it a word that is
+     * itself in the inventory would swallow its own split — the whole word
+     * scores higher than any division of it, so "lastebil" would come back as
+     * one member and the caller would never see "laste + bil".
+     */
+    function solve(start: number, budget: number, allowSingle: boolean): CompoundPart[] | null {
+        if (budget < 1) return null;
+        const key = `${start}:${budget}:${allowSingle}`;
+        const cached = memo.get(key);
+        if (cached !== undefined) return cached;
+
+        let best: CompoundPart[] | null = null;
+
+        // The remainder is the final member.
+        const tail = w.slice(start);
+        if (allowSingle && tail.length >= min && hasNucleus(tail) && isKnown(tail, true)) {
+            best = [{ word: tail, link: '' }];
+        }
+
+        // Or split a non-final member off the front and recurse.
+        if (budget >= 2) {
+            for (let end = start + min; end <= w.length - min; end++) {
+                const head = w.slice(start, end);
+                if (!hasNucleus(head) || !isKnown(head, false)) continue;
+                for (const link of LINKS) {
+                    const next = end + link.length;
+                    if (w.slice(end, next) !== link) continue;
+                    // A link must be followed by a member, never end the word.
+                    if (w.length - next < min) continue;
+                    const rest = solve(next, budget - 1, true);
+                    if (!rest) continue;
+                    const candidate: CompoundPart[] = [{ word: head, link }, ...rest];
+                    if (!best || splitScore(candidate) > splitScore(best)) best = candidate;
+                }
+            }
+        }
+
+        memo.set(key, best);
+        return best;
+    }
+
+    const parts = solve(0, maxParts, false);
+    // A single member is just the word itself, not a compound.
+    return parts && parts.length >= 2 ? parts : null;
+}
+
+/** Phonemes a linking morpheme contributes on its own. */
+const LINK_IPA: Record<CompoundLink, string> = { '': '', s: 's', e: 'ə' };
+
+/**
+ * Rule-based IPA for a compound, transcribing each member separately.
+ *
+ * Worth doing even without lexicon data: `wordToIPA` decides vowel length from
+ * the consonants that follow, and across a compound seam those consonants
+ * belong to the next member. Run whole, "hentetid" lengthens the linking e
+ * because a single consonant follows it; run per member, "hente" keeps its
+ * schwa. Returns null when the word does not decompose, so callers can fall
+ * back to the plain rule walk.
+ */
+export function compoundToIPA(
+    word: string,
+    isKnown: MemberPredicate,
+    options?: CompoundOptions
+): string | null {
+    const parts = decomposeCompound(word, isKnown, options);
+    if (!parts) return null;
+    return parts.map(part => wordToIPA(part.word) + LINK_IPA[part.link]).join('');
 }
