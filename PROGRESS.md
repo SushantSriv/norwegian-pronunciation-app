@@ -32,8 +32,31 @@
   than a flat delivery", which is the failure mode worth naming.
 - ✅ **The target contour is drawn on the learner's own timeline**, warped by the
   same alignment, instead of stretched evenly across the clip.
+- ✅ **The chart names the tonelag the learner actually produced.** Scoring an
+  attempt out of 100 against one target is a grade, and a grade is the least
+  useful thing to hand someone learning a distinction they cannot yet hear.
+  `classifyAccent` asks which of the two shapes the delivery fits — a relative
+  decision, which survives microphone noise where an absolute threshold on
+  stylised curves does not — and says "that came out as Tonelag 1, but this word
+  takes Tonelag 2". It refuses to guess: a flat delivery is equidistant from
+  both, so below half a semitone of margin it says nothing.
+- ✅ **Tone twins are surfaced.** 106 words in this corpus are two different
+  words that only the accent separates — `huset` the house against `huset`
+  housed, `avtale` the noun against the verb. The practice screen now says so
+  and names both parts of speech. The data was already in the entry.
 
 ### Changed
+- ✅ **The speech model was chosen by measuring it.** `scripts/bench-asr.mjs`
+  runs candidates over read Norwegian from google/fleurs and reports word error
+  rate. whisper-tiny — which I had shipped on the reasoning that it was the
+  smallest checkpoint that knew any Norwegian — scored **79%**, which is not
+  usable: every mis-hearing is a failed attempt that was actually correct, and
+  the learner cannot tell their mistake from the model's. whisper-base scores
+  **48%** for less than double the download and a difference in speed too small
+  to feel, and now ships. Quantization turned out not to be free either: it
+  costs `tiny` 14 points, so the answer was a bigger model rather than heavier
+  weights. The benchmark is committed rather than described, so the next
+  checkpoint can be judged in one command.
 - ✅ **Recognition runs on this device.** The Web Speech API is gone, replaced by
   a quantized whisper-tiny on ONNX Runtime Web in a worker. This is the fix for
   three separate long-standing constraints at once: Firefox and most of iOS are
@@ -60,6 +83,15 @@
 - ✅ **`parts.<dialect>.json`**, a second output holding the sub-words the
   corpus's unresolved compounds need. 3 KB gzipped, loaded alongside the dialect
   chunk, and it is what lets `skiftetøy` resolve to real data for both members.
+- ✅ **Two ways the learner was charged for the transcript's spelling.** Whisper
+  transcribes rather than dictates, so "fem" comes back as "5" while the corpus
+  spells it out, and alignment counted a substitution — then scored it zero,
+  because every character of "5" is stripped before the G2P sees it. And
+  Norwegian compounds come back written apart as often as together, so
+  "skiftetøy" heard as "skifte tøy" cost a substitution plus an insertion for a
+  phrase said correctly — which matters here more than most places, since the
+  compounds ARE the exercise in the occupation tracks. Both are reconciled
+  before alignment, and only ever towards words the phrase actually asked for.
 - ✅ Diagnostics no longer judge the browser. They used to tell a Firefox user to
   install Chrome, which was correct advice about the Web Speech API and is now
   simply wrong.
@@ -70,14 +102,26 @@
   at 1.9 MB. The dialect chunk grew from 62 KB to 80 KB (20 KB gzipped) now that
   it carries the occupation vocabulary it always should have.
 - A second or two of WASM inference per attempt, more on an older phone.
-- whisper-tiny is a small model and will mis-hear a learner sometimes; that
-  shows up as a low score the learner did not earn.
+- whisper-base is a small model and will mis-hear a learner sometimes; that
+  shows up as a low score the learner did not earn. 48% word error rate on
+  long-form read prose; short everyday phrases fare much better, but not
+  perfectly.
 - No interim results — the model sees a finished clip, not a stream.
 
 ### Not verified
-The model path was proven end to end under Node (loads in 4.3 s, transcribes,
-honours `language: 'no'`). It has **not** been run in a real browser: WASM
-inference speed on mobile Safari in particular is an estimate.
+The model path was proven end to end under Node — it loads, transcribes, honours
+`language: 'no'`, and its word error rate was measured. It has **not** been run
+in a real browser: WASM inference speed, on mobile Safari in particular, is an
+estimate rather than a measurement.
+
+### Left for next time
+- **NbAiLab/nb-whisper-\*** would almost certainly beat any multilingual
+  checkpoint on Norwegian, and cannot be used as published: a split
+  encoder/decoder ONNX export with no merged decoder, which transformers.js
+  cannot load, and no quantized weights, which would make it a 216 MB download
+  if it could. Re-exporting it is the single biggest accuracy win available.
+- Melody is only scored for single words; a phrase has one accent per word and
+  nothing aligns the audio to the words yet.
 
 ---
 
