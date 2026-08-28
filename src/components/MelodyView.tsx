@@ -11,8 +11,8 @@ interface Props {
      * word — a phrase has one accent per word, so the caller passes NONE there.
      */
     targetAccent?: PitchAccent;
-    /** Whether the accent came from real data or our fallback rules. */
-    accentSource?: 'lexicon' | 'rule';
+    /** Whether the accent came from real data, a compound split, or our rules. */
+    accentSource?: 'lexicon' | 'compound' | 'rule';
 }
 
 const WIDTH = 420;
@@ -139,12 +139,16 @@ export function MelodyView({
                         <span className="rounded-full bg-violet-400/25 px-2 py-0.5 text-xs font-bold text-violet-100">
                             {ACCENT_LABEL[targetAccent]}
                         </span>
-                        {accentSource === 'rule' && (
+                        {accentSource && accentSource !== 'lexicon' && (
                             <span
                                 className="text-[10px] font-semibold uppercase tracking-wide text-white/35"
-                                title="Derived from spelling rules, not the pronunciation lexicon"
+                                title={
+                                    accentSource === 'compound'
+                                        ? 'Derived from the compound’s parts, not a lexicon entry for the whole word'
+                                        : 'Derived from spelling rules, not the pronunciation lexicon'
+                                }
                             >
-                                estimated
+                                {accentSource === 'compound' ? 'from parts' : 'estimated'}
                             </span>
                         )}
                     </div>

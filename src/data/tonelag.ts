@@ -15,6 +15,8 @@
  * L*H / H*LH description, not a phonological transcription.
  */
 
+import type { CompoundLink } from '../utils/norwegianG2P';
+
 export type PitchAccent = 'ACCENT_1' | 'ACCENT_2' | 'NONE';
 
 export interface AccentInfo {
@@ -122,6 +124,58 @@ export function pitchAccentFor(word: string): AccentInfo {
     }
 
     return { accent: 'ACCENT_2', source: 'rule', syllables };
+}
+
+// ---------------------------------------------------------------------------
+// Compound accent
+// ---------------------------------------------------------------------------
+
+/** What `compoundAccent` needs to know about a compound's first member. */
+export interface CompoundHead {
+    /** The accent the member carries on its own, or NONE if unknown. */
+    accent: PitchAccent;
+    syllables: number;
+}
+
+/**
+ * Which accent a compound carries, given its first member and the linking
+ * morpheme after it.
+ *
+ * The textbook line is "compounds take accent 2", and it is wrong often enough
+ * to matter. These rules were measured against every compound NB Uttale marks
+ * with a secondary stress in the east chunk (351 words), restricted to the ones
+ * that genuinely decompose:
+ *
+ *   - A POLYSYLLABIC first member hands the compound its own accent. "data" is
+ *     accent 1, so "datasett", "datalagring" and "dataanalyse" are all accent 1
+ *     — a flat accent-2 default gets every one of them wrong. "forskning" is
+ *     accent 2, so "forskningsprosjekter" is accent 2. (52 words, 45 correct;
+ *     every miss is a head the lexicon does not carry, so its accent came from
+ *     the spelling rules rather than data.)
+ *
+ *   - A MONOSYLLABIC first member has no accent of its own to lend — one
+ *     syllable carries no tonal contrast — so the link decides, and it does so
+ *     without a single exception in the sample:
+ *
+ *       no link, 21 words, all accent 2   sollys, matvarer, halvtime, grunnlag,
+ *                                         språkkompetanse, planlagt, sanntid
+ *       -s- link,  5 words, all accent 1  tidsbruk, tidspunkt, tidsskrift,
+ *                                         driftskostnader, kravspesifikasjoner
+ *
+ *     The -s- closes the first syllable with a heavy cluster, leaving the
+ *     accent-2 contour nowhere to fall through.
+ *
+ * What this deliberately does NOT cover is prefixed words — "tilpasning",
+ * "oppdatering", "forberedelse". They look like compounds and behave nothing
+ * like them: the accent is lexical, not structural ("oppgave" is accent 2,
+ * "oppdatering" accent 1). pronunciationLexicon.ts keeps them out of the
+ * splitter instead of guessing here.
+ */
+export function compoundAccent(head: CompoundHead, link: CompoundLink): PitchAccent {
+    if (head.syllables > 1) {
+        return head.accent === 'NONE' ? 'ACCENT_2' : head.accent;
+    }
+    return link === 's' ? 'ACCENT_1' : 'ACCENT_2';
 }
 
 export interface ContourPoint {

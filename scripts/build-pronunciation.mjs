@@ -33,19 +33,24 @@ const DIALECTS = {
 };
 
 // ---- corpus word list -----------------------------------------------------
-const corpus = JSON.parse(
-    readFileSync(new URL('../src/data/sentences.json', import.meta.url), 'utf8')
-).levels;
+// BOTH corpora, not just sentences.json. The practice pool is drawn from
+// sentences.json for the general stages and occupations.json for the
+// occupation ones (see poolForStage in src/data/stages.ts), and leaving the
+// latter out meant every one of its 414 exclusive words — skiftetøy, hentetid,
+// vernebriller, the whole workplace vocabulary — shipped with no lexicon entry
+// at all.
+const readJson = name => JSON.parse(readFileSync(new URL(`../src/data/${name}`, import.meta.url), 'utf8'));
 
 const wanted = new Set();
-for (const items of Object.values(corpus)) {
-    for (const item of items) {
-        for (const raw of item.split(/\s+/)) {
-            const w = raw.toLowerCase().replace(/[^a-zæøå]/g, '');
-            if (w) wanted.add(w);
-        }
+const addPhrase = phrase => {
+    for (const raw of phrase.split(/\s+/)) {
+        const w = raw.toLowerCase().replace(/[^a-zæøå]/g, '');
+        if (w) wanted.add(w);
     }
-}
+};
+for (const items of Object.values(readJson('sentences.json').levels)) items.forEach(addPhrase);
+for (const items of Object.values(readJson('occupations.json'))) items.forEach(addPhrase);
+
 console.log('corpus words wanted:', wanted.size);
 
 // ---- minimal CSV line parser (handles quoted fields) ----------------------
@@ -92,10 +97,14 @@ function toneFrom(nofabet) {
     return null;
 }
 
-async function buildDialect(prefix, name) {
-    const file = `${LEX_DIR}/${prefix}_written_pronunciation_lexicon.csv`;
+/**
+ * One streaming pass over a dialect's CSV, keeping the rows `accept` wants.
+ *
+ * Returns wordform -> [{ pos, ipa, tone }]. The file is 158 MB, so the cheap
+ * pre-filter on the first field runs before the full CSV parse.
+ */
+async function scanLexicon(file, accept) {
     const entries = new Map();
-
     const rl = createInterface({
         input: createReadStream(file, { encoding: 'utf8' }),
         crlfDelay: Infinity,
@@ -107,62 +116,143 @@ async function buildDialect(prefix, name) {
             first = false;
             continue;
         }
-        // Cheap pre-filter before the full parse: the wordform is the first field.
         const comma = line.indexOf(',');
         if (comma < 1) continue;
-        const head = line.slice(0, comma).toLowerCase();
-        if (!wanted.has(head)) continue;
+        if (!accept(line.slice(0, comma).toLowerCase())) continue;
 
-        const cols = parseCsvLine(line);
-        const [wordform, pos, , , , nofabet, ipa] = cols;
+        const [wordform, pos, , , , nofabet, ipa] = parseCsvLine(line);
         const key = wordform.toLowerCase();
-        if (!wanted.has(key) || !ipa) continue;
+        if (!accept(key) || !ipa) continue;
 
         const tone = toneFrom(nofabet ?? '');
         const list = entries.get(key) ?? [];
         // Same pronunciation under several inflection tags adds nothing.
-        if (!list.some(e => e.ipa === ipa && e.pos === pos)) {
-            list.push({ pos, ipa, tone });
-        }
+        if (!list.some(e => e.ipa === ipa && e.pos === pos)) list.push({ pos, ipa, tone });
         entries.set(key, list);
     }
+    return entries;
+}
 
-    // Compact shape: word -> [[ipa, tone, pos], ...], best sense first so a
-    // consumer can just take [0] and ignore the rest.
+/**
+ * Compact shape: word -> [[ipa, tone, pos], ...], best sense first so a
+ * consumer can just take [0] and ignore the rest.
+ */
+function compactify(entries, only) {
     const compact = {};
-    for (const [word, list] of [...entries].sort((a, b) => a[0].localeCompare(b[0]))) {
+    const rows = [...entries].filter(([word]) => !only || only.has(word));
+    for (const [word, list] of rows.sort((a, b) => a[0].localeCompare(b[0]))) {
         const ranked = [...list].sort(
             (a, b) => posRank(a.pos) - posRank(b.pos) || (a.tone ?? 9) - (b.tone ?? 9)
         );
         compact[word] = ranked.map(e => [e.ipa, e.tone, (e.pos ?? '').split('|')[0]]);
     }
+    return compact;
+}
 
+function write(name, compact) {
     mkdirSync(OUT_DIR, { recursive: true });
-    const path = `${OUT_DIR}/${name}.json`;
-    writeFileSync(path, JSON.stringify(compact));
-    const kb = (readFileSync(path).length / 1024).toFixed(0);
     const serialised = JSON.stringify(compact);
+    writeFileSync(OUT_DIR + name + '.json', serialised);
     console.log(
-        `${name.padEnd(11)} words=${String(Object.keys(compact).length).padStart(5)}  ${kb} KB`
+        `${name.padEnd(16)} words=${String(Object.keys(compact).length).padStart(5)}  ` +
+            `${(serialised.length / 1024).toFixed(0)} KB`
     );
     return serialised;
 }
 
+const csvFor = prefix => `${LEX_DIR}/${prefix}_written_pronunciation_lexicon.csv`;
+
+// ---- compound members -----------------------------------------------------
+//
+// Norwegian writes compounds as one word and forms them freely, so a corpus
+// always outruns a lexicon: NB Uttale lists "skifte" and "tøy" but not
+// "skiftetøy". src/utils/norwegianG2P.ts splits those at runtime, which needs
+// an inventory of members — harvested here, for exactly the words the first
+// pass could not resolve.
+
+const MIN_MEMBER = 3;
+const LINKS = ['', 's', 'e'];
+
+/**
+ * The members of one complete cover of `word`, or null if it does not cover.
+ *
+ * A deliberately simplified mirror of `decomposeCompound` in
+ * src/utils/norwegianG2P.ts: the script only has to decide WHICH sub-words to
+ * ship, and the runtime picks the best split among them. Longest head first, so
+ * a cover that exists is the same one the runtime would prefer.
+ */
+function coveringMembers(word, attested, depth = 3) {
+    if (depth < 1) return null;
+    if (depth >= 2) {
+        for (let end = word.length - MIN_MEMBER; end >= MIN_MEMBER; end--) {
+            const head = word.slice(0, end);
+            if (!attested.has(head)) continue;
+            for (const link of LINKS) {
+                const next = end + link.length;
+                if (word.slice(end, next) !== link) continue;
+                const rest = coveringMembers(word.slice(next), attested, depth - 1);
+                if (rest) return [head, ...rest];
+            }
+        }
+    }
+    return word.length >= MIN_MEMBER && attested.has(word) ? [word] : null;
+}
+
+/**
+ * A second pass, collecting the sub-words that let the unresolved corpus words
+ * decompose. Candidates are every substring of an unresolved word; the pass
+ * keeps whichever of them NB Uttale actually lists, and the cover check then
+ * throws away the ones that do not participate in a whole split — an inventory
+ * full of accidental substrings would only give the runtime splitter junk to
+ * split on.
+ */
+async function buildParts(prefix, name, unresolved) {
+    const candidates = new Set();
+    for (const word of unresolved) {
+        for (let i = 0; i + MIN_MEMBER <= word.length; i++) {
+            for (let j = i + MIN_MEMBER; j <= word.length; j++) candidates.add(word.slice(i, j));
+        }
+    }
+
+    const entries = await scanLexicon(csvFor(prefix), key => candidates.has(key));
+    const attested = new Set(entries.keys());
+
+    const used = new Set();
+    let covered = 0;
+    for (const word of unresolved) {
+        const members = coveringMembers(word, attested);
+        if (!members) continue;
+        covered++;
+        members.forEach(m => used.add(m));
+    }
+    console.log(`${name.padEnd(16)} ${covered}/${unresolved.length} unresolved words now decompose`);
+
+    return write('parts.' + name, compactify(entries, used));
+}
+
+async function buildDialect(prefix, name) {
+    const entries = await scanLexicon(csvFor(prefix), key => wanted.has(key));
+    return { serialised: write(name, compactify(entries)), resolved: new Set(entries.keys()) };
+}
+
 /**
  * Several NB Uttale areas transcribe this corpus identically - the areas do
- * differ across the full 785k vocabulary, but not within these ~1,350 words.
+ * differ across the full 785k vocabulary, but not within these ~1,780 words.
  * Writing byte-identical files would ship dead chunks and let the UI offer
  * choices that change nothing, so duplicates are reported and skipped.
  */
 const written = new Map();
 for (const [prefix, name] of Object.entries(DIALECTS)) {
-    const json = await buildDialect(prefix, name);
-    const twin = written.get(json);
+    const { serialised, resolved } = await buildDialect(prefix, name);
+    const twin = written.get(serialised);
     if (twin) {
         rmSync(OUT_DIR + name + '.json');
-        console.log(name.padEnd(11) + 'identical to ' + twin + ' - skipped');
-    } else {
-        written.set(json, name);
+        console.log(name.padEnd(16) + 'identical to ' + twin + ' - skipped');
+        continue;
     }
+    written.set(serialised, name);
+
+    const unresolved = [...wanted].filter(w => !resolved.has(w) && w.length >= MIN_MEMBER * 2);
+    await buildParts(prefix, name, unresolved);
 }
 console.log('done');
