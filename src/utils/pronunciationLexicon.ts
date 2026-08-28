@@ -291,7 +291,29 @@ function joinMembers(
 function isInflectedSimplex(word: string, dialect: DialectId): boolean {
     const isMember = memberPredicate(dialect);
     return baseFormsOf(word).some(
-        base => isMember(base, true) && decomposeCompound(base, isMember) === null
+        base => isMember(base, true) && splitMembers(base, dialect) === null
+    );
+}
+
+/**
+ * Find the members, preferring a two-part reading.
+ *
+ * Deeper splits are where an inventory this large starts over-generating:
+ * "grunnpillarer" comes apart as grunn + pilla + rer, "klimascenarier" as
+ * klimas + cen + arier. Every fragment there is a real Norwegian word, which is
+ * why the inventory admits them and why no amount of tightening the inventory
+ * helps. What separates those from the three-part splits that ARE right —
+ * smart + hjem + enheter, data + vitenskaps + problemer — is that the genuine
+ * ones are built from substantial words, not leftovers.
+ *
+ * So: take a two-part reading if one exists, and only go deeper when every
+ * member is a word of real length.
+ */
+function splitMembers(word: string, dialect: DialectId): CompoundPart[] | null {
+    const isMember = memberPredicate(dialect);
+    return (
+        decomposeCompound(word, isMember, { maxParts: 2 }) ??
+        decomposeCompound(word, isMember, { maxParts: 3, minPartLength: 4 })
     );
 }
 
@@ -310,9 +332,7 @@ export function compoundPronunciationFor(word: string, dialect: DialectId): Pron
     const cached = compoundCache.get(cacheKey);
     if (cached !== undefined) return cached;
 
-    const members = isInflectedSimplex(key, dialect)
-        ? null
-        : decomposeCompound(key, memberPredicate(dialect));
+    const members = isInflectedSimplex(key, dialect) ? null : splitMembers(key, dialect);
     if (!members) {
         compoundCache.set(cacheKey, null);
         return null;

@@ -1,5 +1,86 @@
 # Progress & Goals
 
+## v2.5 — Compound decomposition, DTW melody scoring, on-device recognition ✅
+
+### Added
+- ✅ **Compound decomposition for words the lexicon does not carry.** Norwegian
+  compounds freely and writes the result as one word, so no lexicon keeps up:
+  "skiftetøy" is absent from NB Uttale, "skifte" and "tøy" are not.
+  `decomposeCompound` in `norwegianG2P.ts` splits an unknown word into members we
+  do know — recursive, memoised, with `-s-`/`-e-` links — and the lexicon layer
+  stitches their transcriptions back together with the compound's own stress.
+  75 corpus words that no lexicon could enumerate now get a real transcription
+  and a real pitch accent.
+- ✅ **A compound accent rule measured rather than assumed.** The textbook line
+  is "compounds take accent 2"; against the 351 marked compounds in the east
+  chunk it is wrong often. What holds: a polysyllabic first member lends the
+  compound its own accent ("data" is accent 1, so every data- compound is), and
+  a monosyllabic first member gives accent 1 with an `-s-` link (tidsbruk,
+  tidspunkt, driftskostnader — 5 of 5) and accent 2 without one (sollys,
+  matvarer, språkkompetanse — 21 of 21). Predicting the recorded tone of
+  lexicon compounds from their members alone: **85%** (106/125). Two guards
+  stop the splitter over-generating: a member must contain a vowel (NB Uttale
+  lists spelled-out abbreviations, so `dashboards` came apart as
+  `dash + boa + rds`), and a three-way split is only taken when no two-way one
+  exists and every member is at least four letters (`grunnpillarer` otherwise
+  reads as `grunn + pilla + rer`, where every fragment is a real word).
+- ✅ **DTW melody scoring.** The melody chart was decorative; it now scores.
+  Pitch is normalised to semitones against the speaker's own median in
+  `pitch.ts` (so a bass and a soprano compare), and `dtw.ts` aligns the learner's
+  contour to the target by shape rather than by clock, which is what makes a
+  correctly shaped but unhurried delivery score as correct. 0 means "no closer
+  than a flat delivery", which is the failure mode worth naming.
+- ✅ **The target contour is drawn on the learner's own timeline**, warped by the
+  same alignment, instead of stretched evenly across the clip.
+
+### Changed
+- ✅ **Recognition runs on this device.** The Web Speech API is gone, replaced by
+  a quantized whisper-tiny on ONNX Runtime Web in a worker. This is the fix for
+  three separate long-standing constraints at once: Firefox and most of iOS are
+  no longer locked out, nothing works only online any more, and no audio leaves
+  the browser.
+- ✅ **Listen-back and the melody chart work on mobile.** They were disabled
+  there because a `MediaRecorder` fought the recogniser for the microphone.
+  There is one recorder now and recognition reads its output afterwards, so the
+  whole "recording is blocked on this device" mechanism — and its localStorage
+  flag — is deleted.
+- ✅ **Whisper hallucinations are not scored.** Given silence the model returns
+  whatever its language model finds likely, usually a caption artefact from its
+  training data. Clips are checked for actual speech with `findSpeechBounds`
+  before transcription, and known artefacts are rejected after it.
+- ✅ **Pronunciation coverage went from 68% to 95.6%.** The build script only
+  ever read `sentences.json`, so **414 occupation words — the entire workplace
+  vocabulary, skiftetøy and hentetid among them — shipped with no lexicon entry
+  at all.** The data was there; nothing asked for it. The script now reads both
+  corpora and the chunks were regenerated against the real 158 MB source:
+  1,625 of 1,779 words come straight from NB Uttale, 75 more from compound
+  decomposition, and the 79 still on the rule engines are almost entirely
+  English tech vocabulary — *agile*, *governance*, *dashboards* — that NB Uttale
+  does not have because they are not Norwegian words.
+- ✅ **`parts.<dialect>.json`**, a second output holding the sub-words the
+  corpus's unresolved compounds need. 3 KB gzipped, loaded alongside the dialect
+  chunk, and it is what lets `skiftetøy` resolve to real data for both members.
+- ✅ Diagnostics no longer judge the browser. They used to tell a Firefox user to
+  install Chrome, which was correct advice about the Web Speech API and is now
+  simply wrong.
+
+### Costs, stated plainly
+- First use downloads ~40 MB of model plus 5.7 MB (gzipped) of ONNX Runtime,
+  cached afterwards. Neither is precached, so first **page** load is unchanged
+  at 1.9 MB. The dialect chunk grew from 62 KB to 80 KB (20 KB gzipped) now that
+  it carries the occupation vocabulary it always should have.
+- A second or two of WASM inference per attempt, more on an older phone.
+- whisper-tiny is a small model and will mis-hear a learner sometimes; that
+  shows up as a low score the learner did not earn.
+- No interim results — the model sees a finished clip, not a stream.
+
+### Not verified
+The model path was proven end to end under Node (loads in 4.3 s, transcribes,
+honours `language: 'no'`). It has **not** been run in a real browser: WASM
+inference speed on mobile Safari in particular is an estimate.
+
+---
+
 ## v2.4 — Mobile fixes ✅ shipped
 
 Reported from Android Chrome: "microphone is blocked by browser", and no voice audible.

@@ -130,9 +130,17 @@ describe('compound pronunciation against the east lexicon', () => {
     });
 
     it('resolves words the lexicon does not carry', () => {
+        // NB Uttale has "skifte" and it has "tøy"; it does not have
+        // "skiftetøy", and no lexicon could, because Norwegian forms compounds
+        // freely. Both members come back as real data here.
         const p = pronunciationFor('skiftetøy', 'east');
         expect(p.source).toBe('compound');
         expect(p.members).toEqual(['skifte', 'tøy']);
+        expect(p.ipa).toBe('"ʃɪf.tə.ˌtœ͡ʏ');
+
+        const hente = pronunciationFor('hentetid', 'east');
+        expect(hente.members).toEqual(['hente', 'tid']);
+        expect(hente.ipa).toBe('"hɛn.tə.ˌtɪː');
     });
 
     it('puts accent 2 on a compound with a polysyllabic native head', () => {
@@ -161,17 +169,53 @@ describe('compound pronunciation against the east lexicon', () => {
     });
 
     it('lets the final member carry the inflection', () => {
-        expect(pronunciationFor('vaskerommet', 'east').members).toEqual(['vaske', 'rommet']);
-        expect(pronunciationFor('regntøyet', 'east').members).toEqual(['regn', 'tøyet']);
+        // A compound inflects on its last member and nowhere else, so the
+        // splitter has to match "rommet" against "rom" and "tøyet" against
+        // "tøy". Both of these are in the lexicon outright now, so ask the
+        // compound path directly rather than through the whole-word lookup.
+        expect(compoundPronunciationFor('vaskerommet', 'east')?.members).toEqual([
+            'vaske',
+            'rommet',
+        ]);
+        expect(compoundPronunciationFor('regntøyet', 'east')?.members).toEqual(['regn', 'tøyet']);
+        // And through the real path, on words the lexicon does not carry.
+        expect(pronunciationFor('kursinnholdet', 'east').members).toEqual(['kurs', 'innholdet']);
+        expect(pronunciationFor('integrasjonstestene', 'east').members).toEqual([
+            'integrasjons',
+            'testene',
+        ]);
     });
 
     it('does not read an inflected simplex as a compound', () => {
         // "bordene" is bord + -ene, not "bor" + "dene"; "kontorene" is
-        // kontor + -ene, not "konto" + "rene".
-        expect(pronunciationFor('bordene', 'east').source).toBe('rule');
-        expect(pronunciationFor('kontorene', 'east').source).toBe('rule');
-        // But an inflected compound still decomposes, because its base does.
-        expect(pronunciationFor('legevakten', 'east').members).toEqual(['lege', 'vakten']);
+        // kontor + -ene, not "konto" + "rene"; "skriveren" is skriver + -en.
+        for (const word of ['bordene', 'kontorene', 'skriveren']) {
+            expect(compoundPronunciationFor(word, 'east')).toBeNull();
+        }
+        // But an inflected COMPOUND still decomposes, because its base does:
+        // "legevakten" reduces to "legevakt", which is lege + vakt.
+        expect(compoundPronunciationFor('legevakten', 'east')?.members).toEqual(['lege', 'vakten']);
+    });
+
+    it('rejects a member with no vowel in it', () => {
+        // NB Uttale lists spelled-out abbreviations, so the member inventory
+        // contains strings like "rds" — transcribed as the letters read aloud.
+        // Without the check, "dashboards" came apart as dash + boa + rds and
+        // the learner was shown the end of the word spelled out.
+        expect(pronunciationFor('dashboards', 'east').source).toBe('rule');
+    });
+
+    it('only splits three ways when every member is a substantial word', () => {
+        // Left to its own devices the splitter reads "grunnpillarer" as
+        // grunn + pilla + rer. Every fragment is a real Norwegian word, which
+        // is why the inventory admits them, so the length floor is what
+        // separates these from the three-part splits that are genuine.
+        expect(pronunciationFor('grunnpillarer', 'east').source).toBe('rule');
+        expect(pronunciationFor('smarthjemenheter', 'east').members).toEqual([
+            'smart',
+            'hjem',
+            'enheter',
+        ]);
     });
 
     it('refuses to split on an unstressed prefix', () => {

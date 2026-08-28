@@ -210,6 +210,16 @@ export interface CompoundOptions {
  * That matters beyond tidiness — "skifte" is disyllabic and carries accent 2,
  * "skift" is monosyllabic and would hand the compound accent 1.
  */
+/**
+ * A member has to be pronounceable on its own, which means it needs a vowel.
+ *
+ * NB Uttale lists spelled-out abbreviations, so an inventory built from it
+ * contains things like "rds" — whose transcription is the letters R, D and S
+ * read aloud. Without this, "dashboards" splits as dash + boa + rds and the
+ * learner is shown a transcription that spells the end of the word out.
+ */
+const hasNucleus = (word: string): boolean => /[aeiouyæøå]/.test(word);
+
 function splitScore(parts: CompoundPart[]): number {
     let score = 0;
     for (const part of parts) {
@@ -256,7 +266,7 @@ export function decomposeCompound(
 
         // The remainder is the final member.
         const tail = w.slice(start);
-        if (allowSingle && tail.length >= min && isKnown(tail, true)) {
+        if (allowSingle && tail.length >= min && hasNucleus(tail) && isKnown(tail, true)) {
             best = [{ word: tail, link: '' }];
         }
 
@@ -264,7 +274,7 @@ export function decomposeCompound(
         if (budget >= 2) {
             for (let end = start + min; end <= w.length - min; end++) {
                 const head = w.slice(start, end);
-                if (!isKnown(head, false)) continue;
+                if (!hasNucleus(head) || !isKnown(head, false)) continue;
                 for (const link of LINKS) {
                     const next = end + link.length;
                     if (w.slice(end, next) !== link) continue;
