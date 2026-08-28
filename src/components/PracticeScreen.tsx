@@ -10,6 +10,7 @@ import { VoicePicker } from './VoicePicker';
 import { DialectPicker } from './DialectPicker';
 import { SpeechTrouble } from './SpeechTrouble';
 import type { DialectId } from '../data/dialects';
+import type { AsrStatus } from '../utils/asr';
 import type { Pronunciation } from '../utils/pronunciationLexicon';
 import { useRecordingAnalysis } from '../hooks/useRecordingAnalysis';
 import { useSpokenPhrase } from '../hooks/useSpokenPhrase';
@@ -22,7 +23,10 @@ interface Props {
     strikes: number;
     streak: number;
     listening: boolean;
-    interim: string;
+    /** The clip has been captured and the model is reading it. */
+    transcribing: boolean;
+    /** Download/readiness of the on-device speech model. */
+    model: AsrStatus;
     speechError: string | null;
     lastAttempt: Attempt | null;
     recordingUrl: string | null;
@@ -61,7 +65,8 @@ export function PracticeScreen({
     strikes,
     streak,
     listening,
-    interim,
+    transcribing,
+    model,
     speechError,
     lastAttempt,
     recordingUrl,
@@ -410,6 +415,7 @@ export function PracticeScreen({
                             <VoiceVisualizer analyserRef={analyserRef} active={listening} />
                             <motion.button
                                 onClick={listening ? onStopListening : onListen}
+                                disabled={transcribing}
                                 aria-label={listening ? 'Stop listening' : 'Start speaking'}
                                 whileHover={{ scale: 1.06 }}
                                 whileTap={{ scale: 0.94 }}
@@ -434,13 +440,26 @@ export function PracticeScreen({
 
                         <div className="min-h-[3rem] text-center" role="status" aria-live="polite">
                             {listening ? (
-                                <p className="text-sm text-white/70">
-                                    Listening… {interim && <em className="text-white">{interim}</em>}
-                                </p>
+                                <p className="text-sm text-white/70">Listening… pause when you are done</p>
+                            ) : transcribing ? (
+                                <p className="text-sm text-white/70">Reading what you said…</p>
+                            ) : model.state === 'loading' ? (
+                                // The model is ~40 MB on the first visit and
+                                // cached after that. Saying so beats a mic
+                                // button that quietly does nothing yet.
+                                <div className="text-sm text-white/50">
+                                    <p>Downloading the speech model — one time only, then it works offline.</p>
+                                    <div className="mx-auto mt-1.5 h-1 w-40 overflow-hidden rounded-full bg-white/10">
+                                        <div
+                                            className="h-full rounded-full bg-sky-400 transition-[width] duration-300"
+                                            style={{ width: `${Math.round(model.progress * 100)}%` }}
+                                        />
+                                    </div>
+                                </div>
                             ) : (
                                 <p className="text-sm text-white/45">Tap the mic, then say the phrase</p>
                             )}
-                            <SpeechTrouble error={speechError} />
+                            <SpeechTrouble error={speechError ?? (model.state === 'failed' ? model.error ?? null : null)} />
                         </div>
                     </motion.div>
                 )}

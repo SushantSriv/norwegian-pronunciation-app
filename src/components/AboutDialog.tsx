@@ -144,17 +144,18 @@ export function AboutDialog({ open, onClose }: Props) {
 
                             <Section title="What you need">
                                 <p>
-                                    <strong className="text-white/80">Chrome, Edge or Safari</strong>, on a
-                                    computer, phone or tablet, plus a microphone and an internet connection.
-                                    Safari uses Apple&rsquo;s speech services rather than Google&rsquo;s, so it
-                                    works on iPhone, iPad and Mac. Firefox does not implement speech
-                                    recognition at all, and several Chromium forks ship the API without access
-                                    to a service behind it.
+                                    <strong className="text-white/80">Any current browser</strong> — Firefox,
+                                    Chrome, Edge or Safari — on a computer, phone or tablet, plus a microphone.
+                                    Recognition is a speech model running inside this page rather than a
+                                    browser feature, so there is no browser that gets locked out any more, and
+                                    listen-back and the melody chart work everywhere.
                                 </p>
                                 <p>
-                                    Some browsers hand the microphone exclusively to the speech recogniser. On
-                                    those, listen-back and the melody chart are unavailable and the app says so
-                                    once it has actually detected it. Scoring works either way.
+                                    The first time you use it, about 40&nbsp;MB is downloaded: the model and
+                                    the runtime it needs. That happens once and is kept in your browser, so
+                                    afterwards practising works with no connection at all. Expect a second or
+                                    two of thinking time after each attempt while the model reads it, and a
+                                    little longer on an older phone.
                                 </p>
                             </Section>
 
@@ -163,14 +164,14 @@ export function AboutDialog({ open, onClose }: Props) {
                                     There is no account, no server of mine, no tracking and no analytics. Your
                                     progress is saved only in this browser and never leaves it.
                                 </p>
-                                <p className="rounded-lg border border-amber-400/25 bg-amber-400/10 p-3 text-amber-100/80">
-                                    <strong className="text-amber-100">One thing to be aware of:</strong> the
-                                    speech recognition is not done by this app but by your browser&rsquo;s own
-                                    service. In Chrome and Edge that means your audio goes to Google&rsquo;s
-                                    or Microsoft&rsquo;s servers to be transcribed, and in Safari to Apple&rsquo;s — exactly as with any site
-                                    using the Web Speech API. That part is outside my control. Everything else —
-                                    the scoring, the pitch analysis and the transcriptions — runs on your own
-                                    device.
+                                <p className="rounded-lg border border-emerald-400/25 bg-emerald-400/10 p-3 text-emerald-100/80">
+                                    <strong className="text-emerald-100">Your voice stays here.</strong> Speech
+                                    recognition used to be handed to the browser&rsquo;s own service, which meant
+                                    the audio went to Google&rsquo;s, Microsoft&rsquo;s or Apple&rsquo;s servers
+                                    to be transcribed. It now runs as a speech model inside this page instead:
+                                    about 40&nbsp;MB is downloaded the first time you use it and kept in your
+                                    browser, and after that nothing about your recordings — not the audio, not
+                                    the transcript — leaves the device, with or without a network connection.
                                 </p>
                             </Section>
 

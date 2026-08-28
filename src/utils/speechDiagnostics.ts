@@ -1,9 +1,18 @@
 /**
- * Why speech recognition might be refused on this device.
+ * Why recognition might not be working on this device.
  *
  * "Speech recognition was blocked" on its own is a dead end for a learner, and
  * worse on someone else's phone where you cannot open developer tools. These
  * checks turn it into something actionable.
+ *
+ * The list changed shape when recognition moved on-device. It used to be
+ * dominated by which browser you were in, because the Web Speech API was a
+ * vendor service reached through the browser: Firefox never implemented it,
+ * several Chromium forks shipped the interface without access to the service,
+ * and an installed shortcut was often refused outright. None of that applies to
+ * a model running in this page — every browser with a microphone can run it —
+ * so what is left is the microphone itself and whether the model can be fetched
+ * and kept.
  */
 
 export interface SpeechDiagnostic {
@@ -22,39 +31,30 @@ export function isStandalone(): boolean {
 }
 
 /**
- * Which engine a browser can reach differs, and getting this wrong sends a
- * learner to a browser they do not have. Safari implements the API against
- * Apple's own speech services and works; Firefox does not implement it at all;
- * several Chromium forks ship the API without access to the service behind it,
- * which surfaces as `service-not-allowed` no matter what the user permits.
+ * Whether the model can be kept between visits.
+ *
+ * transformers.js stores the weights in the Cache API. Private windows and
+ * "block site data" settings make that fail silently, and the only symptom is
+ * that the learner re-downloads 40 MB every single session — worth naming.
  */
-function browserNote(): SpeechDiagnostic | null {
-    const ua = navigator.userAgent;
-    // Safari must be tested before Chromium: Chrome on iOS is WebKit underneath
-    // and every iOS browser carries "Safari" in its user agent.
-    const isSafari = /^((?!chrome|android|crios|fxios|edgios).)*safari/i.test(ua);
-    const isChromium = /Chrome|Chromium|CriOS|Edg/i.test(ua);
-    const cannotReachService = /SamsungBrowser|Brave|Vivaldi|OPR|YaBrowser|DuckDuckGo/i.test(ua);
-    const noImplementation = /Firefox|FxiOS/i.test(ua);
-
-    if (noImplementation) {
+async function modelCacheCheck(): Promise<SpeechDiagnostic> {
+    if (typeof caches === 'undefined') {
         return {
-            label: 'Browser',
+            label: 'Model storage',
             ok: false,
-            fix: 'Firefox does not implement speech recognition. Use Chrome, Edge or Safari.',
+            fix: 'This browser will not let the page store the speech model, so it has to be downloaded again each visit.',
         };
     }
-    if (cannotReachService) {
+    try {
+        await caches.open('npa-storage-probe');
+        return { label: 'Model storage', ok: true };
+    } catch {
         return {
-            label: 'Browser',
+            label: 'Model storage',
             ok: false,
-            fix: 'This browser usually cannot reach a speech service. Try Chrome, Edge or Safari.',
+            fix: 'Site storage is blocked — often a private window. The speech model will be downloaded again each visit.',
         };
     }
-    // Safari and the Chromium family both work; anything else is unknown rather
-    // than known-broken, so do not claim it fails.
-    if (isSafari || isChromium) return { label: 'Browser', ok: true };
-    return null;
 }
 
 export async function collectSpeechDiagnostics(): Promise<SpeechDiagnostic[]> {
@@ -63,7 +63,7 @@ export async function collectSpeechDiagnostics(): Promise<SpeechDiagnostic[]> {
     out.push({
         label: 'Secure connection',
         ok: window.isSecureContext,
-        fix: window.isSecureContext ? undefined : 'The page must be served over HTTPS.',
+        fix: window.isSecureContext ? undefined : 'The page must be served over HTTPS to use the microphone.',
     });
 
     // Permission may be unqueryable; that is not itself a failure.
@@ -83,16 +83,36 @@ export async function collectSpeechDiagnostics(): Promise<SpeechDiagnostic[]> {
                 : undefined,
     });
 
-    if (isStandalone()) {
+    // TypeScript types getUserMedia as always present, so the check has to be
+    // made at runtime against the actual object — which on an insecure origin,
+    // or in an old WebView, is genuinely missing.
+    const hasMicrophone = typeof navigator.mediaDevices?.getUserMedia === 'function';
+    out.push({
+        label: 'Microphone available',
+        ok: hasMicrophone,
+        fix: hasMicrophone ? undefined : 'This browser exposes no microphone to the page.',
+    });
+
+    const canRunModel = typeof WebAssembly !== 'undefined' && typeof Worker !== 'undefined';
+    out.push({
+        label: 'Runs the speech model',
+        ok: canRunModel,
+        fix: canRunModel
+            ? undefined
+            : 'Recognition needs WebAssembly and web workers, which this browser has disabled.',
+    });
+
+    out.push(await modelCacheCheck());
+
+    // Only worth mentioning while the model has yet to be fetched: once it is
+    // cached, being offline is fine, which is rather the point.
+    if (typeof navigator.onLine === 'boolean' && !navigator.onLine) {
         out.push({
-            label: 'Running as an installed app',
+            label: 'Network',
             ok: false,
-            fix: 'Installed shortcuts often cannot use the speech service. Open the site in a normal Chrome tab instead.',
+            fix: 'You are offline. That is fine once the speech model has been downloaded once, but the first download needs a connection.',
         });
     }
-
-    const note = browserNote();
-    if (note) out.push(note);
 
     return out;
 }
