@@ -394,6 +394,39 @@ export function pronunciationFor(word: string, dialect: DialectId): Pronunciatio
     };
 }
 
+/** NB Uttale's part-of-speech tags, in words a learner can use. */
+export const POS_LABEL: Record<string, string> = {
+    NN: 'noun',
+    VB: 'verb',
+    JJ: 'adjective',
+    AB: 'adverb',
+    PN: 'pronoun',
+    DT: 'determiner',
+    PP: 'preposition',
+    CC: 'conjunction',
+    KN: 'conjunction',
+    IN: 'interjection',
+    RO: 'numeral',
+};
+
+/**
+ * The other word this spelling is, when the only thing separating them is the
+ * melody.
+ *
+ * NB Uttale records both senses of `hender` — hands with accent 1, happens with
+ * accent 2 — and 106 words in this corpus are like that. For a learner it is
+ * the single most convincing demonstration that tonelag carries meaning rather
+ * than decorating it, and it costs nothing to surface, because the data is
+ * already in the entry.
+ */
+export function toneTwin(entry: Pronunciation): { accent: PitchAccent; pos?: string } | null {
+    if (entry.accent === 'NONE') return null;
+    const other = entry.alternatives.find(
+        alternative => alternative.accent !== 'NONE' && alternative.accent !== entry.accent
+    );
+    return other ? { accent: other.accent, pos: other.pos } : null;
+}
+
 /**
  * Strip stress and syllable marks, leaving bare phonemes.
  *

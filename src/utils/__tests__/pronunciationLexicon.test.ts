@@ -1,5 +1,11 @@
 import { describe, expect, it, beforeAll } from 'vitest';
-import { loadDialect, pronunciationFor, stripProsody, isDialectLoaded } from '../pronunciationLexicon';
+import {
+    isDialectLoaded,
+    loadDialect,
+    pronunciationFor,
+    stripProsody,
+    toneTwin,
+} from '../pronunciationLexicon';
 
 describe('stripProsody', () => {
     it('removes stress marks and syllable dots so sources are comparable', () => {
@@ -74,5 +80,29 @@ describe('dialect variation', () => {
         expect(east).not.toBe(west);
         expect(east).toContain('ʂ');
         expect(west).toContain('r');
+    });
+});
+
+describe('toneTwin', () => {
+    beforeAll(async () => {
+        await loadDialect('east');
+    });
+
+    it('finds the other word a spelling is, when only the melody separates them', () => {
+        // "huset" is the house (accent 1) and housed (accent 2). 106 words in
+        // this corpus are like that, and it is the most convincing evidence a
+        // learner can be shown that tonelag carries meaning.
+        const huset = pronunciationFor('huset', 'east');
+        const twin = toneTwin(huset);
+        expect(twin).not.toBeNull();
+        expect(twin!.accent).not.toBe(huset.accent);
+    });
+
+    it('says nothing for a word with only one accent', () => {
+        expect(toneTwin(pronunciationFor('mat', 'east'))).toBeNull();
+    });
+
+    it('says nothing when there is no accent at all', () => {
+        expect(toneTwin(pronunciationFor('  ', 'east'))).toBeNull();
     });
 });

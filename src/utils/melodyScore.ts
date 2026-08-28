@@ -99,6 +99,49 @@ function warpTargetOntoUser(
 }
 
 /**
+ * How much closer the better-fitting accent has to be before we name it.
+ *
+ * The two contours are only a few semitones apart at their widest, and real
+ * speech is noisy, so a hair's difference in fit means nothing. Below this the
+ * honest answer is that the delivery did not commit to either shape — which is
+ * itself worth telling a learner, since a flat delivery lands exactly there.
+ */
+export const CLEAR_MARGIN = 0.5;
+
+export interface AccentVerdict {
+    /** The accent this delivery actually fits best. */
+    accent: 'ACCENT_1' | 'ACCENT_2';
+    /** How much better it fits than the other, in semitones. */
+    margin: number;
+    /** True when the margin is wide enough to be worth stating. */
+    clear: boolean;
+}
+
+/**
+ * Which accent the learner actually produced, rather than how well they hit the
+ * one they were aiming for.
+ *
+ * This is the more useful question, and a far more robust one. Judging a
+ * contour against a single target needs an absolute threshold on stylised
+ * curves; asking which of the two it is CLOSER to is a relative decision, and
+ * relative decisions survive the noise in a phone microphone. It is also the
+ * question the language actually poses: `hender` is either hands or happens,
+ * and the melody is the entire difference.
+ */
+export function classifyAccent(contour: PitchContour | null): AccentVerdict | null {
+    const first = scoreMelody(contour, 'ACCENT_1');
+    const second = scoreMelody(contour, 'ACCENT_2');
+    if (!first || !second) return null;
+
+    const margin = Math.abs(first.distance - second.distance);
+    return {
+        accent: first.distance <= second.distance ? 'ACCENT_1' : 'ACCENT_2',
+        margin,
+        clear: margin >= CLEAR_MARGIN,
+    };
+}
+
+/**
  * How well the recording matched the expected accent, or null when there is
  * nothing to compare — no accent to aim at, or too little voiced sound.
  *

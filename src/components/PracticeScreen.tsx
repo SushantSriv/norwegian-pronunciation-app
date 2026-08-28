@@ -1,6 +1,7 @@
 import { AnimatePresence, motion } from 'framer-motion';
 import { ITEMS_TO_WIN, MAX_STRIKES, type Attempt } from '../hooks/usePracticeSession';
 import type { Stage } from '../data/stages';
+import { ACCENT_LABEL } from '../data/tonelag';
 import { ScoreRing } from './ScoreRing';
 import { PhonemeBreakdown } from './PhonemeBreakdown';
 import { CompareAudio } from './CompareAudio';
@@ -11,7 +12,7 @@ import { DialectPicker } from './DialectPicker';
 import { SpeechTrouble } from './SpeechTrouble';
 import type { DialectId } from '../data/dialects';
 import type { AsrStatus } from '../utils/asr';
-import type { Pronunciation } from '../utils/pronunciationLexicon';
+import { POS_LABEL, toneTwin, type Pronunciation } from '../utils/pronunciationLexicon';
 import { useRecordingAnalysis } from '../hooks/useRecordingAnalysis';
 import { useSpokenPhrase } from '../hooks/useSpokenPhrase';
 
@@ -105,6 +106,9 @@ export function PracticeScreen({
     const attemptWords = lastAttempt ? lastAttempt.expected.trim().split(/\s+/) : [];
     const soleWord = attemptWords.length === 1 ? attemptWords[0] : null;
     const soleWordEntry = soleWord ? lookup(soleWord) : null;
+    // Some spellings are two different words that only the melody separates.
+    // Nothing demonstrates that tonelag carries meaning quite as well.
+    const twin = soleWordEntry ? toneTwin(soleWordEntry) : null;
 
     // Dialect transcription of the whole phrase. Words the lexicon does not
     // carry fall back to the rule engine, which emits no stress marks, so the
@@ -368,6 +372,19 @@ export function PracticeScreen({
                                     recordingAvailable={recordingAvailable}
                                     bounds={analysis?.bounds ?? null}
                                 />
+                                {twin && soleWordEntry && (
+                                    <div className="mb-3 rounded-lg border border-sky-400/20 bg-sky-400/10 px-3 py-2 text-xs leading-relaxed text-sky-100/80">
+                                        <strong className="text-sky-100">
+                                            “{soleWord}” is two different words.
+                                        </strong>{' '}
+                                        The melody is the only thing telling them apart — the{' '}
+                                        {POS_LABEL[soleWordEntry.pos ?? ''] ?? 'one'} takes{' '}
+                                        {ACCENT_LABEL[soleWordEntry.accent]} and the{' '}
+                                        {POS_LABEL[twin.pos ?? ''] ?? 'other'} takes{' '}
+                                        {ACCENT_LABEL[twin.accent]}.
+                                    </div>
+                                )}
+
                                 <MelodyView
                                     contour={analysis?.contour ?? null}
                                     analysing={analysing}

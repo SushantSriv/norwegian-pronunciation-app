@@ -1,7 +1,7 @@
 import { useMemo } from 'react';
 import { motion } from 'framer-motion';
 import type { PitchContour } from '../utils/pitch';
-import { scoreMelody, type MelodyScore } from '../utils/melodyScore';
+import { classifyAccent, scoreMelody, type MelodyScore } from '../utils/melodyScore';
 import { ACCENT_HINT, ACCENT_LABEL, targetContour, type PitchAccent } from '../data/tonelag';
 
 interface Props {
@@ -148,9 +148,15 @@ export function MelodyView({
         () => scoreMelody(contour, targetAccent ?? 'NONE'),
         [contour, targetAccent]
     );
+    // Which accent the delivery actually fits, regardless of which was asked
+    // for. Naming the one they produced is far more useful than a number: it is
+    // the difference between "72/100" and "you said the hands one".
+    const produced = useMemo(() => classifyAccent(contour), [contour]);
     const { userPaths, targetPath } = buildPlot(contour, targetAccent, melody);
     const range = contour?.rangeSemitones ?? null;
     const showAccent = targetAccent && targetAccent !== 'NONE';
+    const saidTheOtherOne =
+        showAccent && produced?.clear === true && produced.accent !== targetAccent;
 
     return (
         <div className="rounded-xl border border-white/10 bg-white/[0.04] p-4">
@@ -277,6 +283,14 @@ export function MelodyView({
                                 target shape, time-aligned
                             </span>
                         </div>
+                    )}
+
+                    {saidTheOtherOne && (
+                        <p className="mt-2 rounded-lg border border-amber-400/25 bg-amber-400/10 px-3 py-2 text-sm text-amber-100">
+                            That came out as <strong>{ACCENT_LABEL[produced.accent]}</strong>, but this
+                            word takes <strong>{ACCENT_LABEL[targetAccent]}</strong>.{' '}
+                            {ACCENT_HINT[targetAccent]}
+                        </p>
                     )}
 
                     {melody && (

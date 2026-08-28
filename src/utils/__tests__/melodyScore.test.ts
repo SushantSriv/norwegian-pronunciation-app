@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { dtw, resample } from '../dtw';
-import { sampleContour, scoreMelody } from '../melodyScore';
+import { classifyAccent, sampleContour, scoreMelody } from '../melodyScore';
 import { contourFrom, toSemitones, type PitchContour } from '../pitch';
 import { targetContour } from '../../data/tonelag';
 
@@ -212,5 +212,37 @@ describe('scoreMelody', () => {
         expect(scoreMelody(contourOf(accent2(64)), 'NONE')).toBeNull();
         // A couple of voiced frames is not a melody.
         expect(scoreMelody(contourOf([0, 1, 2]), 'ACCENT_2')).toBeNull();
+    });
+});
+
+describe('classifyAccent', () => {
+    it('names the accent the delivery actually fits', () => {
+        // The question the language poses: "hender" is either hands or
+        // happens, and the melody is the entire difference.
+        const one = classifyAccent(contourOf(accent1(64)))!;
+        expect(one.accent).toBe('ACCENT_1');
+        expect(one.clear).toBe(true);
+
+        const two = classifyAccent(contourOf(accent2(64)))!;
+        expect(two.accent).toBe('ACCENT_2');
+        expect(two.clear).toBe(true);
+    });
+
+    it('is not fooled by how fast the word was said', () => {
+        expect(classifyAccent(contourOf(accent2(200), 2.4))!.accent).toBe('ACCENT_2');
+        expect(classifyAccent(contourOf(accent1(30), 0.4))!.accent).toBe('ACCENT_1');
+    });
+
+    it('refuses to call a flat delivery either accent', () => {
+        // A monotone attempt is roughly equidistant from both shapes. Claiming
+        // one would be telling the learner something untrue about what they
+        // did, when the useful thing to say is that they did neither.
+        const flat = classifyAccent(contourOf(new Array(64).fill(0)))!;
+        expect(flat.clear).toBe(false);
+    });
+
+    it('declines when there is nothing to classify', () => {
+        expect(classifyAccent(null)).toBeNull();
+        expect(classifyAccent(contourOf([0, 1, 2]))).toBeNull();
     });
 });
