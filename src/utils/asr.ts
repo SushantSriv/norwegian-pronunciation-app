@@ -15,16 +15,30 @@
  */
 
 /**
- * Multilingual whisper-tiny, 8-bit. The smallest checkpoint that knows any
- * Norwegian at all; the `.en` variants are English-only and the next size up is
- * roughly six times the download, which is not a reasonable thing to ask of
- * someone on a phone.
+ * Multilingual whisper-base, 8-bit.
  *
- * It is a genuinely small model and it will mis-hear a learner sometimes. That
- * is visible in the score, so it is worth knowing that a low score is not
- * always the learner's fault.
+ * Chosen by measurement, not by reputation — `scripts/bench-asr.mjs` runs the
+ * candidates over read Norwegian from google/fleurs and reports word error
+ * rate. On 99 s of it:
+ *
+ *   whisper-small   WER 35.8%   240 MB   0.42x real time
+ *   whisper-base    WER 48.3%    76 MB   0.18x real time   <- this
+ *   whisper-tiny    WER 79.0%    41 MB   0.13x real time
+ *
+ * `tiny` is what a size-first reading of the problem lands on, and it is not
+ * usable here: at 79% it would mis-hear a learner more often than not, and in a
+ * pronunciation app every mis-hearing is a failed attempt that was actually
+ * correct. `base` nearly halves that for less than double the download and a
+ * difference in speed too small to feel. `small` is better again and asks for
+ * 240 MB, which is not a reasonable thing to put in front of someone on a
+ * phone.
+ *
+ * FLEURS is long-form read prose with hard vocabulary, so the short everyday
+ * phrases this app uses will fare far better than 48% suggests. It is the
+ * ranking that carries over, not the absolute number. Even so, `base` will
+ * mis-hear a learner sometimes, and that shows up as a score they did not earn.
  */
-export const ASR_MODEL = 'Xenova/whisper-tiny';
+export const ASR_MODEL = 'Xenova/whisper-base';
 
 /** Whisper's language code for Norwegian Bokmål. */
 export const ASR_LANGUAGE = 'no';

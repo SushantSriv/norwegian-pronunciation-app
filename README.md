@@ -39,7 +39,7 @@ property of the architecture rather than a promise.
 ## Requirements
 
 - **Any current browser with a microphone** — Firefox, Chrome, Edge and Safari, desktop or mobile. Speech recognition is a quantized Whisper model running in the page on WebAssembly, not a browser API, so there is no longer a browser that gets locked out.
-- **About 40 MB on first use**, downloaded once and then cached: the speech model, plus the ONNX Runtime it runs on. After that recognition works with the network off. The rest of the app is ~1.9 MB.
+- **About 82 MB on first use**, downloaded once and then cached: a quantized whisper-base (76 MB) plus the ONNX Runtime it runs on (5.7 MB gzipped). After that recognition works with the network off. The rest of the app is ~1.9 MB.
 - **A Norwegian text-to-speech voice** for the reference audio. Most systems have one; the app tells you how to add one if not.
 - A second or two of thinking time per attempt while the model transcribes, more on an older phone. That is the cost of not sending your voice anywhere.
 
@@ -100,7 +100,7 @@ the pitch analysis never leave the device.
 
 ## How the scoring works
 
-1. A quantized **whisper-tiny** transcribes the recording, in a web worker, on your own
+1. A quantized **whisper-base** transcribes the recording, in a web worker, on your own
    device. The clip is checked for actual speech first: given silence Whisper does not
    return nothing, it returns whatever its language model finds likely.
 2. Expected and heard words are **aligned** with Needleman–Wunsch, so inserted or
@@ -123,8 +123,11 @@ which is what pitch accent actually is. The score is expressed against a flat ba
 so 0 means "no closer to the target than not trying" — the exact failure mode the chart
 exists to catch.
 
-**Known limits:** whisper-tiny is a small model and will mis-hear a learner sometimes,
-which shows up as a low score they did not earn. The fallback G2P used outside the
+**Known limits:** whisper-base is a small model and will mis-hear a learner sometimes,
+which shows up as a low score they did not earn. `scripts/bench-asr.mjs` measures exactly
+that against read Norwegian from google/fleurs, and the model was picked on those numbers
+rather than on size — `tiny` scored 79% word error rate against `base`'s 48%, which in a
+pronunciation app means failing attempts that were correct. The fallback G2P used outside the
 lexicon is an approximation and will be wrong on loanwords. Pitch detection returns
 nothing rather than guessing on unvoiced or quiet frames. The melody target is drawn for
 single words only, since a phrase has one accent per word.

@@ -151,7 +151,7 @@ export function AboutDialog({ open, onClose }: Props) {
                                     listen-back and the melody chart work everywhere.
                                 </p>
                                 <p>
-                                    The first time you use it, about 40&nbsp;MB is downloaded: the model and
+                                    The first time you use it, about 82&nbsp;MB is downloaded: the model and
                                     the runtime it needs. That happens once and is kept in your browser, so
                                     afterwards practising works with no connection at all. Expect a second or
                                     two of thinking time after each attempt while the model reads it, and a
@@ -169,7 +169,7 @@ export function AboutDialog({ open, onClose }: Props) {
                                     recognition used to be handed to the browser&rsquo;s own service, which meant
                                     the audio went to Google&rsquo;s, Microsoft&rsquo;s or Apple&rsquo;s servers
                                     to be transcribed. It now runs as a speech model inside this page instead:
-                                    about 40&nbsp;MB is downloaded the first time you use it and kept in your
+                                    about 82&nbsp;MB is downloaded the first time you use it and kept in your
                                     browser, and after that nothing about your recordings — not the audio, not
                                     the transcript — leaves the device, with or without a network connection.
                                 </p>

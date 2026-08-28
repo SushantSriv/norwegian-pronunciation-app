@@ -48,8 +48,9 @@ function load(): Promise<AutomaticSpeechRecognitionPipeline> {
     if (loading) return loading;
 
     loading = pipeline('automatic-speech-recognition', ASR_MODEL, {
-        // 8-bit weights: a quarter of the download and, on the WASM backend,
-        // meaningfully faster than fp32 for no accuracy this task would notice.
+        // 8-bit weights. Quantization is not free — it costs `tiny` 14 points
+        // of word error rate — but it is a quarter of the download, and the
+        // answer to that cost was a bigger model rather than heavier weights.
         dtype: 'q8',
         progress_callback: reportProgress,
     })
