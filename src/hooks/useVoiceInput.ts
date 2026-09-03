@@ -10,6 +10,12 @@ import {
 } from '../utils/asr';
 import { decodeForRecognition, RECOGNITION_RATE } from '../utils/audioDecode';
 import { findSpeechBounds } from '../utils/pitch';
+import {
+    listenOnce,
+    rememberCloudTakesMicrophone,
+    shouldUseCloudSpeech,
+    type WebSpeechOutcome,
+} from '../utils/webSpeech';
 
 /**
  * Recording the learner and turning it into text, entirely on this device.
@@ -68,6 +74,12 @@ export function useVoiceInput({ onResult }: Options) {
      * fixed by trying again with a fresh worker.
      */
     const [reloadKey, setReloadKey] = useState(0);
+    /** Which engine answered the last attempt, so the UI can be honest. */
+    const [engine, setEngine] = useState<'cloud' | 'local' | null>(null);
+    /** Partial text from the browser service, which the local model cannot do. */
+    const [interim, setInterim] = useState('');
+    /** The browser service's answer for the attempt in flight. */
+    const cloudRef = useRef<Promise<WebSpeechOutcome> | null>(null);
 
     const clientRef = useRef<AsrClient | null>(null);
     const mediaRecorderRef = useRef<MediaRecorder | null>(null);
@@ -156,6 +168,27 @@ export function useVoiceInput({ onResult }: Options) {
                 return;
             }
 
+            // The browser service, when it was running, has usually already
+            // answered by now — it listens live rather than after the fact.
+            // Taking its result skips a whole local transcription.
+            const cloud = await cloudRef.current;
+            cloudRef.current = null;
+            if (cloud?.conflict) {
+                // It will not share the microphone with our recorder. Melody
+                // matters more than speed, so the fast path stands down.
+                rememberCloudTakesMicrophone();
+            }
+
+            const cloudText = cloud?.text ? cleanTranscript(cloud.text) : '';
+            if (cloudText) {
+                setEngine('cloud');
+                // No word timings from this path, so per-word melody is
+                // unavailable; the whole-utterance chart is unaffected.
+                onResultRef.current({ text: cloudText, words: [], speech });
+                return;
+            }
+
+            setEngine('local');
             const recognition = await client.transcribe(audio);
             const text = cleanTranscript(recognition.text);
             if (looksHallucinated(text)) {
@@ -238,6 +271,7 @@ export function useVoiceInput({ onResult }: Options) {
             clearTimers();
             releaseAudio();
             setListening(false);
+            setInterim('');
 
             if (!chunksRef.current.length) return;
             const blob = new Blob(chunksRef.current, { type: recorder.mimeType || 'audio/webm' });
@@ -252,6 +286,16 @@ export function useVoiceInput({ onResult }: Options) {
         recorder.start();
         mediaRecorderRef.current = recorder;
         setListening(true);
+        setInterim('');
+        setEngine(null);
+
+        // Listen through the browser service in parallel, when the learner has
+        // allowed it and it has not already proved it will not share the
+        // microphone. Its answer is used if it produces one; otherwise the
+        // recording goes to the local model exactly as before.
+        cloudRef.current = shouldUseCloudSpeech()
+            ? listenOnce({ onInterim: setInterim })
+            : null;
 
         // Tap the same stream for live level data, for the visualiser and for
         // deciding when the learner has stopped talking.
@@ -283,6 +327,8 @@ export function useVoiceInput({ onResult }: Options) {
         analyserRef,
         model,
         retryModel,
+        engine,
+        interim,
         start,
         stop,
     };

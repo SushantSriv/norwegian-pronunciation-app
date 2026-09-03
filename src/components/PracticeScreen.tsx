@@ -11,6 +11,7 @@ import { PhraseMelody } from './PhraseMelody';
 import { VoiceVisualizer } from './VoiceVisualizer';
 import { VoicePicker } from './VoicePicker';
 import { DialectPicker } from './DialectPicker';
+import { SpeechEnginePicker } from './SpeechEnginePicker';
 import { SpeechTrouble } from './SpeechTrouble';
 import type { DialectId } from '../data/dialects';
 import type { AsrStatus } from '../utils/asr';
@@ -34,6 +35,10 @@ interface Props {
     model: AsrStatus;
     /** Throw the worker away and fetch the model again. */
     onRetryModel: () => void;
+    /** Which engine answered the last attempt. */
+    engine: 'cloud' | 'local' | null;
+    /** Partial text, which only the browser service can produce. */
+    interim: string;
     speechError: string | null;
     lastAttempt: Attempt | null;
     recordingUrl: string | null;
@@ -77,6 +82,8 @@ export function PracticeScreen({
     transcribing,
     model,
     onRetryModel,
+    engine,
+    interim,
     speechError,
     lastAttempt,
     recordingUrl,
@@ -530,7 +537,10 @@ export function PracticeScreen({
 
                         <div className="min-h-[3rem] text-center" role="status" aria-live="polite">
                             {listening ? (
-                                <p className="text-sm text-white/70">Listening… pause when you are done</p>
+                                <p className="text-sm text-white/70">
+                                    Listening… pause when you are done
+                                    {interim && <em className="ml-1 text-white">{interim}</em>}
+                                </p>
                             ) : transcribing ? (
                                 <p className="text-sm text-white/70">Reading what you said…</p>
                             ) : model.state === 'loading' ? (
@@ -572,6 +582,9 @@ export function PracticeScreen({
 
             <div className="mt-6 border-t border-white/10 pt-4">
                 <DialectPicker dialect={dialect} onChange={onDialectChange} ready={dialectReady} />
+                <div className="mt-3">
+                    <SpeechEnginePicker engine={engine} />
+                </div>
                 <VoicePicker
                     voices={voices}
                     activeVoiceURI={activeVoiceURI}

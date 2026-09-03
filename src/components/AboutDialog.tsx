@@ -168,8 +168,9 @@ export function AboutDialog({ open, onClose }: Props) {
                                     <strong className="text-emerald-100">Your voice stays here.</strong> Speech
                                     recognition used to be handed to the browser&rsquo;s own service, which meant
                                     the audio went to Google&rsquo;s, Microsoft&rsquo;s or Apple&rsquo;s servers
-                                    to be transcribed. It now runs as a speech model inside this page instead:
-                                    about 82&nbsp;MB is downloaded the first time you use it and kept in your
+                                    to be transcribed. By default it now runs as a speech model inside this page
+                                    instead &mdash; you can switch the browser service back on, and the app says
+                                    so plainly when you do. About 82&nbsp;MB is downloaded the first time you use it and kept in your
                                     browser, and after that nothing about your recordings — not the audio, not
                                     the transcript — leaves the device, with or without a network connection.
                                 </p>
