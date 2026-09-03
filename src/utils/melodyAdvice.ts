@@ -11,7 +11,7 @@
  * someone their peak is late when they did not move their pitch at all.
  */
 import type { PitchAccent } from '../data/tonelag';
-import { ACCENT_LABEL } from '../data/tonelag';
+import { ACCENT_LABEL, ACCENT_SHAPE } from '../data/tonelag';
 import type { AccentVerdict } from './melodyScore';
 
 export type MelodyIssue =
@@ -124,7 +124,12 @@ export function adviseMelody(
     if (produced?.clear && expected !== 'NONE' && produced.accent !== expected) {
         return {
             issue: 'wrong-accent',
-            text: `That came out as ${ACCENT_LABEL[produced.accent]}. This word takes ${ACCENT_LABEL[expected]}.`,
+            // Shape first, name second: "Tonelag 2" means nothing to someone
+            // who has not met the term, and this sentence is the one that has
+            // to be actionable.
+            text:
+                `You gave it ${ACCENT_SHAPE[produced.accent]}. This word needs ` +
+                `${ACCENT_SHAPE[expected]} — ${ACCENT_LABEL[expected]}.`,
         };
     }
 

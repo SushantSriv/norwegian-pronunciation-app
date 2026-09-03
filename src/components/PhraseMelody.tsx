@@ -1,6 +1,7 @@
 import { useState } from 'react';
 import { motion } from 'framer-motion';
 import { ACCENT_HINT, ACCENT_LABEL } from '../data/tonelag';
+import { AccentBadge } from './AccentBadge';
 import { problemWords, type WordMelody, type WordMelodyStatus } from '../utils/phraseMelody';
 import { sampleContour } from '../utils/melodyScore';
 import { targetContour } from '../data/tonelag';
@@ -115,9 +116,7 @@ export function PhraseMelody({ melody }: Props) {
                         <span lang="nb" className="font-semibold text-white">
                             {open.word}
                         </span>
-                        <span className="rounded-full bg-violet-400/25 px-2 py-0.5 text-xs font-bold text-violet-100">
-                            {ACCENT_LABEL[open.expected]}
-                        </span>
+                        <AccentBadge accent={open.expected} compact />
                         {open.score !== null && (
                             <span className="text-xs tabular-nums text-white/40">
                                 {open.score}/100

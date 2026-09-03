@@ -2,7 +2,7 @@ import { useEffect, useMemo } from 'react';
 import { AnimatePresence, motion } from 'framer-motion';
 import { ITEMS_TO_WIN, MAX_STRIKES, type Attempt } from '../hooks/usePracticeSession';
 import type { Stage } from '../data/stages';
-import { ACCENT_LABEL } from '../data/tonelag';
+import { ACCENT_LABEL, ACCENT_SHAPE } from '../data/tonelag';
 import { ScoreRing } from './ScoreRing';
 import { PhonemeBreakdown } from './PhonemeBreakdown';
 import { CompareAudio } from './CompareAudio';
@@ -453,9 +453,9 @@ export function PracticeScreen({
                                         </strong>{' '}
                                         The melody is the only thing telling them apart — the{' '}
                                         {POS_LABEL[soleWordEntry.pos ?? ''] ?? 'one'} takes{' '}
-                                        {ACCENT_LABEL[soleWordEntry.accent]} and the{' '}
+                                        {ACCENT_SHAPE[soleWordEntry.accent]} ({ACCENT_LABEL[soleWordEntry.accent]}) and the{' '}
                                         {POS_LABEL[twin.pos ?? ''] ?? 'other'} takes{' '}
-                                        {ACCENT_LABEL[twin.accent]}.
+                                        {ACCENT_SHAPE[twin.accent]} ({ACCENT_LABEL[twin.accent]}).
                                     </div>
                                 )}
 

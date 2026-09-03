@@ -221,6 +221,29 @@ export const ACCENT_LABEL: Record<PitchAccent, string> = {
     NONE: '—',
 };
 
+/**
+ * The melody in three words, for people who have never met the term.
+ *
+ * "Tonelag 2" means nothing to a beginner, and a badge that says only that
+ * teaches nothing. The Norwegian name is kept — it is what every textbook and
+ * every teacher will call it — but it never appears alone.
+ */
+export const ACCENT_SHAPE: Record<PitchAccent, string> = {
+    ACCENT_1: 'one rise',
+    ACCENT_2: 'fall, then rise',
+    NONE: '',
+};
+
+/**
+ * A minimal pair for each accent: two words spelled the same where the melody
+ * is the only difference. Nothing explains tonelag as quickly as one of these.
+ */
+export const ACCENT_EXAMPLE: Record<PitchAccent, string> = {
+    ACCENT_1: 'bønder (farmers)',
+    ACCENT_2: 'bønner (beans)',
+    NONE: '',
+};
+
 export const ACCENT_HINT: Record<PitchAccent, string> = {
     ACCENT_1: 'Start low and rise — a single climb through the word.',
     ACCENT_2: 'Start high, dip, then rise again — two peaks, not one.',

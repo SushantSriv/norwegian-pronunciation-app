@@ -100,6 +100,31 @@ export function AboutDialog({ open, onClose }: Props) {
                                 </ol>
                             </Section>
 
+                            <Section title="What is tonelag?">
+                                <p>
+                                    Norwegian is a <em>pitch-accent</em> language: the tune you put on a
+                                    word is part of the word, not decoration. There are two, and Norwegian
+                                    calls them <strong>tonelag 1</strong> and <strong>tonelag 2</strong>.
+                                </p>
+                                <p>
+                                    Tonelag 1 is <strong>one rise</strong> — the pitch climbs once through
+                                    the word. Tonelag 2 is a <strong>fall and then a rise</strong>, heard as
+                                    two peaks rather than one.
+                                </p>
+                                <p className="rounded-lg border border-white/10 bg-white/[0.04] p-3">
+                                    The clearest proof that it matters:{' '}
+                                    <strong lang="nb">bønder</strong> (farmers) and{' '}
+                                    <strong lang="nb">bønner</strong> (beans) are said with the same sounds.
+                                    The melody is the only thing telling them apart — and get it wrong and
+                                    you have said a different word.
+                                </p>
+                                <p>
+                                    This is the thing that most often marks someone out as a non-native
+                                    speaker, and almost no app measures it. That is why this one draws your
+                                    melody against the shape the word wants.
+                                </p>
+                            </Section>
+
                             <Section title="Reading your result">
                                 <ul className="space-y-1.5">
                                     <li>

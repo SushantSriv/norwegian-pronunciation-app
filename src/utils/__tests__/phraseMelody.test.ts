@@ -261,7 +261,11 @@ describe('adviseMelody', () => {
             'ACCENT_2'
         );
         expect(advice.issue).toBe('wrong-accent');
-        expect(advice.text).toMatch(/Tonelag 1/);
+        // Says what the learner DID and what the word NEEDS, in shapes rather
+        // than in a term a beginner has never met. The name is there too, but
+        // never on its own.
+        expect(advice.text).toMatch(/one rise/);
+        expect(advice.text).toMatch(/fall, then rise/);
         expect(advice.text).toMatch(/Tonelag 2/);
     });
 
