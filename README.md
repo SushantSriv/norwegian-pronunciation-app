@@ -40,7 +40,7 @@ property of the architecture rather than a promise.
 
 ## Requirements
 
-- **A desktop browser built on Chromium or WebKit** — Chrome, Edge, Safari. Both engines are measured (see below). Recognition is a quantized Whisper model running in the page on WebAssembly rather than a browser API, so nothing is locked out by policy — but "not locked out" is not the same as "measured", and only what has been measured is claimed here.
+- **A desktop browser built on Chromium or WebKit** — Chrome, Edge, Safari. Firefox runs it too, but roughly eight times slower (see below), which is usable rather than pleasant. Recognition is a quantized Whisper model running in the page on WebAssembly rather than a browser API, so nothing is locked out by policy — but "not locked out" is not the same as "measured", and only what has been measured is claimed here.
 - **About 82 MB on first use**, downloaded once and then cached: a quantized whisper-base (76 MB) plus the ONNX Runtime it runs on (5.7 MB gzipped). After that recognition works with the network off. The rest of the app is ~1.9 MB.
 - **A Norwegian text-to-speech voice** for the reference audio. Most systems have one; the app tells you how to add one if not.
 - **Roughly 2.3x the length of what you said**, while the model transcribes: a two-second phrase comes back in about four and a half seconds on a desktop Chromium, five and a half on WebKit. Longer on an older or smaller device. That is the cost of not sending your voice anywhere.
@@ -149,7 +149,10 @@ and reports what it costs. On a desktop Windows machine, a 2-second clip:
 |---|---|---|---|---|---|
 | Chromium | 7.9 s | 4.64 s | 2.31 | 0.05 s | 10 MB |
 | WebKit | 9.2 s | 5.55 s | 2.82 | 0.04 s | not reported |
-| Firefox | under investigation | | | | |
+| Firefox | 13.6 s | 47.05 s | 23.52 | 0.06 s | not reported |
+
+Pitch analysis is negligible everywhere — 40 to 60 ms for two seconds of audio —
+so the wait a learner feels is essentially all speech model.
 
 Chromium is the engine behind Chrome and Edge and WebKit the engine behind
 Safari, so those numbers transfer in kind — they are not the branded builds.
@@ -157,6 +160,26 @@ Safari, so those numbers transfer in kind — they are not the branded builds.
 devices, and nothing here should be read as evidence about them.
 `bench/bench.html` is a plain page, so opening it through `npm run dev` on a
 phone produces the same table.
+
+#### The single biggest speed-up available
+
+Those numbers are without cross-origin isolation. With `Cross-Origin-Opener-Policy`
+and `Cross-Origin-Embedder-Policy` set, `SharedArrayBuffer` becomes available and
+ONNX Runtime can use more than one WASM thread:
+
+| engine | without isolation | with isolation |
+|---|---|---|
+| Chromium | 2.31x real time | **1.19x** |
+| Firefox | 23.52x real time | **9.16x** |
+
+Twice as fast in Chromium, nearly three times in Firefox, for two response
+headers. The dev server sets them (`credentialless`, so the model can still be
+fetched from the Hugging Face CDN, which sends no CORP header).
+
+**GitHub Pages cannot set response headers**, so the hosted build does not get
+this. The usual workaround is a service worker that re-serves responses with the
+headers attached; the app already registers one for offline support, so this is
+the obvious next piece of work rather than a research question.
 
 That benchmark earned its keep immediately. The quantized model did not load in
 any browser — a graph-rewrite failure in ONNX Runtime Web that does not happen

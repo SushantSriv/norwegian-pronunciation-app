@@ -69,10 +69,23 @@ function syntheticSpeech(seconds = CLIP_SECONDS): Float32Array {
     return out;
 }
 
+/**
+ * Whether the page can open a microphone here.
+ *
+ * Time-bounded on purpose. A headless browser with no capture device and no way
+ * to answer a permission prompt can leave getUserMedia pending forever rather
+ * than rejecting — which is not a finding about the app, it is the harness
+ * hanging, and it cost a 25-minute Firefox run to work that out.
+ */
 async function microphoneState(): Promise<BenchResult['microphone']> {
     if (typeof navigator.mediaDevices?.getUserMedia !== 'function') return 'absent';
     try {
-        const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+        const stream = await Promise.race([
+            navigator.mediaDevices.getUserMedia({ audio: true }),
+            new Promise<never>((_, reject) =>
+                setTimeout(() => reject(new Error('timed out')), 5000)
+            ),
+        ]);
         stream.getTracks().forEach(track => track.stop());
         return 'available';
     } catch {

@@ -64,10 +64,30 @@ Windows:
 |---|---|---|---|---|---|---|
 | Chromium | 7.9 s | 4.64 s | 2.31 | 0.05 s | 10 MB | opens |
 | WebKit | 9.2 s | 5.55 s | 2.82 | 0.04 s | not reported | not testable headless |
-| Firefox | under investigation | | | | | |
+| Firefox | 13.6 s | 47.05 s | 23.52 | 0.06 s | not reported | not testable headless |
 
-Pitch analysis is negligible in both engines — 40-50 ms for two seconds of
-audio — so the wait a learner feels is essentially all the speech model.
+Pitch analysis is negligible everywhere — 40-60 ms for two seconds of audio — so
+the wait a learner feels is essentially all speech model.
+
+Firefox works and is about eight times slower than Chromium. It took two runs to
+establish that: the first three attempts reported a hang, which turned out to be
+the benchmark's own microphone probe rather than the app — headless Firefox
+neither grants nor refuses getUserMedia, it simply never answers. The probe is
+now time-bounded, which is a lesson about harnesses rather than about Firefox.
+
+**Cross-origin isolation is the biggest speed-up available and is not shipped.**
+With COOP and COEP set, SharedArrayBuffer becomes available and ONNX Runtime can
+use more than one WASM thread:
+
+| engine | without | with |
+|---|---|---|
+| Chromium | 2.31x real time | **1.19x** |
+| Firefox | 23.52x real time | **9.16x** |
+
+The dev server now sets them (`credentialless`, so the Hugging Face CDN fetch
+still works). GitHub Pages cannot set response headers, so the hosted build does
+not benefit; a service worker that re-serves responses with the headers is the
+standard workaround, and the app already registers one.
 
 ### Not verified
 - **Chrome on Android and Safari on iOS.** Playwright reaches Chromium, Firefox
@@ -78,6 +98,9 @@ audio — so the wait a learner feels is essentially all the speech model.
   logic is pure and unit-tested, their rendering is not.
 
 ### Left for next time
+- **Cross-origin isolation on GitHub Pages**, via the service worker already
+  present. Measured at roughly 2x in Chromium and 2.6x in Firefox — the largest
+  single improvement identified, and the only one that needs no new model.
 - **NbAiLab/nb-whisper-\*** remains the biggest accuracy win available and still
   cannot be used as published: a split encoder/decoder ONNX export with no merged
   decoder and no quantized weights.
