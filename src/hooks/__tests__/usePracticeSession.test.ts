@@ -133,3 +133,51 @@ describe('usePracticeSession', () => {
         expect(result.current.lastAttempt).toBeNull();
     });
 });
+
+describe('attempts the recogniser could not vouch for', () => {
+    /**
+     * The guarantee this protects: the speech model mis-hears people, and
+     * charging a life for its mistake teaches the learner to distrust every
+     * piece of feedback the app gives them.
+     */
+    it('costs no life, clears nothing, and offers the same item again', () => {
+        const { result } = renderHook(() => usePracticeSession());
+        act(() => result.current.begin(stage));
+        const item = result.current.currentItem;
+
+        act(() =>
+            result.current.submit({
+                text: 'noe helt annet',
+                // Two seconds of speech, a fifth of a second accounted for:
+                // evidence the model dropped audio, not that the learner erred.
+                speech: { start: 0, end: 2, duration: 2.5 },
+                words: [{ word: 'noe', start: 0.1, end: 0.3 }],
+            })
+        );
+
+        expect(result.current.lastAttempt?.verdict.outcome).toBe('uncertain');
+        expect(result.current.strikes).toBe(0);
+        expect(result.current.cleared).toBe(0);
+        expect(result.current.currentItem).toBe(item);
+    });
+
+    it('still charges for a wrong answer the recogniser did account for', () => {
+        const { result } = renderHook(() => usePracticeSession());
+        act(() => result.current.begin(stage));
+
+        act(() =>
+            result.current.submit({
+                text: GIBBERISH,
+                speech: { start: 0, end: 1.2, duration: 1.5 },
+                words: [
+                    { word: 'zzz', start: 0.0, end: 0.4 },
+                    { word: 'qqq', start: 0.4, end: 0.8 },
+                    { word: 'xxx', start: 0.8, end: 1.2 },
+                ],
+            })
+        );
+
+        expect(result.current.lastAttempt?.verdict.outcome).toBe('mispronounced');
+        expect(result.current.strikes).toBe(1);
+    });
+});

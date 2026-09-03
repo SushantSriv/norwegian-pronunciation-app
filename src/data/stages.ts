@@ -12,7 +12,7 @@
  */
 
 /** Which section of the picker a stage belongs to. */
-export type Track = 'general' | 'occupation';
+export type Track = 'general' | 'occupation' | 'weakness';
 
 export interface Stage {
     id: string;
@@ -33,6 +33,25 @@ export interface Stage {
     accent: string;
     icon: string;
 }
+
+/**
+ * The drill built from the learner's own record.
+ *
+ * It has no corpus of its own: the pool is assembled at the moment it starts,
+ * from whichever phrases exercise the sound or the accent they are currently
+ * worst at. It is hidden until there is enough evidence to name a weakness,
+ * because a drill for a problem you may not have is worse than no drill.
+ */
+export const WEAKNESS_STAGE: Stage = {
+    id: 'weaknesses',
+    name: 'Practice my weaknesses',
+    cefr: 'Adaptive',
+    blurb: 'Built from your own attempts — the sounds and the tonelag you keep missing.',
+    track: 'weakness',
+    baseThreshold: 55,
+    accent: 'from-fuchsia-400 to-violet-500',
+    icon: '🎯',
+};
 
 export const STAGES: Stage[] = [
     {

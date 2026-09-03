@@ -1,4 +1,6 @@
 import { motion } from 'framer-motion';
+import { ProfilePanel } from './ProfilePanel';
+import type { Profile } from '../utils/learningProfile';
 import type { Outcome } from '../hooks/usePracticeSession';
 import { ITEMS_TO_WIN } from '../hooks/usePracticeSession';
 import type { Stage } from '../data/stages';
@@ -17,11 +19,20 @@ interface Props {
     stage: Stage;
     outcome: Outcome;
     summary: Summary;
+    /** What this learner finds hard, across every session so far. */
+    profile: Profile;
     onRetry: () => void;
     onChangeStage: () => void;
 }
 
-export function ResultsScreen({ stage, outcome, summary, onRetry, onChangeStage }: Props) {
+export function ResultsScreen({
+    stage,
+    outcome,
+    summary,
+    profile,
+    onRetry,
+    onChangeStage,
+}: Props) {
     const won = outcome === 'completed';
 
     return (
@@ -73,6 +84,10 @@ export function ResultsScreen({ stage, outcome, summary, onRetry, onChangeStage 
                         </dd>
                     </div>
                 </dl>
+            </div>
+
+            <div className="mt-5">
+                <ProfilePanel profile={profile} />
             </div>
 
             {summary.missedWords.length > 0 && (

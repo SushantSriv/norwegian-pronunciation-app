@@ -38,20 +38,108 @@
  * ranking that carries over, not the absolute number. Even so, `base` will
  * mis-hear a learner sometimes, and that shows up as a score they did not earn.
  */
+import type { SpeechBounds } from './pitch';
+
 export const ASR_MODEL = 'Xenova/whisper-base';
 
 /** Whisper's language code for Norwegian Bokmål. */
+/**
+ * How hard ONNX Runtime is allowed to rewrite the graph before running it.
+ *
+ * This is not a tuning knob, it is the fix for an outright failure. At the
+ * default (`all`), whisper-base's q8 build refuses to load in a browser:
+ *
+ *   Can't create a session. qdq_actions.cc:137 TransposeDQWeightsForMatMulNBits
+ *   Missing required scale: model.decoder.embed_tokens.weight_merged_0_scale
+ *
+ * The same build loads and transcribes perfectly under Node, which is where
+ * every earlier measurement of it was taken, so recognition shipped completely
+ * broken in browsers and nothing in this repository could have caught it — the
+ * unit tests stub the worker and the accuracy benchmark runs under Node on
+ * purpose. It took running the real worker in a real engine.
+ *
+ * The failing transform is a QDQ (quantize-dequantize) rewrite that lives in
+ * the extended optimization level. Stopping at `basic` skips it, and measured
+ * in Chromium it is also the faster of the two options that work:
+ *
+ *   q8, graph 'basic'      loads in 8.1 s, 2.30x real time   <- this
+ *   q8, graph 'disabled'   loads in 7.6 s, 2.69x real time
+ *   q8, graph 'all'        does not load at all
+ */
+export const ASR_GRAPH_OPTIMIZATION = 'basic';
+
+/**
+ * Weight precisions to try, in order, keeping the first that loads.
+ *
+ * q8 works everywhere it has been measured once the graph level above is set,
+ * and is by far the smaller download. fp32 is kept behind it as insurance: the
+ * loader failure above could plausibly hit an engine that cannot be tested from
+ * here — Chrome on Android and Safari on iOS above all — and a single pinned
+ * precision would turn that into an app that silently does nothing.
+ *
+ * Two entries, not four. A longer chain sounds safer and is not: each failed
+ * attempt is a whole model download, and walking q8/int8/uint8/fp32 took over
+ * ten minutes before giving up, which is indistinguishable from broken.
+ */
+export const ASR_DTYPES = ['q8', 'fp32'] as const;
+
+/** The precision tried first; the rest are insurance. */
+export const ASR_DTYPE = ASR_DTYPES[0];
+
 export const ASR_LANGUAGE = 'no';
 
+/**
+ * Where one word sits in the recording.
+ *
+ * Whisper can report these, and they cost about 0.3 s on top of a 2 s
+ * transcription. They are what makes per-word melody feedback possible at all:
+ * without them there is no way to say which stretch of the pitch contour
+ * belongs to which word, and the melody chart can only ever talk about a whole
+ * utterance at once.
+ *
+ * They are estimates, derived from the model's own attention rather than from
+ * measuring the signal, and they drift — most visibly at the start of a clip.
+ * Everything downstream treats them as approximate.
+ */
+export interface WordTiming {
+    word: string;
+    /** Seconds from the start of the recording. */
+    start: number;
+    end: number;
+}
+
+export interface Recognition {
+    text: string;
+    /** Per-word spans. Empty if the model declined to produce them. */
+    words: WordTiming[];
+    /**
+     * Where speech was actually found in the recording.
+     *
+     * Filled in by the recorder rather than the model — it is measured from the
+     * signal, which is exactly why it is worth having next to the model's
+     * output: comparing the two is how we tell "you said it wrong" apart from
+     * "I did not hear you properly". Undefined when nothing measured it.
+     */
+    speech?: SpeechBounds | null;
+}
+
+/** Overrides for the benchmark harness; production uses the constants above. */
+export interface ModelChoice {
+    model?: string;
+    dtype?: string;
+    /** ONNX graph optimization level, for narrowing down loader failures. */
+    graph?: string;
+}
+
 export type AsrRequest =
-    | { type: 'load' }
+    | ({ type: 'load' } & ModelChoice)
     | { type: 'transcribe'; id: number; audio: Float32Array };
 
 export type AsrResponse =
     | { type: 'progress'; ratio: number }
-    | { type: 'ready' }
+    | { type: 'ready'; dtype: string }
     | { type: 'failed'; message: string }
-    | { type: 'result'; id: number; text: string }
+    | { type: 'result'; id: number; text: string; words: WordTiming[] }
     | { type: 'error'; id: number; message: string };
 
 export type AsrState = 'idle' | 'loading' | 'ready' | 'failed';
@@ -61,6 +149,8 @@ export interface AsrStatus {
     /** Download progress, 0 to 1, while `state` is 'loading'. */
     progress: number;
     error?: string;
+    /** Which weight precision the browser accepted, once it is loaded. */
+    dtype?: string;
 }
 
 /**
@@ -109,9 +199,9 @@ export function looksHallucinated(text: string): boolean {
 
 export interface AsrClient {
     /** Start fetching the model. Safe to call more than once. */
-    load(): void;
+    load(choice?: ModelChoice): void;
     /** Transcribe 16 kHz mono samples. Rejects if the model failed to load. */
-    transcribe(audio: Float32Array): Promise<string>;
+    transcribe(audio: Float32Array): Promise<Recognition>;
     subscribe(listener: (status: AsrStatus) => void): () => void;
     status(): AsrStatus;
     dispose(): void;
@@ -141,7 +231,10 @@ export function createAsrClient(spawn: () => Worker = spawnWorker): AsrClient {
     let current: AsrStatus = { state: 'idle', progress: 0 };
 
     const listeners = new Set<(status: AsrStatus) => void>();
-    const pending = new Map<number, { resolve: (text: string) => void; reject: (e: Error) => void }>();
+    const pending = new Map<
+        number,
+        { resolve: (result: Recognition) => void; reject: (e: Error) => void }
+    >();
 
     const publish = (next: AsrStatus) => {
         current = next;
@@ -159,7 +252,7 @@ export function createAsrClient(spawn: () => Worker = spawnWorker): AsrClient {
                     publish({ state: 'loading', progress: message.ratio });
                     break;
                 case 'ready':
-                    publish({ state: 'ready', progress: 1 });
+                    publish({ state: 'ready', progress: 1, dtype: message.dtype });
                     break;
                 case 'failed':
                     publish({ state: 'failed', progress: 0, error: message.message });
@@ -168,7 +261,7 @@ export function createAsrClient(spawn: () => Worker = spawnWorker): AsrClient {
                     pending.clear();
                     break;
                 case 'result':
-                    pending.get(message.id)?.resolve(message.text);
+                    pending.get(message.id)?.resolve({ text: message.text, words: message.words });
                     pending.delete(message.id);
                     break;
                 case 'error':
@@ -187,10 +280,10 @@ export function createAsrClient(spawn: () => Worker = spawnWorker): AsrClient {
     }
 
     return {
-        load() {
+        load(choice) {
             if (current.state === 'ready' || current.state === 'loading') return;
             publish({ state: 'loading', progress: 0 });
-            ensureWorker().postMessage({ type: 'load' } satisfies AsrRequest);
+            ensureWorker().postMessage({ type: 'load', ...choice } satisfies AsrRequest);
         },
 
         transcribe(audio) {
@@ -202,7 +295,7 @@ export function createAsrClient(spawn: () => Worker = spawnWorker): AsrClient {
             if (current.state === 'idle') {
                 publish({ state: 'loading', progress: 0 });
             }
-            return new Promise<string>((resolve, reject) => {
+            return new Promise<Recognition>((resolve, reject) => {
                 pending.set(id, { resolve, reject });
                 // A copy, so transferring the buffer cannot detach the caller's
                 // decoded audio out from under them.

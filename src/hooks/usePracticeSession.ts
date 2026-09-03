@@ -1,5 +1,9 @@
 import { useCallback, useMemo, useState } from 'react';
 import { scoreAttempt, type AttemptScore, type IpaResolver } from '../utils/scoring';
+import type { Recognition, WordTiming } from '../utils/asr';
+import { judgeAttempt, type AttemptVerdict } from '../utils/attemptVerdict';
+import { drillPool, prioritise, weaknesses, type Profile } from '../utils/learningProfile';
+import type { PitchAccent } from '../data/tonelag';
 import { poolForStage, type Stage } from '../data/stages';
 import rawSentenceData from '../data/sentences.json';
 import occupationData from '../data/occupations.json';
@@ -20,6 +24,14 @@ export interface Attempt extends AttemptScore {
     /** The bar this attempt had to beat. */
     threshold: number;
     passed: boolean;
+    /**
+     * Where each heard word sat in the recording, when the model reported it.
+     * Carried through so the melody of individual words can be looked at
+     * against the same pitch contour the chart already draws.
+     */
+    words: WordTiming[];
+    /** Whether the recognition can be trusted as pronunciation feedback. */
+    verdict: AttemptVerdict;
 }
 
 interface SessionState {
@@ -69,21 +81,42 @@ function writeBest(stageId: string, cleared: number) {
  * @param toIpa How words become IPA for scoring. Defaults to the rule engine;
  * the app supplies a resolver backed by the NB Uttale lexicon.
  */
-export function usePracticeSession(toIpa?: IpaResolver) {
+/** Every phrase the app knows, for drills that are not tied to one stage. */
+function everyPhrase(): string[] {
+    return [...Object.values(LEVELS).flat(), ...Object.values(OCCUPATIONS).flat()];
+}
+
+export function usePracticeSession(
+    toIpa?: IpaResolver,
+    profile?: Profile,
+    accentFor?: (word: string) => PitchAccent
+) {
     const [session, setSession] = useState<SessionState | null>(null);
     const [bests, setBests] = useState<Record<string, number>>(readBests);
     /** The most recent graded attempt, shown as feedback before moving on. */
     const [lastAttempt, setLastAttempt] = useState<Attempt | null>(null);
 
     const begin = useCallback((stage: Stage) => {
-        const pool = poolForStage(stage, LEVELS, OCCUPATIONS);
+        // The weakness drill has no corpus of its own: it is assembled now,
+        // from whatever exercises the thing the learner is currently worst at.
+        const weakness = profile ? weaknesses(profile)[0] : undefined;
+        const pool =
+            stage.track === 'weakness' && weakness && toIpa && accentFor
+                ? drillPool(weakness, everyPhrase(), toIpa, accentFor)
+                : poolForStage(stage, LEVELS, OCCUPATIONS);
+        if (!pool.length) return;
         // A run needs ITEMS_TO_WIN passes plus room for up to MAX_STRIKES
         // misses, so draw enough that we never run dry mid-run.
         const needed = ITEMS_TO_WIN + MAX_STRIKES;
-        const queue = shuffle(pool).slice(0, Math.max(needed, Math.min(pool.length, needed)));
+        // Shuffle first so a run is never the same twice, then let the
+        // learner's own record pull the phrases they are due to revisit to the
+        // front. Without a profile this is just the shuffle it always was.
+        const shuffled = shuffle(pool);
+        const ordered = profile ? prioritise(profile, shuffled) : shuffled;
+        const queue = ordered.slice(0, Math.max(needed, Math.min(pool.length, needed)));
         setLastAttempt(null);
         setSession({ stage, queue, cursor: 0, cleared: 0, strikes: 0, streak: 0, bestStreak: 0, attempts: [], outcome: null });
-    }, []);
+    }, [profile, toIpa, accentFor]);
 
     const quit = useCallback(() => {
         setSession(null);
@@ -96,15 +129,45 @@ export function usePracticeSession(toIpa?: IpaResolver) {
 
     const currentItem = session ? (session.queue[session.cursor] ?? session.queue[0]) : '';
 
-    /** Grade what the recognizer heard against the current item. */
+    /**
+     * Grade what the recognizer heard against the current item.
+     *
+     * Takes either the full recognition or just its text; the plain string form
+     * is what the tests and any caller without word timings use.
+     */
     const submit = useCallback(
-        (heard: string) => {
+        (heard: string | Recognition) => {
             if (!session || session.outcome) return;
 
-            const graded = scoreAttempt(currentItem, heard, toIpa);
+            const recognition: Recognition =
+                typeof heard === 'string' ? { text: heard, words: [] } : heard;
+
+            const graded = scoreAttempt(currentItem, recognition.text, toIpa);
             const bar = session.stage.baseThreshold + session.cleared * THRESHOLD_STEP;
             const passed = graded.score >= bar;
-            const attempt: Attempt = { ...graded, threshold: bar, passed };
+            const verdict = judgeAttempt({
+                heard: recognition.text,
+                passed,
+                speech: recognition.speech,
+                words: recognition.words,
+            });
+            const attempt: Attempt = {
+                ...graded,
+                threshold: bar,
+                passed,
+                words: recognition.words,
+                verdict,
+            };
+
+            setLastAttempt(attempt);
+
+            // An attempt we cannot vouch for costs nothing and is offered
+            // again. Charging a life for the model's mistake is how a learner
+            // is taught to distrust the feedback.
+            if (!verdict.counts) {
+                setSession({ ...session, attempts: session.attempts });
+                return;
+            }
 
             const cleared = session.cleared + (passed ? 1 : 0);
             const strikes = session.strikes + (passed ? 0 : 1);
@@ -122,7 +185,6 @@ export function usePracticeSession(toIpa?: IpaResolver) {
                 setBests(readBests());
             }
 
-            setLastAttempt(attempt);
             setSession({
                 ...session,
                 cleared,

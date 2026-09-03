@@ -100,9 +100,12 @@ describe('createAsrClient', () => {
 
         client.load();
         worker.reply({ type: 'progress', ratio: 0.4 });
-        worker.reply({ type: 'ready' });
+        worker.reply({ type: 'ready', dtype: 'q8' });
 
         expect(seen.map(s => s.state)).toEqual(['idle', 'loading', 'loading', 'ready']);
+        // Which precision the browser accepted is worth knowing: ORT-web rejects
+        // builds ORT-node loads, so the worker walks a list.
+        expect(seen.at(-1)?.dtype).toBe('q8');
         expect(seen[2].progress).toBe(0.4);
         expect(worker.sent).toEqual([{ type: 'load' }]);
     });
@@ -112,7 +115,7 @@ describe('createAsrClient', () => {
         const client = createAsrClient(worker.spawn);
         client.load();
         client.load();
-        worker.reply({ type: 'ready' });
+        worker.reply({ type: 'ready', dtype: 'q8' });
         client.load();
         expect(worker.sent).toHaveLength(1);
     });
@@ -124,9 +127,23 @@ describe('createAsrClient', () => {
         const pending = client.transcribe(new Float32Array([0.1, 0.2, 0.3]));
         const request = worker.sent[0];
         expect(request.type).toBe('transcribe');
-        worker.reply({ type: 'result', id: (request as { id: number }).id, text: ' god morgen' });
+        worker.reply({
+            type: 'result',
+            id: (request as { id: number }).id,
+            text: ' god morgen',
+            words: [
+                { word: 'god', start: 0.1, end: 0.4 },
+                { word: 'morgen', start: 0.4, end: 0.9 },
+            ],
+        });
 
-        await expect(pending).resolves.toBe(' god morgen');
+        await expect(pending).resolves.toEqual({
+            text: ' god morgen',
+            words: [
+                { word: 'god', start: 0.1, end: 0.4 },
+                { word: 'morgen', start: 0.4, end: 0.9 },
+            ],
+        });
     });
 
     it('sends a copy, so the caller’s decoded audio is not detached', async () => {
@@ -152,10 +169,10 @@ describe('createAsrClient', () => {
         const ids = worker.sent.map(m => (m as { id: number }).id);
 
         worker.reply({ type: 'error', id: ids[0], message: 'decoder blew up' });
-        worker.reply({ type: 'result', id: ids[1], text: 'takk' });
+        worker.reply({ type: 'result', id: ids[1], text: 'takk', words: [] });
 
         await expect(first).rejects.toThrow('decoder blew up');
-        await expect(second).resolves.toBe('takk');
+        await expect(second).resolves.toEqual({ text: 'takk', words: [] });
     });
 
     it('fails everything outstanding when the model cannot load', async () => {

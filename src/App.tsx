@@ -9,7 +9,10 @@ import { usePracticeSession } from './hooks/usePracticeSession';
 import { useVoiceInput } from './hooks/useVoiceInput';
 import { useNorwegianVoices } from './hooks/useNorwegianVoices';
 import { useDialect } from './hooks/useDialect';
+import { useLearningProfile } from './hooks/useLearningProfile';
+import { weaknesses } from './utils/learningProfile';
 import { countVisit } from './utils/analytics';
+import type { Recognition } from './utils/asr';
 
 /**
  * Shown instead of the app when the device cannot run recognition at all.
@@ -38,6 +41,7 @@ function UnsupportedNotice() {
 
 export default function App() {
     const { dialect, setDialect, ready: dialectReady, toIpa, lookup } = useDialect();
+    const { profile, remember } = useLearningProfile();
 
     const {
         stage,
@@ -54,11 +58,14 @@ export default function App() {
         submit,
         next,
         quit,
-    } = usePracticeSession(toIpa);
+    } = usePracticeSession(toIpa, profile, word => lookup(word).accent);
 
     const [showConfetti, setShowConfetti] = useState(false);
 
-    const handleResult = useCallback((transcript: string) => submit(transcript), [submit]);
+    const handleResult = useCallback(
+        (recognition: Recognition) => submit(recognition),
+        [submit]
+    );
     const {
         supported,
         listening,
@@ -123,6 +130,7 @@ export default function App() {
                                         stage={stage}
                                         outcome={outcome}
                                         summary={summary}
+                                        profile={profile}
                                         onRetry={() => begin(stage)}
                                         onChangeStage={quit}
                                     />
@@ -151,6 +159,7 @@ export default function App() {
                                         onDialectChange={setDialect}
                                         dialectReady={dialectReady}
                                         lookup={lookup}
+                                        onRemember={remember}
                                         rate={rate}
                                         onRateChange={setRate}
                                         onListen={start}
@@ -161,7 +170,11 @@ export default function App() {
                                 </motion.div>
                             ) : (
                                 <motion.div key="stages" exit={{ opacity: 0, y: -12 }}>
-                                    <StageSelect bests={bests} onPick={begin} />
+                                    <StageSelect
+                                        bests={bests}
+                                        canDrillWeaknesses={weaknesses(profile).length > 0}
+                                        onPick={begin}
+                                    />
                                 </motion.div>
                             )}
                         </AnimatePresence>

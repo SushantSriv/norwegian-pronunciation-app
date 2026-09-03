@@ -27,6 +27,8 @@ your attempt, extracts the pitch contour, and draws it.
 | 🎙️ **On-device recognition** | A quantized Whisper model runs inside the page itself. Every word is aligned and scored, so a dropped or inserted word does not throw off everything after it. |
 | 🔤 **Phoneme feedback** | Each missed word is broken into IPA sounds, with a plain-language explanation of the target sound and what you actually said. |
 | 📈 **Melody scoring** | Your pitch contour, normalised to semitones and aligned to the *expected* shape for that word's tonelag by dynamic time warping — so a correctly shaped but unhurried delivery scores as correct. Flat delivery scores zero, by construction. |
+| 🎵 **Which tonelag you actually said** | Not just a mark out of 100. The chart names the accent your delivery fits: *"that came out as Tonelag 1, but this word takes Tonelag 2"*. It refuses to guess — a flat attempt sits equidistant from both shapes, so it says nothing rather than something untrue. |
+| 👯 **Tone twins** | 106 words in the corpus are two different words that only the melody separates — `huset` the house against `huset` housed, `avtale` the noun against the verb. When you get one, the app says so and names both. |
 | 🗣️ **Dialects** | Østnorsk, Vest-/sørvestnorsk or Trøndersk/nordnorsk. The transcription under every phrase updates live, so the choice is visible rather than buried in error feedback. |
 | 🎧 **Listen back** | Play the reference and your own attempt back to back. Silence before and after you speak is trimmed automatically. |
 | 🎯 **Rising difficulty** | Clear 10 phrases before losing 3 lives. The pass bar climbs with every one you get right. |
@@ -38,10 +40,10 @@ property of the architecture rather than a promise.
 
 ## Requirements
 
-- **Any current browser with a microphone** — Firefox, Chrome, Edge and Safari, desktop or mobile. Speech recognition is a quantized Whisper model running in the page on WebAssembly, not a browser API, so there is no longer a browser that gets locked out.
+- **A desktop browser built on Chromium or WebKit** — Chrome, Edge, Safari. Firefox runs it too, but roughly eight times slower (see below), which is usable rather than pleasant. Recognition is a quantized Whisper model running in the page on WebAssembly rather than a browser API, so nothing is locked out by policy — but "not locked out" is not the same as "measured", and only what has been measured is claimed here.
 - **About 82 MB on first use**, downloaded once and then cached: a quantized whisper-base (76 MB) plus the ONNX Runtime it runs on (5.7 MB gzipped). After that recognition works with the network off. The rest of the app is ~1.9 MB.
 - **A Norwegian text-to-speech voice** for the reference audio. Most systems have one; the app tells you how to add one if not.
-- A second or two of thinking time per attempt while the model transcribes, more on an older phone. That is the cost of not sending your voice anywhere.
+- **Roughly 2.3x the length of what you said**, while the model transcribes: a two-second phrase comes back in about four and a half seconds on a desktop Chromium, five and a half on WebKit. Longer on an older or smaller device. That is the cost of not sending your voice anywhere.
 
 ## Install it
 
@@ -54,7 +56,7 @@ once the model has been fetched once.
 ```bash
 npm install
 npm run dev        # http://localhost:5173
-npm test           # 167 unit tests
+npm test           # 184 unit tests
 npm run build      # production build
 ```
 
@@ -114,6 +116,21 @@ the pitch analysis never leave the device.
    normalised to semitones against your own median pitch, and aligned to the target
    contour by **dynamic time warping** before being scored.
 
+The same alignment answers a second and more useful question: which of the two accents
+does this delivery actually fit? Scoring against one target needs an absolute threshold on
+stylised curves; asking which of two it is *closer* to is a relative decision, and relative
+decisions survive the noise of a phone microphone. It is also the question the language
+poses — `hender` is either hands or happens, and the melody is the entire difference — so
+you get "you said the hands one" rather than "41/100".
+
+Before any of that, two things the transcript gets to spell its own way are reconciled, so
+neither costs you a life. Whisper transcribes rather than dictates, so `fem` comes back as
+`5` while the corpus spells it out; number words and digits canonicalise to the same token,
+and a digit is given its pronunciation back before the phoneme comparison. And Norwegian
+compounds come back written apart as often as together — `skiftetøy` heard as `skifte tøy`
+— which alignment would charge as a substitution plus an insertion. Both are rejoined only
+towards words the phrase actually asked for, so neither can invent a match.
+
 Two normalisations are what make the melody score mean anything. Semitones
 (`ST = 12·log₂(F₀ / F₀ median)`) remove the speaker: a bass at 100 Hz and a soprano at
 200 Hz saying the same word share a shape and no frequencies at all. DTW removes the
@@ -123,11 +140,63 @@ which is what pitch accent actually is. The score is expressed against a flat ba
 so 0 means "no closer to the target than not trying" — the exact failure mode the chart
 exists to catch.
 
+### Measured, in real browsers
+
+`npm run bench:browser` drives the app's own worker and pitch code in Playwright
+and reports what it costs. On a desktop Windows machine, a 2-second clip:
+
+| engine | model load (cold) | transcribe | x real time | pitch analysis | JS heap |
+|---|---|---|---|---|---|
+| Chromium | 7.9 s | 4.64 s | 2.31 | 0.05 s | 10 MB |
+| WebKit | 9.2 s | 5.55 s | 2.82 | 0.04 s | not reported |
+| Firefox | 13.6 s | 47.05 s | 23.52 | 0.06 s | not reported |
+
+Pitch analysis is negligible everywhere — 40 to 60 ms for two seconds of audio —
+so the wait a learner feels is essentially all speech model.
+
+Chromium is the engine behind Chrome and Edge and WebKit the engine behind
+Safari, so those numbers transfer in kind — they are not the branded builds.
+**Chrome on Android and Safari on iOS are not covered at all**: they need real
+devices, and nothing here should be read as evidence about them.
+`bench/bench.html` is a plain page, so opening it through `npm run dev` on a
+phone produces the same table.
+
+#### The single biggest speed-up available
+
+Those numbers are without cross-origin isolation. With `Cross-Origin-Opener-Policy`
+and `Cross-Origin-Embedder-Policy` set, `SharedArrayBuffer` becomes available and
+ONNX Runtime can use more than one WASM thread:
+
+| engine | without isolation | with isolation |
+|---|---|---|
+| Chromium | 2.31x real time | **1.19x** |
+| Firefox | 23.52x real time | **9.16x** |
+
+Twice as fast in Chromium, nearly three times in Firefox, for two response
+headers. The dev server sets them (`credentialless`, so the model can still be
+fetched from the Hugging Face CDN, which sends no CORP header).
+
+**GitHub Pages cannot set response headers**, so the hosted build does not get
+this. The usual workaround is a service worker that re-serves responses with the
+headers attached; the app already registers one for offline support, so this is
+the obvious next piece of work rather than a research question.
+
+That benchmark earned its keep immediately. The quantized model did not load in
+any browser — a graph-rewrite failure in ONNX Runtime Web that does not happen
+under Node, where every earlier measurement had been taken — so recognition had
+shipped completely broken, invisibly to every test in this repository.
+
 **Known limits:** whisper-base is a small model and will mis-hear a learner sometimes,
 which shows up as a low score they did not earn. `scripts/bench-asr.mjs` measures exactly
 that against read Norwegian from google/fleurs, and the model was picked on those numbers
 rather than on size — `tiny` scored 79% word error rate against `base`'s 48%, which in a
-pronunciation app means failing attempts that were correct. The fallback G2P used outside the
+pronunciation app means failing attempts that were correct. Since it will mis-hear
+people, an attempt is judged before it is scored: when the recognised words account for
+less than 40% of the speech actually measured in the recording, the attempt is called
+uncertain, costs no life and is offered again. That check uses only evidence from the
+audio, never a guess from the transcript, because whether a wrong transcript means the
+model failed or the learner said something else is not decidable from text — and a
+heuristic that tried would excuse real mistakes. The fallback G2P used outside the
 lexicon is an approximation and will be wrong on loanwords. Pitch detection returns
 nothing rather than guessing on unvoiced or quiet frames. The melody target is drawn for
 single words only, since a phrase has one accent per word.

@@ -14,7 +14,16 @@ import {
     type AutomaticSpeechRecognitionPipeline,
     type ProgressInfo,
 } from '@huggingface/transformers';
-import { ASR_LANGUAGE, ASR_MODEL, type AsrRequest, type AsrResponse } from '../utils/asr';
+import {
+    ASR_DTYPES,
+    ASR_GRAPH_OPTIMIZATION,
+    ASR_LANGUAGE,
+    ASR_MODEL,
+    type AsrRequest,
+    type AsrResponse,
+    type ModelChoice,
+    type WordTiming,
+} from '../utils/asr';
 
 // The model is fetched from the Hugging Face CDN, not from our own origin;
 // looking locally first would just add a failing request per file.
@@ -44,33 +53,88 @@ function reportProgress(info: ProgressInfo) {
 
 let loading: Promise<AutomaticSpeechRecognitionPipeline> | null = null;
 
-function load(): Promise<AutomaticSpeechRecognitionPipeline> {
+/**
+ * Load the model, trying each precision until one works.
+ *
+ * A precision that loads under Node can fail in a browser (see ASR_DTYPES), so
+ * pinning one risks an app where recognition never starts. Each attempt is a
+ * fresh fetch, but only of the weights — everything already in the browser
+ * cache is reused, so a fallback costs a download rather than a restart.
+ */
+async function attemptLoad(
+    model: string,
+    dtypes: readonly string[],
+    graph?: string
+): Promise<AutomaticSpeechRecognitionPipeline> {
+    let last: unknown;
+
+    for (const dtype of dtypes) {
+        files.clear();
+        try {
+            const instance = await pipeline('automatic-speech-recognition', model, {
+                dtype: dtype as 'q8',
+                progress_callback: reportProgress,
+                // Skipping the extended optimizations is what makes the
+                // quantized build loadable at all; see ASR_GRAPH_OPTIMIZATION.
+                session_options: {
+                    graphOptimizationLevel: graph ?? ASR_GRAPH_OPTIMIZATION,
+                },
+            } as Parameters<typeof pipeline>[2]);
+            post({ type: 'ready', dtype });
+            return instance;
+        } catch (error) {
+            last = error;
+        }
+    }
+
+    throw last instanceof Error ? last : new Error('no usable model build');
+}
+
+function load(choice: ModelChoice = {}): Promise<AutomaticSpeechRecognitionPipeline> {
     if (loading) return loading;
 
-    loading = pipeline('automatic-speech-recognition', ASR_MODEL, {
-        // 8-bit weights. Quantization is not free — it costs `tiny` 14 points
-        // of word error rate — but it is a quarter of the download, and the
-        // answer to that cost was a bigger model rather than heavier weights.
-        dtype: 'q8',
-        progress_callback: reportProgress,
-    })
-        .then(instance => {
-            post({ type: 'ready' });
-            return instance;
-        })
-        .catch((error: unknown) => {
-            loading = null;
-            post({
-                type: 'failed',
-                message:
-                    error instanceof Error
-                        ? `The speech model could not be loaded (${error.message}).`
-                        : 'The speech model could not be loaded.',
-            });
-            throw error;
+    loading = attemptLoad(
+        choice.model ?? ASR_MODEL,
+        // An explicit choice is taken at its word: the benchmark asks for one
+        // precision at a time on purpose.
+        choice.dtype ? [choice.dtype] : ASR_DTYPES,
+        choice.graph
+    ).catch((error: unknown) => {
+        loading = null;
+        post({
+            type: 'failed',
+            message:
+                error instanceof Error
+                    ? `The speech model could not be loaded (${error.message}).`
+                    : 'The speech model could not be loaded.',
         });
+        throw error;
+    });
 
     return loading;
+}
+
+/**
+ * Pull the per-word spans out of a pipeline result.
+ *
+ * Defensive because `return_timestamps` is best-effort: a chunk can come back
+ * with a null start or end when the model could not place it, and one bad span
+ * must not cost the whole attempt its melody feedback.
+ */
+function wordTimings(result: unknown): WordTiming[] {
+    const chunks = (result as { chunks?: { text?: string; timestamp?: [number, number] }[] })
+        ?.chunks;
+    if (!Array.isArray(chunks)) return [];
+
+    const out: WordTiming[] = [];
+    for (const chunk of chunks) {
+        const word = chunk.text?.trim();
+        const [start, end] = chunk.timestamp ?? [];
+        if (!word || typeof start !== 'number' || typeof end !== 'number') continue;
+        if (!Number.isFinite(start) || !Number.isFinite(end) || end <= start) continue;
+        out.push({ word, start, end });
+    }
+    return out;
 }
 
 self.onmessage = async (event: MessageEvent<AsrRequest>) => {
@@ -78,7 +142,7 @@ self.onmessage = async (event: MessageEvent<AsrRequest>) => {
 
     if (message.type === 'load') {
         // Failure has already been reported through the 'failed' message.
-        await load().catch(() => undefined);
+        await load(message).catch(() => undefined);
         return;
     }
 
@@ -87,11 +151,21 @@ self.onmessage = async (event: MessageEvent<AsrRequest>) => {
         const output = await transcriber(message.audio, {
             language: ASR_LANGUAGE,
             task: 'transcribe',
+            // Per-word spans, so the melody of each word can be looked at
+            // separately. Whisper derives these from its own cross-attention,
+            // which is why they cost so little on top of the decode it is
+            // doing anyway.
+            return_timestamps: 'word',
         });
         // The pipeline returns one result for a single clip, but its type
         // allows a batch.
-        const text = Array.isArray(output) ? (output[0]?.text ?? '') : output.text;
-        post({ type: 'result', id: message.id, text });
+        const result = Array.isArray(output) ? output[0] : output;
+        post({
+            type: 'result',
+            id: message.id,
+            text: result?.text ?? '',
+            words: wordTimings(result),
+        });
     } catch (error) {
         post({
             type: 'error',

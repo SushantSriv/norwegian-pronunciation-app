@@ -11,6 +11,16 @@ export default defineConfig(({ command }) => ({
     // assets. Pre-bundling rewrites the URLs they use to find those at runtime,
     // so the dependency is left alone and served as published.
     optimizeDeps: { exclude: ['@huggingface/transformers'] },
+    // Cross-origin isolation unlocks SharedArrayBuffer, which is what lets ONNX
+    // Runtime use more than one WASM thread. 'credentialless' rather than
+    // 'require-corp' so the model can still be fetched from the Hugging Face
+    // CDN, which does not send a CORP header.
+    server: {
+        headers: {
+            'Cross-Origin-Opener-Policy': 'same-origin',
+            'Cross-Origin-Embedder-Policy': 'credentialless',
+        },
+    },
     worker: { format: 'es' as const },
     plugins: [
         react(),

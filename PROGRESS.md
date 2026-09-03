@@ -1,5 +1,117 @@
 # Progress & Goals
 
+## v2.6 — Word-by-word melody, recognition trust, and a learning record ✅
+
+### Fixed — and only findable in a browser
+- 🔴 **Recognition did not work in any browser at all.** whisper-base's q8 build
+  loads and transcribes perfectly under Node, and fails outright on ONNX Runtime
+  Web — `Missing required scale: model.decoder.embed_tokens.weight_merged_0_scale`
+  — in Chromium and WebKit alike. Nothing in this repository could have caught
+  it: the unit tests stub the worker, and the accuracy benchmark runs under Node
+  precisely so it can measure word error rate without a browser. It took running
+  the real worker in a real engine, which is what `bench/` now exists for.
+  The worker now walks q8 → int8 → uint8 → fp32 and keeps the first that loads,
+  because the same class of failure can hit an engine that cannot be tested from
+  here and a single pinned precision turns that into an app that silently does
+  nothing.
+
+### Added
+- ✅ **Melody, word by word.** Whisper's per-word timestamps
+  (`return_timestamps: 'word'`, about 0.3 s on a 2 s decode) make it possible to
+  say WHICH word's melody went wrong rather than only that one did. Each word is
+  judged on its own slice of the same contour, against the accent the lexicon
+  gives that word. Existing parts do the work: `alignWords` matches heard to
+  expected, `scoreMelody` and `classifyAccent` judge the slice.
+- ✅ **Feedback that is an instruction, not a mark.** Six diagnoses, each a
+  measurement of the two contours: flat, wrong accent, moving the opposite way,
+  peaking or dipping too early or too late, and the right shape too small.
+  Checked in that order — there is no point discussing peak timing with someone
+  who did not move their pitch. The score stays, in small print.
+- ✅ **Recognition uncertainty.** whisper-base is measured at 48% word error rate
+  on read Norwegian, so it mis-hears people; presenting that as a pronunciation
+  mistake teaches the learner to distrust every piece of feedback the app gives.
+  An attempt is now judged before it is scored, and one we cannot vouch for
+  costs no life and is offered again. The signals are strictly evidence from the
+  AUDIO — speech detected but nothing returned, or recognised words spanning
+  under 40% of the measured speech. It deliberately does not guess from the
+  transcript: whether a wrong transcript means the model failed or the learner
+  said something else is not decidable from text, and a heuristic that tried
+  would excuse real mistakes.
+- ✅ **A learning record**, in localStorage and nowhere else. Which sounds keep
+  coming out wrong (compared symbol by symbol, so one bad vowel does not blame
+  the consonants around it), which accent is not landing, which words are
+  slipping. Leitner scheduling at 0/1/3/7/16/35 days orders each run by
+  never-seen, then most overdue, then worst recent score.
+- ✅ **"Practice my weaknesses"**, a stage with no corpus of its own: the pool is
+  assembled from whichever phrases exercise the sound or accent the learner is
+  currently worst at, using their own IPA rather than hardcoded categories. It
+  stays hidden until there is enough evidence to name a weakness.
+
+### Privacy
+Unchanged and now load-bearing. The learning record is a JSON blob in this
+browser: no account, no sync, no server, no analytics. Recordings are never
+stored, only the scores derived from them, and clearing site data is a complete
+erase. There is nowhere for it to go, because nothing here can send it anywhere.
+
+### Verified
+tsc, eslint, vitest (229 tests, 45 new) and a production build on every commit.
+Word timestamps confirmed against Xenova/whisper-base on real Norwegian audio.
+
+Measured in real engines by `npm run bench:browser`, 2-second clip, desktop
+Windows:
+
+| engine | model load | transcribe | x real time | pitch | heap | mic |
+|---|---|---|---|---|---|---|
+| Chromium | 7.9 s | 4.64 s | 2.31 | 0.05 s | 10 MB | opens |
+| WebKit | 9.2 s | 5.55 s | 2.82 | 0.04 s | not reported | not testable headless |
+| Firefox | 13.6 s | 47.05 s | 23.52 | 0.06 s | not reported | not testable headless |
+
+Pitch analysis is negligible everywhere — 40-60 ms for two seconds of audio — so
+the wait a learner feels is essentially all speech model.
+
+Firefox works and is about eight times slower than Chromium. It took two runs to
+establish that: the first three attempts reported a hang, which turned out to be
+the benchmark's own microphone probe rather than the app — headless Firefox
+neither grants nor refuses getUserMedia, it simply never answers. The probe is
+now time-bounded, which is a lesson about harnesses rather than about Firefox.
+
+**Cross-origin isolation is the biggest speed-up available and is not shipped.**
+With COOP and COEP set, SharedArrayBuffer becomes available and ONNX Runtime can
+use more than one WASM thread:
+
+| engine | without | with |
+|---|---|---|
+| Chromium | 2.31x real time | **1.19x** |
+| Firefox | 23.52x real time | **9.16x** |
+
+The dev server now sets them (`credentialless`, so the Hugging Face CDN fetch
+still works). GitHub Pages cannot set response headers, so the hosted build does
+not benefit; a service worker that re-serves responses with the headers is the
+standard workaround, and the app already registers one.
+
+### Not verified
+- **Chrome on Android and Safari on iOS.** Playwright reaches Chromium, Firefox
+  and WebKit on this machine; the branded mobile browsers need real devices.
+  `bench/bench.html` is a plain page, so opening it through `npm run dev` on a
+  phone produces the same table — that is the way to close this gap.
+- The melody and profile panels have not been driven by hand in a browser; their
+  logic is pure and unit-tested, their rendering is not.
+
+### Left for next time
+- **Cross-origin isolation on GitHub Pages**, via the service worker already
+  present. Measured at roughly 2x in Chromium and 2.6x in Firefox — the largest
+  single improvement identified, and the only one that needs no new model.
+- **NbAiLab/nb-whisper-\*** remains the biggest accuracy win available and still
+  cannot be used as published: a split encoder/decoder ONNX export with no merged
+  decoder and no quantized weights.
+- Native reference recordings. Melody targets are one canonical curve per accent
+  because there is no corpus of native speakers to build an envelope from; that,
+  not a cleverer curve, is what would make pitch scoring more robust.
+- Scenario-based occupation tracks — short realistic exchanges rather than
+  vocabulary lists.
+
+---
+
 ## v2.5 — Compound decomposition, DTW melody scoring, on-device recognition ✅
 
 ### Added
