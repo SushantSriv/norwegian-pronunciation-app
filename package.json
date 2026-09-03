@@ -8,7 +8,9 @@
     "build": "tsc -b && vite build",
     "lint": "eslint .",
     "preview": "vite preview",
-    "test": "vitest run"
+    "test": "vitest run",
+    "bench:asr": "node scripts/bench-asr.mjs",
+    "bench:browser": "node scripts/bench-browser.mjs"
   },
   "dependencies": {
     "@huggingface/transformers": "^4.2.0",

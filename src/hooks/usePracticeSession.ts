@@ -2,6 +2,7 @@ import { useCallback, useMemo, useState } from 'react';
 import { scoreAttempt, type AttemptScore, type IpaResolver } from '../utils/scoring';
 import type { Recognition, WordTiming } from '../utils/asr';
 import { judgeAttempt, type AttemptVerdict } from '../utils/attemptVerdict';
+import { prioritise, type Profile } from '../utils/learningProfile';
 import { poolForStage, type Stage } from '../data/stages';
 import rawSentenceData from '../data/sentences.json';
 import occupationData from '../data/occupations.json';
@@ -79,7 +80,7 @@ function writeBest(stageId: string, cleared: number) {
  * @param toIpa How words become IPA for scoring. Defaults to the rule engine;
  * the app supplies a resolver backed by the NB Uttale lexicon.
  */
-export function usePracticeSession(toIpa?: IpaResolver) {
+export function usePracticeSession(toIpa?: IpaResolver, profile?: Profile) {
     const [session, setSession] = useState<SessionState | null>(null);
     const [bests, setBests] = useState<Record<string, number>>(readBests);
     /** The most recent graded attempt, shown as feedback before moving on. */
@@ -90,10 +91,15 @@ export function usePracticeSession(toIpa?: IpaResolver) {
         // A run needs ITEMS_TO_WIN passes plus room for up to MAX_STRIKES
         // misses, so draw enough that we never run dry mid-run.
         const needed = ITEMS_TO_WIN + MAX_STRIKES;
-        const queue = shuffle(pool).slice(0, Math.max(needed, Math.min(pool.length, needed)));
+        // Shuffle first so a run is never the same twice, then let the
+        // learner's own record pull the phrases they are due to revisit to the
+        // front. Without a profile this is just the shuffle it always was.
+        const shuffled = shuffle(pool);
+        const ordered = profile ? prioritise(profile, shuffled) : shuffled;
+        const queue = ordered.slice(0, Math.max(needed, Math.min(pool.length, needed)));
         setLastAttempt(null);
         setSession({ stage, queue, cursor: 0, cleared: 0, strikes: 0, streak: 0, bestStreak: 0, attempts: [], outcome: null });
-    }, []);
+    }, [profile]);
 
     const quit = useCallback(() => {
         setSession(null);

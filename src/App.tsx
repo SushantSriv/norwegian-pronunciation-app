@@ -9,6 +9,7 @@ import { usePracticeSession } from './hooks/usePracticeSession';
 import { useVoiceInput } from './hooks/useVoiceInput';
 import { useNorwegianVoices } from './hooks/useNorwegianVoices';
 import { useDialect } from './hooks/useDialect';
+import { useLearningProfile } from './hooks/useLearningProfile';
 import { countVisit } from './utils/analytics';
 import type { Recognition } from './utils/asr';
 
@@ -39,6 +40,7 @@ function UnsupportedNotice() {
 
 export default function App() {
     const { dialect, setDialect, ready: dialectReady, toIpa, lookup } = useDialect();
+    const { profile, remember } = useLearningProfile();
 
     const {
         stage,
@@ -55,7 +57,7 @@ export default function App() {
         submit,
         next,
         quit,
-    } = usePracticeSession(toIpa);
+    } = usePracticeSession(toIpa, profile);
 
     const [showConfetti, setShowConfetti] = useState(false);
 
@@ -127,6 +129,7 @@ export default function App() {
                                         stage={stage}
                                         outcome={outcome}
                                         summary={summary}
+                                        profile={profile}
                                         onRetry={() => begin(stage)}
                                         onChangeStage={quit}
                                     />
@@ -155,6 +158,7 @@ export default function App() {
                                         onDialectChange={setDialect}
                                         dialectReady={dialectReady}
                                         lookup={lookup}
+                                        onRemember={remember}
                                         rate={rate}
                                         onRateChange={setRate}
                                         onListen={start}

@@ -1,4 +1,4 @@
-import { useMemo } from 'react';
+import { useEffect, useMemo } from 'react';
 import { AnimatePresence, motion } from 'framer-motion';
 import { ITEMS_TO_WIN, MAX_STRIKES, type Attempt } from '../hooks/usePracticeSession';
 import type { Stage } from '../data/stages';
@@ -17,6 +17,7 @@ import type { AsrStatus } from '../utils/asr';
 import { POS_LABEL, toneTwin, type Pronunciation } from '../utils/pronunciationLexicon';
 import { useRecordingAnalysis } from '../hooks/useRecordingAnalysis';
 import { analysePhraseMelody } from '../utils/phraseMelody';
+import type { AttemptRecord } from '../utils/learningProfile';
 import { useSpokenPhrase } from '../hooks/useSpokenPhrase';
 
 interface Props {
@@ -45,6 +46,8 @@ interface Props {
     onDialectChange: (id: DialectId) => void;
     dialectReady: boolean;
     lookup: (word: string) => Pronunciation;
+    /** Fold a finished attempt into the learner's own record. */
+    onRemember: (attempt: object | null, record: AttemptRecord, ready: boolean) => void;
     onListen: () => void;
     onStopListening: () => void;
     onNext: () => void;
@@ -85,6 +88,7 @@ export function PracticeScreen({
     onDialectChange,
     dialectReady,
     lookup,
+    onRemember,
     onListen,
     onStopListening,
     onNext,
@@ -138,6 +142,30 @@ export function PracticeScreen({
         .map(w => lookup(w).ipa)
         .filter(Boolean)
         .join(' ');
+
+    // Fold the attempt into the learner's record once everything about it is
+    // known — the melody verdicts arrive after the transcript does, and an
+    // attempt is only worth writing down once.
+    useEffect(() => {
+        if (!lastAttempt) return;
+        onRemember(
+            lastAttempt,
+            {
+                score: lastAttempt,
+                melody: phraseMelody
+                    .filter(entry => entry.status === 'good' || entry.status === 'close' || entry.status === 'wrong')
+                    .map(entry => ({
+                        word: entry.word,
+                        accent: entry.expected,
+                        correct: entry.status !== 'wrong',
+                    })),
+                compoundWords: lastAttempt.expected
+                    .split(/\s+/)
+                    .filter(word => word && lookup(word).source === 'compound'),
+            },
+            !analysing
+        );
+    }, [lastAttempt, phraseMelody, analysing, lookup, onRemember]);
 
     return (
         <div className="glass w-full overflow-hidden rounded-3xl p-5 sm:p-7">

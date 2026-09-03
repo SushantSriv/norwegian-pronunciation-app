@@ -1,0 +1,43 @@
+<!doctype html>
+<html lang="en">
+    <head>
+        <meta charset="UTF-8" />
+        <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+        <title>Norsk uttale — browser benchmark</title>
+        <style>
+            body {
+                font: 14px/1.5 system-ui, sans-serif;
+                margin: 0;
+                padding: 24px;
+                background: #0b1120;
+                color: #e2e8f0;
+            }
+            h1 {
+                font-size: 18px;
+            }
+            pre {
+                background: #111827;
+                padding: 12px;
+                border-radius: 8px;
+                overflow-x: auto;
+                white-space: pre-wrap;
+            }
+            .row {
+                display: flex;
+                justify-content: space-between;
+                border-bottom: 1px solid #1f2937;
+                padding: 4px 0;
+            }
+            .pending {
+                color: #94a3b8;
+            }
+        </style>
+    </head>
+    <body>
+        <h1>Norsk uttale — browser benchmark</h1>
+        <p class="pending" id="status">Running…</p>
+        <div id="rows"></div>
+        <pre id="json"></pre>
+        <script type="module" src="./bench.ts"></script>
+    </body>
+</html>
