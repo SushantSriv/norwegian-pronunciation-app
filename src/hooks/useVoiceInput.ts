@@ -6,6 +6,7 @@ import {
     recognitionSupported,
     type AsrClient,
     type AsrStatus,
+    type Recognition,
 } from '../utils/asr';
 import { decodeForRecognition, RECOGNITION_RATE } from '../utils/audioDecode';
 import { findSpeechBounds } from '../utils/pitch';
@@ -45,7 +46,7 @@ const MIC_ERRORS: Record<string, string> = {
 };
 
 interface Options {
-    onResult: (transcript: string) => void;
+    onResult: (recognition: Recognition) => void;
 }
 
 export function useVoiceInput({ onResult }: Options) {
@@ -132,17 +133,22 @@ export function useVoiceInput({ onResult }: Options) {
             // Whisper does not return nothing when it hears nothing; it returns
             // whatever its language model finds likely. Checking for speech
             // first is cheaper and more honest than scoring a guess.
-            if (!findSpeechBounds(audio, RECOGNITION_RATE)) {
+            const speech = findSpeechBounds(audio, RECOGNITION_RATE);
+            if (!speech) {
                 setError('I did not catch anything — try speaking a little louder.');
                 return;
             }
 
-            const text = cleanTranscript(await client.transcribe(audio));
+            const recognition = await client.transcribe(audio);
+            const text = cleanTranscript(recognition.text);
             if (looksHallucinated(text)) {
                 setError('I did not catch anything — try speaking a little louder.');
                 return;
             }
-            onResultRef.current(text);
+            // The measured speech window goes up with the transcript: how much
+            // of it the model accounted for is what tells us whether to trust
+            // the result as pronunciation feedback.
+            onResultRef.current({ text, words: recognition.words, speech });
         } catch (cause) {
             setError(cause instanceof Error ? cause.message : 'Could not read that recording.');
         } finally {

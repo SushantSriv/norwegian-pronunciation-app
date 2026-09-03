@@ -38,10 +38,47 @@
  * ranking that carries over, not the absolute number. Even so, `base` will
  * mis-hear a learner sometimes, and that shows up as a score they did not earn.
  */
+import type { SpeechBounds } from './pitch';
+
 export const ASR_MODEL = 'Xenova/whisper-base';
 
 /** Whisper's language code for Norwegian Bokmål. */
 export const ASR_LANGUAGE = 'no';
+
+/**
+ * Where one word sits in the recording.
+ *
+ * Whisper can report these, and they cost about 0.3 s on top of a 2 s
+ * transcription. They are what makes per-word melody feedback possible at all:
+ * without them there is no way to say which stretch of the pitch contour
+ * belongs to which word, and the melody chart can only ever talk about a whole
+ * utterance at once.
+ *
+ * They are estimates, derived from the model's own attention rather than from
+ * measuring the signal, and they drift — most visibly at the start of a clip.
+ * Everything downstream treats them as approximate.
+ */
+export interface WordTiming {
+    word: string;
+    /** Seconds from the start of the recording. */
+    start: number;
+    end: number;
+}
+
+export interface Recognition {
+    text: string;
+    /** Per-word spans. Empty if the model declined to produce them. */
+    words: WordTiming[];
+    /**
+     * Where speech was actually found in the recording.
+     *
+     * Filled in by the recorder rather than the model — it is measured from the
+     * signal, which is exactly why it is worth having next to the model's
+     * output: comparing the two is how we tell "you said it wrong" apart from
+     * "I did not hear you properly". Undefined when nothing measured it.
+     */
+    speech?: SpeechBounds | null;
+}
 
 export type AsrRequest =
     | { type: 'load' }
@@ -51,7 +88,7 @@ export type AsrResponse =
     | { type: 'progress'; ratio: number }
     | { type: 'ready' }
     | { type: 'failed'; message: string }
-    | { type: 'result'; id: number; text: string }
+    | { type: 'result'; id: number; text: string; words: WordTiming[] }
     | { type: 'error'; id: number; message: string };
 
 export type AsrState = 'idle' | 'loading' | 'ready' | 'failed';
@@ -111,7 +148,7 @@ export interface AsrClient {
     /** Start fetching the model. Safe to call more than once. */
     load(): void;
     /** Transcribe 16 kHz mono samples. Rejects if the model failed to load. */
-    transcribe(audio: Float32Array): Promise<string>;
+    transcribe(audio: Float32Array): Promise<Recognition>;
     subscribe(listener: (status: AsrStatus) => void): () => void;
     status(): AsrStatus;
     dispose(): void;
@@ -141,7 +178,10 @@ export function createAsrClient(spawn: () => Worker = spawnWorker): AsrClient {
     let current: AsrStatus = { state: 'idle', progress: 0 };
 
     const listeners = new Set<(status: AsrStatus) => void>();
-    const pending = new Map<number, { resolve: (text: string) => void; reject: (e: Error) => void }>();
+    const pending = new Map<
+        number,
+        { resolve: (result: Recognition) => void; reject: (e: Error) => void }
+    >();
 
     const publish = (next: AsrStatus) => {
         current = next;
@@ -168,7 +208,7 @@ export function createAsrClient(spawn: () => Worker = spawnWorker): AsrClient {
                     pending.clear();
                     break;
                 case 'result':
-                    pending.get(message.id)?.resolve(message.text);
+                    pending.get(message.id)?.resolve({ text: message.text, words: message.words });
                     pending.delete(message.id);
                     break;
                 case 'error':
@@ -202,7 +242,7 @@ export function createAsrClient(spawn: () => Worker = spawnWorker): AsrClient {
             if (current.state === 'idle') {
                 publish({ state: 'loading', progress: 0 });
             }
-            return new Promise<string>((resolve, reject) => {
+            return new Promise<Recognition>((resolve, reject) => {
                 pending.set(id, { resolve, reject });
                 // A copy, so transferring the buffer cannot detach the caller's
                 // decoded audio out from under them.

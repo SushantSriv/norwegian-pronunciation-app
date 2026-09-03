@@ -10,6 +10,7 @@ import { useVoiceInput } from './hooks/useVoiceInput';
 import { useNorwegianVoices } from './hooks/useNorwegianVoices';
 import { useDialect } from './hooks/useDialect';
 import { countVisit } from './utils/analytics';
+import type { Recognition } from './utils/asr';
 
 /**
  * Shown instead of the app when the device cannot run recognition at all.
@@ -58,7 +59,10 @@ export default function App() {
 
     const [showConfetti, setShowConfetti] = useState(false);
 
-    const handleResult = useCallback((transcript: string) => submit(transcript), [submit]);
+    const handleResult = useCallback(
+        (recognition: Recognition) => submit(recognition),
+        [submit]
+    );
     const {
         supported,
         listening,

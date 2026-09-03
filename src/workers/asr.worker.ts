@@ -14,7 +14,13 @@ import {
     type AutomaticSpeechRecognitionPipeline,
     type ProgressInfo,
 } from '@huggingface/transformers';
-import { ASR_LANGUAGE, ASR_MODEL, type AsrRequest, type AsrResponse } from '../utils/asr';
+import {
+    ASR_LANGUAGE,
+    ASR_MODEL,
+    type AsrRequest,
+    type AsrResponse,
+    type WordTiming,
+} from '../utils/asr';
 
 // The model is fetched from the Hugging Face CDN, not from our own origin;
 // looking locally first would just add a failing request per file.
@@ -73,6 +79,29 @@ function load(): Promise<AutomaticSpeechRecognitionPipeline> {
     return loading;
 }
 
+/**
+ * Pull the per-word spans out of a pipeline result.
+ *
+ * Defensive because `return_timestamps` is best-effort: a chunk can come back
+ * with a null start or end when the model could not place it, and one bad span
+ * must not cost the whole attempt its melody feedback.
+ */
+function wordTimings(result: unknown): WordTiming[] {
+    const chunks = (result as { chunks?: { text?: string; timestamp?: [number, number] }[] })
+        ?.chunks;
+    if (!Array.isArray(chunks)) return [];
+
+    const out: WordTiming[] = [];
+    for (const chunk of chunks) {
+        const word = chunk.text?.trim();
+        const [start, end] = chunk.timestamp ?? [];
+        if (!word || typeof start !== 'number' || typeof end !== 'number') continue;
+        if (!Number.isFinite(start) || !Number.isFinite(end) || end <= start) continue;
+        out.push({ word, start, end });
+    }
+    return out;
+}
+
 self.onmessage = async (event: MessageEvent<AsrRequest>) => {
     const message = event.data;
 
@@ -87,11 +116,21 @@ self.onmessage = async (event: MessageEvent<AsrRequest>) => {
         const output = await transcriber(message.audio, {
             language: ASR_LANGUAGE,
             task: 'transcribe',
+            // Per-word spans, so the melody of each word can be looked at
+            // separately. Whisper derives these from its own cross-attention,
+            // which is why they cost so little on top of the decode it is
+            // doing anyway.
+            return_timestamps: 'word',
         });
         // The pipeline returns one result for a single clip, but its type
         // allows a batch.
-        const text = Array.isArray(output) ? (output[0]?.text ?? '') : output.text;
-        post({ type: 'result', id: message.id, text });
+        const result = Array.isArray(output) ? output[0] : output;
+        post({
+            type: 'result',
+            id: message.id,
+            text: result?.text ?? '',
+            words: wordTimings(result),
+        });
     } catch (error) {
         post({
             type: 'error',

@@ -1,3 +1,4 @@
+import { useMemo } from 'react';
 import { AnimatePresence, motion } from 'framer-motion';
 import { ITEMS_TO_WIN, MAX_STRIKES, type Attempt } from '../hooks/usePracticeSession';
 import type { Stage } from '../data/stages';
@@ -6,6 +7,7 @@ import { ScoreRing } from './ScoreRing';
 import { PhonemeBreakdown } from './PhonemeBreakdown';
 import { CompareAudio } from './CompareAudio';
 import { MelodyView } from './MelodyView';
+import { PhraseMelody } from './PhraseMelody';
 import { VoiceVisualizer } from './VoiceVisualizer';
 import { VoicePicker } from './VoicePicker';
 import { DialectPicker } from './DialectPicker';
@@ -14,6 +16,7 @@ import type { DialectId } from '../data/dialects';
 import type { AsrStatus } from '../utils/asr';
 import { POS_LABEL, toneTwin, type Pronunciation } from '../utils/pronunciationLexicon';
 import { useRecordingAnalysis } from '../hooks/useRecordingAnalysis';
+import { analysePhraseMelody } from '../utils/phraseMelody';
 import { useSpokenPhrase } from '../hooks/useSpokenPhrase';
 
 interface Props {
@@ -109,6 +112,23 @@ export function PracticeScreen({
     // Some spellings are two different words that only the melody separates.
     // Nothing demonstrates that tonelag carries meaning quite as well.
     const twin = soleWordEntry ? toneTwin(soleWordEntry) : null;
+
+    // Per-word melody for a phrase. Pitch accent is a property of a word, so a
+    // multi-word item deserves a verdict per word rather than one number for
+    // the lot — which is only possible now the speech model reports where each
+    // word sat in the recording.
+    const phraseMelody = useMemo(() => {
+        const contour = analysis?.contour;
+        if (!lastAttempt || attemptWords.length < 2 || !contour || !lastAttempt.words.length) {
+            return [];
+        }
+        return analysePhraseMelody({
+            expected: lastAttempt.expected,
+            words: lastAttempt.words,
+            contour,
+            accentFor: word => lookup(word).accent,
+        });
+    }, [lastAttempt, attemptWords.length, analysis, lookup]);
 
     // Dialect transcription of the whole phrase. Words the lexicon does not
     // carry fall back to the rule engine, which emits no stress marks, so the
@@ -302,6 +322,22 @@ export function PracticeScreen({
                         aria-live="polite"
                     >
                         <motion.div variants={revealStack} initial="hidden" animate="show" className="space-y-4">
+                            {/*
+                              An attempt the recogniser could not vouch for. It
+                              costs nothing and is offered again, because
+                              charging a life for the model's mistake teaches
+                              the learner to distrust the feedback.
+                            */}
+                            {!lastAttempt.verdict.counts && (
+                                <motion.div
+                                    variants={revealItem}
+                                    className="rounded-xl border border-amber-400/30 bg-amber-400/10 px-4 py-3 text-center text-sm text-amber-100"
+                                >
+                                    <span aria-hidden="true">⚠️ </span>
+                                    {lastAttempt.verdict.message}
+                                </motion.div>
+                            )}
+
                             {/* Verdict */}
                             <motion.div
                                 variants={revealItem}
@@ -382,6 +418,12 @@ export function PracticeScreen({
                                         {ACCENT_LABEL[soleWordEntry.accent]} and the{' '}
                                         {POS_LABEL[twin.pos ?? ''] ?? 'other'} takes{' '}
                                         {ACCENT_LABEL[twin.accent]}.
+                                    </div>
+                                )}
+
+                                {phraseMelody.length > 0 && (
+                                    <div className="mb-3">
+                                        <PhraseMelody melody={phraseMelody} />
                                     </div>
                                 )}
 
