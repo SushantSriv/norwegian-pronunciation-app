@@ -40,10 +40,10 @@ property of the architecture rather than a promise.
 
 ## Requirements
 
-- **Any current browser with a microphone** — Firefox, Chrome, Edge and Safari, desktop or mobile. Speech recognition is a quantized Whisper model running in the page on WebAssembly, not a browser API, so there is no longer a browser that gets locked out.
+- **A desktop browser built on Chromium or WebKit** — Chrome, Edge, Safari. Both engines are measured (see below). Recognition is a quantized Whisper model running in the page on WebAssembly rather than a browser API, so nothing is locked out by policy — but "not locked out" is not the same as "measured", and only what has been measured is claimed here.
 - **About 82 MB on first use**, downloaded once and then cached: a quantized whisper-base (76 MB) plus the ONNX Runtime it runs on (5.7 MB gzipped). After that recognition works with the network off. The rest of the app is ~1.9 MB.
 - **A Norwegian text-to-speech voice** for the reference audio. Most systems have one; the app tells you how to add one if not.
-- A second or two of thinking time per attempt while the model transcribes, more on an older phone. That is the cost of not sending your voice anywhere.
+- **Roughly 2.3x the length of what you said**, while the model transcribes: a two-second phrase comes back in about four and a half seconds on a desktop Chromium, five and a half on WebKit. Longer on an older or smaller device. That is the cost of not sending your voice anywhere.
 
 ## Install it
 
@@ -140,11 +140,40 @@ which is what pitch accent actually is. The score is expressed against a flat ba
 so 0 means "no closer to the target than not trying" — the exact failure mode the chart
 exists to catch.
 
+### Measured, in real browsers
+
+`npm run bench:browser` drives the app's own worker and pitch code in Playwright
+and reports what it costs. On a desktop Windows machine, a 2-second clip:
+
+| engine | model load (cold) | transcribe | x real time | pitch analysis | JS heap |
+|---|---|---|---|---|---|
+| Chromium | 7.9 s | 4.64 s | 2.31 | 0.05 s | 10 MB |
+| WebKit | 9.2 s | 5.55 s | 2.82 | 0.04 s | not reported |
+| Firefox | under investigation | | | | |
+
+Chromium is the engine behind Chrome and Edge and WebKit the engine behind
+Safari, so those numbers transfer in kind — they are not the branded builds.
+**Chrome on Android and Safari on iOS are not covered at all**: they need real
+devices, and nothing here should be read as evidence about them.
+`bench/bench.html` is a plain page, so opening it through `npm run dev` on a
+phone produces the same table.
+
+That benchmark earned its keep immediately. The quantized model did not load in
+any browser — a graph-rewrite failure in ONNX Runtime Web that does not happen
+under Node, where every earlier measurement had been taken — so recognition had
+shipped completely broken, invisibly to every test in this repository.
+
 **Known limits:** whisper-base is a small model and will mis-hear a learner sometimes,
 which shows up as a low score they did not earn. `scripts/bench-asr.mjs` measures exactly
 that against read Norwegian from google/fleurs, and the model was picked on those numbers
 rather than on size — `tiny` scored 79% word error rate against `base`'s 48%, which in a
-pronunciation app means failing attempts that were correct. The fallback G2P used outside the
+pronunciation app means failing attempts that were correct. Since it will mis-hear
+people, an attempt is judged before it is scored: when the recognised words account for
+less than 40% of the speech actually measured in the recording, the attempt is called
+uncertain, costs no life and is offered again. That check uses only evidence from the
+audio, never a guess from the transcript, because whether a wrong transcript means the
+model failed or the learner said something else is not decidable from text — and a
+heuristic that tried would excuse real mistakes. The fallback G2P used outside the
 lexicon is an approximation and will be wrong on loanwords. Pitch detection returns
 nothing rather than guessing on unvoiced or quiet frames. The melody target is drawn for
 single words only, since a phrase has one accent per word.

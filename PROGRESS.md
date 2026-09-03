@@ -56,7 +56,18 @@ erase. There is nowhere for it to go, because nothing here can send it anywhere.
 ### Verified
 tsc, eslint, vitest (229 tests, 45 new) and a production build on every commit.
 Word timestamps confirmed against Xenova/whisper-base on real Norwegian audio.
-Browser measurements below.
+
+Measured in real engines by `npm run bench:browser`, 2-second clip, desktop
+Windows:
+
+| engine | model load | transcribe | x real time | pitch | heap | mic |
+|---|---|---|---|---|---|---|
+| Chromium | 7.9 s | 4.64 s | 2.31 | 0.05 s | 10 MB | opens |
+| WebKit | 9.2 s | 5.55 s | 2.82 | 0.04 s | not reported | not testable headless |
+| Firefox | under investigation | | | | | |
+
+Pitch analysis is negligible in both engines — 40-50 ms for two seconds of
+audio — so the wait a learner feels is essentially all the speech model.
 
 ### Not verified
 - **Chrome on Android and Safari on iOS.** Playwright reaches Chromium, Firefox
