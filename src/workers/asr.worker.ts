@@ -15,10 +15,12 @@ import {
     type ProgressInfo,
 } from '@huggingface/transformers';
 import {
+    ASR_DTYPE,
     ASR_LANGUAGE,
     ASR_MODEL,
     type AsrRequest,
     type AsrResponse,
+    type ModelChoice,
     type WordTiming,
 } from '../utils/asr';
 
@@ -50,14 +52,14 @@ function reportProgress(info: ProgressInfo) {
 
 let loading: Promise<AutomaticSpeechRecognitionPipeline> | null = null;
 
-function load(): Promise<AutomaticSpeechRecognitionPipeline> {
+function load(choice: ModelChoice = {}): Promise<AutomaticSpeechRecognitionPipeline> {
     if (loading) return loading;
 
-    loading = pipeline('automatic-speech-recognition', ASR_MODEL, {
+    loading = pipeline('automatic-speech-recognition', choice.model ?? ASR_MODEL, {
         // 8-bit weights. Quantization is not free — it costs `tiny` 14 points
         // of word error rate — but it is a quarter of the download, and the
         // answer to that cost was a bigger model rather than heavier weights.
-        dtype: 'q8',
+        dtype: (choice.dtype ?? ASR_DTYPE) as 'q8',
         progress_callback: reportProgress,
     })
         .then(instance => {
@@ -107,7 +109,7 @@ self.onmessage = async (event: MessageEvent<AsrRequest>) => {
 
     if (message.type === 'load') {
         // Failure has already been reported through the 'failed' message.
-        await load().catch(() => undefined);
+        await load(message).catch(() => undefined);
         return;
     }
 

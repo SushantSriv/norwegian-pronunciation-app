@@ -43,6 +43,9 @@ import type { SpeechBounds } from './pitch';
 export const ASR_MODEL = 'Xenova/whisper-base';
 
 /** Whisper's language code for Norwegian Bokmål. */
+/** Weight precision. Verified to load on onnxruntime-web; see the note above. */
+export const ASR_DTYPE = 'q8';
+
 export const ASR_LANGUAGE = 'no';
 
 /**
@@ -80,8 +83,14 @@ export interface Recognition {
     speech?: SpeechBounds | null;
 }
 
+/** Overrides for the benchmark harness; production uses the constants above. */
+export interface ModelChoice {
+    model?: string;
+    dtype?: string;
+}
+
 export type AsrRequest =
-    | { type: 'load' }
+    | ({ type: 'load' } & ModelChoice)
     | { type: 'transcribe'; id: number; audio: Float32Array };
 
 export type AsrResponse =
@@ -146,7 +155,7 @@ export function looksHallucinated(text: string): boolean {
 
 export interface AsrClient {
     /** Start fetching the model. Safe to call more than once. */
-    load(): void;
+    load(choice?: ModelChoice): void;
     /** Transcribe 16 kHz mono samples. Rejects if the model failed to load. */
     transcribe(audio: Float32Array): Promise<Recognition>;
     subscribe(listener: (status: AsrStatus) => void): () => void;
@@ -227,10 +236,10 @@ export function createAsrClient(spawn: () => Worker = spawnWorker): AsrClient {
     }
 
     return {
-        load() {
+        load(choice) {
             if (current.state === 'ready' || current.state === 'loading') return;
             publish({ state: 'loading', progress: 0 });
-            ensureWorker().postMessage({ type: 'load' } satisfies AsrRequest);
+            ensureWorker().postMessage({ type: 'load', ...choice } satisfies AsrRequest);
         },
 
         transcribe(audio) {

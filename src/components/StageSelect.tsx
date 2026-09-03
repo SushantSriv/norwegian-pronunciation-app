@@ -1,11 +1,17 @@
 import { useState } from 'react';
 import { motion } from 'framer-motion';
 import { AboutDialog } from './AboutDialog';
-import { stagesInTrack, type Stage, type Track } from '../data/stages';
+import { stagesInTrack, WEAKNESS_STAGE, type Stage, type Track } from '../data/stages';
 import { ITEMS_TO_WIN, MAX_STRIKES } from '../hooks/usePracticeSession';
 
 interface Props {
     bests: Record<string, number>;
+    /**
+     * Whether the adaptive drill has anything to drill. It stays hidden until
+     * the learner's record names a weakness, because a drill for a problem you
+     * may not have is worse than no drill.
+     */
+    canDrillWeaknesses: boolean;
     onPick: (stage: Stage) => void;
 }
 
@@ -26,6 +32,7 @@ const card = {
 
 /** The picker is split so workplace language is findable, not buried. */
 const SECTIONS: { track: Track; title: string; subtitle: string }[] = [
+    { track: 'weakness', title: 'For deg', subtitle: 'built from your own attempts' },
     { track: 'general', title: 'Generelt', subtitle: 'everyday Norwegian, A1 to B2' },
     { track: 'occupation', title: 'Yrkesnorsk', subtitle: 'language for your line of work' },
 ];
@@ -40,7 +47,14 @@ const fadeUp = {
     show: { opacity: 1, y: 0, transition: { type: 'spring' as const, stiffness: 200, damping: 22 } },
 };
 
-export function StageSelect({ bests, onPick }: Props) {
+export function StageSelect({ bests, canDrillWeaknesses, onPick }: Props) {
+    const stagesFor = (track: Track): Stage[] =>
+        track === 'weakness'
+            ? canDrillWeaknesses
+                ? [WEAKNESS_STAGE]
+                : []
+            : stagesInTrack(track);
+
     const [aboutOpen, setAboutOpen] = useState(false);
     return (
         <motion.div initial="hidden" animate="show" variants={container} className="w-full">
@@ -75,7 +89,7 @@ export function StageSelect({ bests, onPick }: Props) {
                 </p>
             </motion.header>
 
-            {SECTIONS.map(section => (
+            {SECTIONS.filter(section => stagesFor(section.track).length > 0).map(section => (
                 <motion.section
                     key={section.track}
                     variants={sectionStagger}
@@ -89,7 +103,7 @@ export function StageSelect({ bests, onPick }: Props) {
                     </motion.div>
 
                     <div className="grid auto-rows-fr gap-4 sm:grid-cols-2 lg:grid-cols-3">
-                        {stagesInTrack(section.track).map(stage => {
+                        {stagesFor(section.track).map(stage => {
                             const best = bests[stage.id] ?? 0;
                             const mastered = best >= ITEMS_TO_WIN;
 

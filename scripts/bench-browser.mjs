@@ -32,6 +32,14 @@ const ENGINES = flag('engines', 'chromium,firefox,webkit').split(',').filter(Boo
 const PORT = Number(flag('port', 5199));
 /** The model download is the slow part, and it is paid once per engine. */
 const TIMEOUT_MS = Number(flag('timeout', 300_000));
+/** Candidate builds to try, as model:dtype pairs. Empty means the app default. */
+const VARIANTS = (flag('variants', '') || '')
+    .split(',')
+    .filter(Boolean)
+    .map(pair => {
+        const [model, dtype] = pair.split(':');
+        return { model, dtype };
+    });
 
 const { chromium, firefox, webkit } = await import('playwright');
 const LAUNCHERS = { chromium, firefox, webkit };
@@ -80,14 +88,17 @@ for (let i = 0; i < 60; i++) {
 
 // ---- run ------------------------------------------------------------------
 const results = [];
-for (const engine of ENGINES) {
+const RUNS = VARIANTS.length ? VARIANTS : [{}];
+
+for (const engine of ENGINES) for (const variant of RUNS) {
     const launcher = LAUNCHERS[engine];
     if (!launcher) {
         console.log(`${engine}: unknown engine, skipped`);
         continue;
     }
 
-    process.stdout.write(`${engine}: `);
+    const label = variant.model ? `${engine} ${variant.model}:${variant.dtype}` : engine;
+    process.stdout.write(`${label}: `);
     let browser;
     try {
         browser = await launcher.launch({
@@ -104,10 +115,13 @@ for (const engine of ENGINES) {
         const page = await context.newPage();
         page.on('pageerror', error => console.log(`\n  page error: ${error.message}`));
 
-        await page.goto(`${base}/bench/bench.html`, { waitUntil: 'load' });
+        const query = variant.model
+            ? `?model=${encodeURIComponent(variant.model)}&dtype=${encodeURIComponent(variant.dtype)}`
+            : '';
+        await page.goto(`${base}/bench/bench.html${query}`, { waitUntil: 'load' });
         await page.waitForFunction(() => '__BENCH__' in window, null, { timeout: TIMEOUT_MS });
         const result = await page.evaluate(() => window.__BENCH__);
-        results.push({ engine, ...result });
+        results.push({ engine: label, ...result });
         console.log('done');
     } catch (error) {
         results.push({ engine, error: error.message.split('\n')[0] });
@@ -125,7 +139,7 @@ const cell = (value, unit = '') =>
 
 console.log('\n=== BROWSER BENCHMARK ===');
 console.log(
-    'engine'.padEnd(11) +
+    'engine'.padEnd(34) +
         'load'.padStart(9) +
         'transcribe'.padStart(12) +
         'xRT'.padStart(7) +
@@ -136,11 +150,11 @@ console.log(
 );
 for (const row of results) {
     if (row.error) {
-        console.log(`${row.engine.padEnd(11)}  FAILED — ${row.error}`);
+        console.log(`${row.engine.padEnd(34)}  FAILED — ${row.error}`);
         continue;
     }
     console.log(
-        row.engine.padEnd(11) +
+        row.engine.padEnd(34) +
             cell(row.modelLoadSeconds, 's').padStart(9) +
             cell(row.transcribeSeconds?.at(-1), 's').padStart(12) +
             cell(row.realtimeFactor).padStart(7) +

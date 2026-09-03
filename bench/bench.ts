@@ -122,6 +122,15 @@ async function run(): Promise<BenchResult> {
         }
     }
 
+    // Model and precision can be overridden from the query string, which is how
+    // candidate builds get tried in a real engine rather than guessed at.
+    const params = new URLSearchParams(location.search);
+    const choice = {
+        model: params.get('model') ?? undefined,
+        dtype: params.get('dtype') ?? undefined,
+    };
+    result.notes.push(`model=${choice.model ?? 'default'} dtype=${choice.dtype ?? 'default'}`);
+
     const client = createAsrClient();
     let lastStatus: AsrStatus = { state: 'idle', progress: 0 };
     client.subscribe(status => {
@@ -132,7 +141,7 @@ async function run(): Promise<BenchResult> {
     try {
         // The first transcription includes the load; timing it separately means
         // waiting for readiness first.
-        client.load();
+        client.load(choice);
         await new Promise<void>((resolve, reject) => {
             const timer = setInterval(() => {
                 if (lastStatus.state === 'ready') {
