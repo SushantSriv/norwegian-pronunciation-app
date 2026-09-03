@@ -75,6 +75,7 @@ export default function App() {
         recordingAvailable,
         analyserRef,
         model,
+        retryModel,
         start,
         stop,
     } = useVoiceInput({ onResult: handleResult });
@@ -147,6 +148,7 @@ export default function App() {
                                         listening={listening}
                                         transcribing={transcribing}
                                         model={model}
+                                        onRetryModel={retryModel}
                                         speechError={error}
                                         lastAttempt={lastAttempt}
                                         recordingUrl={recordingUrl}

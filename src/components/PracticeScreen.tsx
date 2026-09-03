@@ -32,6 +32,8 @@ interface Props {
     transcribing: boolean;
     /** Download/readiness of the on-device speech model. */
     model: AsrStatus;
+    /** Throw the worker away and fetch the model again. */
+    onRetryModel: () => void;
     speechError: string | null;
     lastAttempt: Attempt | null;
     recordingUrl: string | null;
@@ -74,6 +76,7 @@ export function PracticeScreen({
     listening,
     transcribing,
     model,
+    onRetryModel,
     speechError,
     lastAttempt,
     recordingUrl,
@@ -546,6 +549,21 @@ export function PracticeScreen({
                             ) : (
                                 <p className="text-sm text-white/45">Tap the mic, then say the phrase</p>
                             )}
+                            {model.state === 'failed' && (
+                                <div className="mt-2">
+                                    <p className="text-sm leading-relaxed text-amber-300">
+                                        The speech model did not load. If the app was updated recently,
+                                        reloading the page usually settles it.
+                                    </p>
+                                    <button
+                                        onClick={onRetryModel}
+                                        className="mt-2 rounded-lg border border-white/20 px-3 py-1.5 text-xs font-semibold text-white/80 transition hover:border-white/40 hover:bg-white/10 hover:text-white"
+                                    >
+                                        Try loading it again
+                                    </button>
+                                </div>
+                            )}
+
                             <SpeechTrouble error={speechError ?? (model.state === 'failed' ? model.error ?? null : null)} />
                         </div>
                     </motion.div>

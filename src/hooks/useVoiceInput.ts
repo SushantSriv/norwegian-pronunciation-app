@@ -58,6 +58,16 @@ export function useVoiceInput({ onResult }: Options) {
     const [recordingUrl, setRecordingUrl] = useState<string | null>(null);
     const [recordingAvailable, setRecordingAvailable] = useState(true);
     const [model, setModel] = useState<AsrStatus>({ state: 'idle', progress: 0 });
+    /**
+     * Bumped to tear the worker down and start over.
+     *
+     * A model that fails to load used to be the end of the session: the message
+     * said what went wrong and offered nothing to do about it. Most causes are
+     * transient — a dropped connection mid-download, a stale service worker
+     * still serving yesterday's bundle after a deploy — and all of them are
+     * fixed by trying again with a fresh worker.
+     */
+    const [reloadKey, setReloadKey] = useState(0);
 
     const clientRef = useRef<AsrClient | null>(null);
     const mediaRecorderRef = useRef<MediaRecorder | null>(null);
@@ -88,7 +98,14 @@ export function useVoiceInput({ onResult }: Options) {
             client.dispose();
             clientRef.current = null;
         };
-    }, [supported]);
+    }, [supported, reloadKey]);
+
+    /** Throw the worker away and fetch the model again from scratch. */
+    const retryModel = useCallback(() => {
+        setError(null);
+        setModel({ state: 'idle', progress: 0 });
+        setReloadKey(key => key + 1);
+    }, []);
 
     // Release the last object URL when the hook goes away.
     useEffect(
@@ -265,6 +282,7 @@ export function useVoiceInput({ onResult }: Options) {
         recordingAvailable,
         analyserRef,
         model,
+        retryModel,
         start,
         stop,
     };
