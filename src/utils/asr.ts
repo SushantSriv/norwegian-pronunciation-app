@@ -43,8 +43,30 @@ import type { SpeechBounds } from './pitch';
 export const ASR_MODEL = 'Xenova/whisper-base';
 
 /** Whisper's language code for Norwegian Bokmål. */
-/** Weight precision. Verified to load on onnxruntime-web; see the note above. */
-export const ASR_DTYPE = 'q8';
+/**
+ * Weight precisions to try, in order, keeping the first that loads.
+ *
+ * ONNX Runtime Web is not ONNX Runtime Node, and the difference is not
+ * academic: whisper-base's q8 build loads and transcribes perfectly under Node
+ * and fails outright in a browser —
+ *
+ *   Can't create a session. qdq_actions.cc:137 TransposeDQWeightsForMatMulNBits
+ *   Missing required scale: model.decoder.embed_tokens.weight_merged_0_scale
+ *
+ * — in Chromium and WebKit alike. Recognition simply never started. That was
+ * invisible to every test in this repository and to the Node benchmark, and
+ * only turned up when the model was run in an actual browser.
+ *
+ * The lesson generalises past the one build: the same class of failure can hit
+ * an engine that cannot be tested from here, and a single pinned precision
+ * turns it into an app that does nothing. So the worker walks this list instead
+ * and reports which one it settled on. Ordered cheapest-first, since a working
+ * small download beats a working large one.
+ */
+export const ASR_DTYPES = ['q8', 'int8', 'uint8', 'fp32'] as const;
+
+/** The precision tried first; the rest are fallbacks. */
+export const ASR_DTYPE = ASR_DTYPES[0];
 
 export const ASR_LANGUAGE = 'no';
 
@@ -95,7 +117,7 @@ export type AsrRequest =
 
 export type AsrResponse =
     | { type: 'progress'; ratio: number }
-    | { type: 'ready' }
+    | { type: 'ready'; dtype: string }
     | { type: 'failed'; message: string }
     | { type: 'result'; id: number; text: string; words: WordTiming[] }
     | { type: 'error'; id: number; message: string };
@@ -107,6 +129,8 @@ export interface AsrStatus {
     /** Download progress, 0 to 1, while `state` is 'loading'. */
     progress: number;
     error?: string;
+    /** Which weight precision the browser accepted, once it is loaded. */
+    dtype?: string;
 }
 
 /**
@@ -208,7 +232,7 @@ export function createAsrClient(spawn: () => Worker = spawnWorker): AsrClient {
                     publish({ state: 'loading', progress: message.ratio });
                     break;
                 case 'ready':
-                    publish({ state: 'ready', progress: 1 });
+                    publish({ state: 'ready', progress: 1, dtype: message.dtype });
                     break;
                 case 'failed':
                     publish({ state: 'failed', progress: 0, error: message.message });

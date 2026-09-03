@@ -100,9 +100,12 @@ describe('createAsrClient', () => {
 
         client.load();
         worker.reply({ type: 'progress', ratio: 0.4 });
-        worker.reply({ type: 'ready' });
+        worker.reply({ type: 'ready', dtype: 'q8' });
 
         expect(seen.map(s => s.state)).toEqual(['idle', 'loading', 'loading', 'ready']);
+        // Which precision the browser accepted is worth knowing: ORT-web rejects
+        // builds ORT-node loads, so the worker walks a list.
+        expect(seen.at(-1)?.dtype).toBe('q8');
         expect(seen[2].progress).toBe(0.4);
         expect(worker.sent).toEqual([{ type: 'load' }]);
     });
@@ -112,7 +115,7 @@ describe('createAsrClient', () => {
         const client = createAsrClient(worker.spawn);
         client.load();
         client.load();
-        worker.reply({ type: 'ready' });
+        worker.reply({ type: 'ready', dtype: 'q8' });
         client.load();
         expect(worker.sent).toHaveLength(1);
     });

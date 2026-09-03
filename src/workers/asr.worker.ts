@@ -15,7 +15,7 @@ import {
     type ProgressInfo,
 } from '@huggingface/transformers';
 import {
-    ASR_DTYPE,
+    ASR_DTYPES,
     ASR_LANGUAGE,
     ASR_MODEL,
     type AsrRequest,
@@ -52,31 +52,56 @@ function reportProgress(info: ProgressInfo) {
 
 let loading: Promise<AutomaticSpeechRecognitionPipeline> | null = null;
 
+/**
+ * Load the model, trying each precision until one works.
+ *
+ * A precision that loads under Node can fail in a browser (see ASR_DTYPES), so
+ * pinning one risks an app where recognition never starts. Each attempt is a
+ * fresh fetch, but only of the weights — everything already in the browser
+ * cache is reused, so a fallback costs a download rather than a restart.
+ */
+async function attemptLoad(
+    model: string,
+    dtypes: readonly string[]
+): Promise<AutomaticSpeechRecognitionPipeline> {
+    let last: unknown;
+
+    for (const dtype of dtypes) {
+        files.clear();
+        try {
+            const instance = await pipeline('automatic-speech-recognition', model, {
+                dtype: dtype as 'q8',
+                progress_callback: reportProgress,
+            });
+            post({ type: 'ready', dtype });
+            return instance;
+        } catch (error) {
+            last = error;
+        }
+    }
+
+    throw last instanceof Error ? last : new Error('no usable model build');
+}
+
 function load(choice: ModelChoice = {}): Promise<AutomaticSpeechRecognitionPipeline> {
     if (loading) return loading;
 
-    loading = pipeline('automatic-speech-recognition', choice.model ?? ASR_MODEL, {
-        // 8-bit weights. Quantization is not free — it costs `tiny` 14 points
-        // of word error rate — but it is a quarter of the download, and the
-        // answer to that cost was a bigger model rather than heavier weights.
-        dtype: (choice.dtype ?? ASR_DTYPE) as 'q8',
-        progress_callback: reportProgress,
-    })
-        .then(instance => {
-            post({ type: 'ready' });
-            return instance;
-        })
-        .catch((error: unknown) => {
-            loading = null;
-            post({
-                type: 'failed',
-                message:
-                    error instanceof Error
-                        ? `The speech model could not be loaded (${error.message}).`
-                        : 'The speech model could not be loaded.',
-            });
-            throw error;
+    loading = attemptLoad(
+        choice.model ?? ASR_MODEL,
+        // An explicit choice is taken at its word: the benchmark asks for one
+        // precision at a time on purpose.
+        choice.dtype ? [choice.dtype] : ASR_DTYPES
+    ).catch((error: unknown) => {
+        loading = null;
+        post({
+            type: 'failed',
+            message:
+                error instanceof Error
+                    ? `The speech model could not be loaded (${error.message}).`
+                    : 'The speech model could not be loaded.',
         });
+        throw error;
+    });
 
     return loading;
 }
