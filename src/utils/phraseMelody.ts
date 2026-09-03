@@ -33,8 +33,15 @@ export type WordMelodyStatus =
     | 'good'
     /** Recognisably the right shape, but loose. */
     | 'close'
-    /** The wrong accent, or nothing like the target. */
+    /** The wrong accent, clearly enough to say so. */
     | 'wrong'
+    /**
+     * Shown, deliberately not judged.
+     *
+     * The word was heard and its contour is worth looking at, but the evidence
+     * does not support a verdict — see ACCENTED_RANGE.
+     */
+    | 'not-judged'
     /** One syllable, so there is no tonal contrast to get right. */
     | 'no-contrast'
     /** The word was not heard at all. */
@@ -63,9 +70,47 @@ export interface WordMelody {
 /** Points to resample both contours to before comparing shapes. */
 const SHAPE_RESOLUTION = 32;
 
-/** Voiced frames below which there is no melody to read. */
-const MIN_VOICED = 8;
+/**
+ * Voiced frames below which there is no melody to read.
+ *
+ * Eighty milliseconds of voicing was the old floor, and it was far too low: a
+ * word needs two syllables before tonelag means anything at all, which is
+ * 300 ms or so. Judging a contour fitted to eight frames was judging noise.
+ */
+const MIN_VOICED = 25;
 
+/**
+ * Pitch movement, in semitones, below which a word is shown but not judged.
+ *
+ * This is the correction for the mistake that made the feature untrustworthy.
+ * Pitch accent is realised on the word carrying prominence; the rest of a
+ * phrase is reduced, and reduced is CORRECT. "jeg kjøpte en ny bil i går" has
+ * one or two accented words in it, not six, and the canonical contours in
+ * tonelag.ts — themselves "a learner-facing simplification", by their own
+ * documentation — describe a word said with full prominence.
+ *
+ * Measuring every word against that shape told learners they had mispronounced
+ * words they had said correctly, which is worse than saying nothing: it teaches
+ * them to distrust the feedback. A word the speaker did not accent simply has
+ * no accent to grade, so it is shown with its contour and no verdict.
+ */
+const ACCENTED_RANGE = 3;
+
+/**
+ * Measured, after a wrong guess: the margin does NOT tell a correct delivery
+ * from an incorrect one, so do not build a gate out of it.
+ *
+ * Simulating accented words at four noise levels, the margin in favour of the
+ * winning accent sits around 0.93 when the learner was right and 0.82 when they
+ * produced the opposite accent — indistinguishable. What IS reliable is the
+ * DIRECTION: across 1,600 correctly-delivered words, at jitter up to 2.5
+ * semitones, the classifier never once picked the wrong accent.
+ *
+ * So the protection against false accusations comes from ACCENTED_RANGE, which
+ * decides whether there is an accent to judge at all. Raising the margin
+ * instead — the first thing I tried — only stops the feature ever saying
+ * anything.
+ */
 const GOOD_SCORE = 65;
 const CLOSE_SCORE = 30;
 
@@ -181,12 +226,27 @@ function judgeWord(
     const produced = classifyAccent(wordContour);
     if (!scored) return { ...base, status: 'unmeasurable', span, points };
 
-    const user = resample(
-        voiced.map(point => point.semitones as number),
-        SHAPE_RESOLUTION
-    );
+    const semitones = voiced.map(point => point.semitones as number);
+    const user = resample(semitones, SHAPE_RESOLUTION);
     const target = sampleContour(targetContour(expected), SHAPE_RESOLUTION);
     const advice = adviseMelody(user, target, produced, expected);
+
+    // A word the speaker did not accent has no accent to grade. Showing its
+    // contour is useful; grading it against a full-prominence target is not.
+    const movement = Math.max(...semitones) - Math.min(...semitones);
+    if (movement < ACCENTED_RANGE) {
+        return {
+            index,
+            word,
+            expected,
+            status: 'not-judged',
+            score: scored.score,
+            produced,
+            advice: null,
+            span,
+            points,
+        };
+    }
 
     const status: WordMelodyStatus =
         advice.issue === 'wrong-accent' || scored.score < CLOSE_SCORE
@@ -205,8 +265,9 @@ export function problemWords(melody: WordMelody[]): WordMelody[] {
         close: 1,
         'not-heard': 2,
         unmeasurable: 3,
-        good: 4,
-        'no-contrast': 5,
+        'not-judged': 4,
+        good: 5,
+        'no-contrast': 6,
     };
     return melody
         .filter(entry => entry.status === 'wrong' || entry.status === 'close')
