@@ -27,6 +27,8 @@ your attempt, extracts the pitch contour, and draws it.
 | 🎙️ **On-device recognition** | A quantized Whisper model runs inside the page itself. Every word is aligned and scored, so a dropped or inserted word does not throw off everything after it. |
 | 🔤 **Phoneme feedback** | Each missed word is broken into IPA sounds, with a plain-language explanation of the target sound and what you actually said. |
 | 📈 **Melody scoring** | Your pitch contour, normalised to semitones and aligned to the *expected* shape for that word's tonelag by dynamic time warping — so a correctly shaped but unhurried delivery scores as correct. Flat delivery scores zero, by construction. |
+| 🎵 **Which tonelag you actually said** | Not just a mark out of 100. The chart names the accent your delivery fits: *"that came out as Tonelag 1, but this word takes Tonelag 2"*. It refuses to guess — a flat attempt sits equidistant from both shapes, so it says nothing rather than something untrue. |
+| 👯 **Tone twins** | 106 words in the corpus are two different words that only the melody separates — `huset` the house against `huset` housed, `avtale` the noun against the verb. When you get one, the app says so and names both. |
 | 🗣️ **Dialects** | Østnorsk, Vest-/sørvestnorsk or Trøndersk/nordnorsk. The transcription under every phrase updates live, so the choice is visible rather than buried in error feedback. |
 | 🎧 **Listen back** | Play the reference and your own attempt back to back. Silence before and after you speak is trimmed automatically. |
 | 🎯 **Rising difficulty** | Clear 10 phrases before losing 3 lives. The pass bar climbs with every one you get right. |
@@ -54,7 +56,7 @@ once the model has been fetched once.
 ```bash
 npm install
 npm run dev        # http://localhost:5173
-npm test           # 167 unit tests
+npm test           # 184 unit tests
 npm run build      # production build
 ```
 
@@ -113,6 +115,21 @@ the pitch analysis never leave the device.
 5. Your recording is separately run through autocorrelation **pitch detection**,
    normalised to semitones against your own median pitch, and aligned to the target
    contour by **dynamic time warping** before being scored.
+
+The same alignment answers a second and more useful question: which of the two accents
+does this delivery actually fit? Scoring against one target needs an absolute threshold on
+stylised curves; asking which of two it is *closer* to is a relative decision, and relative
+decisions survive the noise of a phone microphone. It is also the question the language
+poses — `hender` is either hands or happens, and the melody is the entire difference — so
+you get "you said the hands one" rather than "41/100".
+
+Before any of that, two things the transcript gets to spell its own way are reconciled, so
+neither costs you a life. Whisper transcribes rather than dictates, so `fem` comes back as
+`5` while the corpus spells it out; number words and digits canonicalise to the same token,
+and a digit is given its pronunciation back before the phoneme comparison. And Norwegian
+compounds come back written apart as often as together — `skiftetøy` heard as `skifte tøy`
+— which alignment would charge as a substitution plus an insertion. Both are rejoined only
+towards words the phrase actually asked for, so neither can invent a match.
 
 Two normalisations are what make the melody score mean anything. Semitones
 (`ST = 12·log₂(F₀ / F₀ median)`) remove the speaker: a bass at 100 Hz and a soprano at
