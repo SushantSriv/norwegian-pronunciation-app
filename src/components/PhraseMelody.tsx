@@ -14,6 +14,9 @@ const MARK: Record<WordMelodyStatus, { icon: string; tone: string; label: string
     good: { icon: '✓', tone: 'text-emerald-300', label: 'melody matched' },
     close: { icon: '~', tone: 'text-amber-300', label: 'melody roughly right' },
     wrong: { icon: '●', tone: 'text-rose-400', label: 'melody wrong' },
+    // Deliberately neutral. This word was not accented, which in connected
+    // speech is usually correct, so it must not read as a failure.
+    'not-judged': { icon: '·', tone: 'text-white/30', label: 'not accented, so not graded' },
     'not-heard': { icon: '·', tone: 'text-white/25', label: 'not heard' },
     unmeasurable: { icon: '·', tone: 'text-white/25', label: 'too little voiced sound' },
     'no-contrast': { icon: '', tone: 'text-white/30', label: 'one syllable, no tonelag' },
@@ -160,7 +163,9 @@ export function PhraseMelody({ melody }: Props) {
                             ? 'This word was not heard at all, so its melody could not be read.'
                             : open.status === 'unmeasurable'
                               ? 'Too little voiced sound in this word to read a melody from it.'
-                              : (open.advice?.text ?? ACCENT_HINT[open.expected])}
+                              : open.status === 'not-judged'
+                                ? 'You did not put the accent on this word, which in a phrase is usually right — so there is nothing to grade here. Its shape is drawn for comparison.'
+                                : (open.advice?.text ?? ACCENT_HINT[open.expected])}
                     </p>
                 </motion.div>
             )}

@@ -116,8 +116,11 @@ describe('analysePhraseMelody', () => {
     });
 
     it('judges each word against its own accent, on its own slice of audio', () => {
-        // "kjøpte" gets a clean accent 2; "bilen" gets a flat delivery.
-        const { contour, spans } = contourOfWords([shapeOf('ACCENT_2', 40), flat(40)]);
+        // "kjøpte" accent 2 said well; "bilen" accent 1 said well.
+        const { contour, spans } = contourOfWords([
+            shapeOf('ACCENT_2', 40),
+            shapeOf('ACCENT_1', 40),
+        ]);
         const melody = analysePhraseMelody({
             expected: 'kjøpte bilen',
             words: [
@@ -130,8 +133,46 @@ describe('analysePhraseMelody', () => {
 
         expect(melody[0].status).toBe('good');
         expect(melody[0].score).toBeGreaterThan(90);
-        expect(melody[1].status).toBe('wrong');
-        expect(melody[1].advice?.issue).toBe('flat');
+        expect(melody[1].status).toBe('good');
+    });
+
+    /**
+     * The bug that made this feature untrustworthy in real use.
+     *
+     * Pitch accent lands on the word carrying prominence; the rest of a phrase
+     * is reduced, and reduced is CORRECT. Grading every word against a
+     * full-prominence contour told learners they had mispronounced words they
+     * had said perfectly well, which is worse than saying nothing.
+     */
+    it('does not call an unaccented word wrong', () => {
+        const { contour, spans } = contourOfWords([shapeOf('ACCENT_2', 40), flat(40)]);
+        const melody = analysePhraseMelody({
+            expected: 'kjøpte bilen',
+            words: [
+                { word: 'kjøpte', start: spans[0][0], end: spans[0][1] },
+                { word: 'bilen', start: spans[1][0], end: spans[1][1] },
+            ],
+            contour,
+            accentFor,
+        });
+
+        expect(melody[1].status).toBe('not-judged');
+        expect(melody[1].advice).toBeNull();
+        // It is still shown, with its contour, for comparison.
+        expect(melody[1].points.length).toBeGreaterThan(0);
+    });
+
+    it('needs real separation before naming the wrong accent', () => {
+        // Accent 1 produced where accent 2 was wanted, with full prominence:
+        // this one IS worth telling the learner about.
+        const { contour, spans } = contourOfWords([shapeOf('ACCENT_1', 40)]);
+        const melody = analysePhraseMelody({
+            expected: 'kjøpte',
+            words: [{ word: 'kjøpte', start: spans[0][0], end: spans[0][1] }],
+            contour,
+            accentFor,
+        });
+        expect(melody[0].status).toBe('wrong');
     });
 
     it('says nothing about a monosyllable, which has no tonal contrast', () => {
@@ -159,7 +200,8 @@ describe('analysePhraseMelody', () => {
     });
 
     it('declines to judge a word with too little voiced sound', () => {
-        const { contour, spans } = contourOfWords([shapeOf('ACCENT_2', 4)]);
+        // Two syllables of tonelag needs 300 ms or so; ten frames is noise.
+        const { contour, spans } = contourOfWords([shapeOf('ACCENT_2', 10)]);
         const melody = analysePhraseMelody({
             expected: 'kjøpte',
             words: [{ word: 'kjøpte', start: spans[0][0], end: spans[0][1] }],
@@ -170,7 +212,11 @@ describe('analysePhraseMelody', () => {
     });
 
     it('surfaces the words that went wrong first', () => {
-        const { contour, spans } = contourOfWords([shapeOf('ACCENT_2', 40), flat(40)]);
+        // "kjøpte" wants accent 2 and got a prominent accent 1: a real miss.
+        const { contour, spans } = contourOfWords([
+            shapeOf('ACCENT_1', 40),
+            shapeOf('ACCENT_1', 40),
+        ]);
         const melody = analysePhraseMelody({
             expected: 'kjøpte bilen',
             words: [
@@ -180,7 +226,7 @@ describe('analysePhraseMelody', () => {
             contour,
             accentFor,
         });
-        expect(problemWords(melody).map(m => m.word)).toEqual(['bilen']);
+        expect(problemWords(melody).map(m => m.word)).toEqual(['kjøpte']);
     });
 });
 
