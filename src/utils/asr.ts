@@ -44,28 +44,46 @@ export const ASR_MODEL = 'Xenova/whisper-base';
 
 /** Whisper's language code for Norwegian Bokmål. */
 /**
- * Weight precisions to try, in order, keeping the first that loads.
+ * How hard ONNX Runtime is allowed to rewrite the graph before running it.
  *
- * ONNX Runtime Web is not ONNX Runtime Node, and the difference is not
- * academic: whisper-base's q8 build loads and transcribes perfectly under Node
- * and fails outright in a browser —
+ * This is not a tuning knob, it is the fix for an outright failure. At the
+ * default (`all`), whisper-base's q8 build refuses to load in a browser:
  *
  *   Can't create a session. qdq_actions.cc:137 TransposeDQWeightsForMatMulNBits
  *   Missing required scale: model.decoder.embed_tokens.weight_merged_0_scale
  *
- * — in Chromium and WebKit alike. Recognition simply never started. That was
- * invisible to every test in this repository and to the Node benchmark, and
- * only turned up when the model was run in an actual browser.
+ * The same build loads and transcribes perfectly under Node, which is where
+ * every earlier measurement of it was taken, so recognition shipped completely
+ * broken in browsers and nothing in this repository could have caught it — the
+ * unit tests stub the worker and the accuracy benchmark runs under Node on
+ * purpose. It took running the real worker in a real engine.
  *
- * The lesson generalises past the one build: the same class of failure can hit
- * an engine that cannot be tested from here, and a single pinned precision
- * turns it into an app that does nothing. So the worker walks this list instead
- * and reports which one it settled on. Ordered cheapest-first, since a working
- * small download beats a working large one.
+ * The failing transform is a QDQ (quantize-dequantize) rewrite that lives in
+ * the extended optimization level. Stopping at `basic` skips it, and measured
+ * in Chromium it is also the faster of the two options that work:
+ *
+ *   q8, graph 'basic'      loads in 8.1 s, 2.30x real time   <- this
+ *   q8, graph 'disabled'   loads in 7.6 s, 2.69x real time
+ *   q8, graph 'all'        does not load at all
  */
-export const ASR_DTYPES = ['q8', 'int8', 'uint8', 'fp32'] as const;
+export const ASR_GRAPH_OPTIMIZATION = 'basic';
 
-/** The precision tried first; the rest are fallbacks. */
+/**
+ * Weight precisions to try, in order, keeping the first that loads.
+ *
+ * q8 works everywhere it has been measured once the graph level above is set,
+ * and is by far the smaller download. fp32 is kept behind it as insurance: the
+ * loader failure above could plausibly hit an engine that cannot be tested from
+ * here — Chrome on Android and Safari on iOS above all — and a single pinned
+ * precision would turn that into an app that silently does nothing.
+ *
+ * Two entries, not four. A longer chain sounds safer and is not: each failed
+ * attempt is a whole model download, and walking q8/int8/uint8/fp32 took over
+ * ten minutes before giving up, which is indistinguishable from broken.
+ */
+export const ASR_DTYPES = ['q8', 'fp32'] as const;
+
+/** The precision tried first; the rest are insurance. */
 export const ASR_DTYPE = ASR_DTYPES[0];
 
 export const ASR_LANGUAGE = 'no';
@@ -109,6 +127,8 @@ export interface Recognition {
 export interface ModelChoice {
     model?: string;
     dtype?: string;
+    /** ONNX graph optimization level, for narrowing down loader failures. */
+    graph?: string;
 }
 
 export type AsrRequest =

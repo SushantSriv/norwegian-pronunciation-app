@@ -128,8 +128,11 @@ async function run(): Promise<BenchResult> {
     const choice = {
         model: params.get('model') ?? undefined,
         dtype: params.get('dtype') ?? undefined,
+        graph: params.get('graph') ?? undefined,
     };
-    result.notes.push(`model=${choice.model ?? 'default'} dtype=${choice.dtype ?? 'default'}`);
+    result.notes.push(
+        `model=${choice.model ?? 'default'} dtype=${choice.dtype ?? 'default'} graph=${choice.graph ?? 'default'}`
+    );
 
     const client = createAsrClient();
     let lastStatus: AsrStatus = { state: 'idle', progress: 0 };

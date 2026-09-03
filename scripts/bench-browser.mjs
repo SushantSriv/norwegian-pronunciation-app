@@ -37,8 +37,8 @@ const VARIANTS = (flag('variants', '') || '')
     .split(',')
     .filter(Boolean)
     .map(pair => {
-        const [model, dtype] = pair.split(':');
-        return { model, dtype };
+        const [model, dtype, graph] = pair.split(':');
+        return { model, dtype, graph };
     });
 
 const { chromium, firefox, webkit } = await import('playwright');
@@ -97,7 +97,9 @@ for (const engine of ENGINES) for (const variant of RUNS) {
         continue;
     }
 
-    const label = variant.model ? `${engine} ${variant.model}:${variant.dtype}` : engine;
+    const label = variant.model
+        ? `${engine} ${variant.model}:${variant.dtype}${variant.graph ? ':' + variant.graph : ''}`
+        : engine;
     process.stdout.write(`${label}: `);
     let browser;
     try {
@@ -116,7 +118,8 @@ for (const engine of ENGINES) for (const variant of RUNS) {
         page.on('pageerror', error => console.log(`\n  page error: ${error.message}`));
 
         const query = variant.model
-            ? `?model=${encodeURIComponent(variant.model)}&dtype=${encodeURIComponent(variant.dtype)}`
+            ? `?model=${encodeURIComponent(variant.model)}&dtype=${encodeURIComponent(variant.dtype)}` +
+              (variant.graph ? `&graph=${encodeURIComponent(variant.graph)}` : '')
             : '';
         await page.goto(`${base}/bench/bench.html${query}`, { waitUntil: 'load' });
         await page.waitForFunction(() => '__BENCH__' in window, null, { timeout: TIMEOUT_MS });

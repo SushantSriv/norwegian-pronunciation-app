@@ -16,6 +16,7 @@ import {
 } from '@huggingface/transformers';
 import {
     ASR_DTYPES,
+    ASR_GRAPH_OPTIMIZATION,
     ASR_LANGUAGE,
     ASR_MODEL,
     type AsrRequest,
@@ -62,7 +63,8 @@ let loading: Promise<AutomaticSpeechRecognitionPipeline> | null = null;
  */
 async function attemptLoad(
     model: string,
-    dtypes: readonly string[]
+    dtypes: readonly string[],
+    graph?: string
 ): Promise<AutomaticSpeechRecognitionPipeline> {
     let last: unknown;
 
@@ -72,7 +74,12 @@ async function attemptLoad(
             const instance = await pipeline('automatic-speech-recognition', model, {
                 dtype: dtype as 'q8',
                 progress_callback: reportProgress,
-            });
+                // Skipping the extended optimizations is what makes the
+                // quantized build loadable at all; see ASR_GRAPH_OPTIMIZATION.
+                session_options: {
+                    graphOptimizationLevel: graph ?? ASR_GRAPH_OPTIMIZATION,
+                },
+            } as Parameters<typeof pipeline>[2]);
             post({ type: 'ready', dtype });
             return instance;
         } catch (error) {
@@ -90,7 +97,8 @@ function load(choice: ModelChoice = {}): Promise<AutomaticSpeechRecognitionPipel
         choice.model ?? ASR_MODEL,
         // An explicit choice is taken at its word: the benchmark asks for one
         // precision at a time on purpose.
-        choice.dtype ? [choice.dtype] : ASR_DTYPES
+        choice.dtype ? [choice.dtype] : ASR_DTYPES,
+        choice.graph
     ).catch((error: unknown) => {
         loading = null;
         post({
