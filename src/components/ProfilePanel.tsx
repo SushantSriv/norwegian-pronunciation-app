@@ -1,4 +1,4 @@
-import { ACCENT_LABEL } from '../data/tonelag';
+import { ACCENT_LABEL, ACCENT_SHAPE } from '../data/tonelag';
 import { getPhonemeHint } from '../utils/pronunciationHints';
 import { accuracy, weaknesses, type Profile, type SkillRecord } from '../utils/learningProfile';
 
@@ -23,7 +23,13 @@ function rowsFor(profile: Profile): Row[] {
     for (const [accent, record] of Object.entries(profile.accents)) {
         const rate = accuracy(record);
         if (rate === null) continue;
-        rows.push({ label: ACCENT_LABEL[accent as keyof typeof ACCENT_LABEL] ?? accent, record, rate });
+        const key = accent as keyof typeof ACCENT_LABEL;
+        rows.push({
+            label: ACCENT_LABEL[key] ?? accent,
+            detail: ACCENT_SHAPE[key],
+            record,
+            rate,
+        });
     }
 
     // The sounds with the most evidence behind them, worst first — a long tail

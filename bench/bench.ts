@@ -142,9 +142,13 @@ async function run(): Promise<BenchResult> {
         model: params.get('model') ?? undefined,
         dtype: params.get('dtype') ?? undefined,
         graph: params.get('graph') ?? undefined,
+        device: (params.get('device') as 'webgpu' | 'wasm' | null) ?? undefined,
+        threads: params.get('threads') ? Number(params.get('threads')) : undefined,
     };
     result.notes.push(
-        `model=${choice.model ?? 'default'} dtype=${choice.dtype ?? 'default'} graph=${choice.graph ?? 'default'}`
+        `model=${choice.model ?? 'default'} dtype=${choice.dtype ?? 'default'} ` +
+            `graph=${choice.graph ?? 'default'} device=${choice.device ?? 'auto'} ` +
+            `threads=${choice.threads ?? 'auto'} isolated=${globalThis.crossOriginIsolated}`
     );
 
     const client = createAsrClient();

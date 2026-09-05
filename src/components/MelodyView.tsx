@@ -2,7 +2,8 @@ import { useMemo } from 'react';
 import { motion } from 'framer-motion';
 import type { PitchContour } from '../utils/pitch';
 import { classifyAccent, scoreMelody, type MelodyScore } from '../utils/melodyScore';
-import { ACCENT_HINT, ACCENT_LABEL, targetContour, type PitchAccent } from '../data/tonelag';
+import { ACCENT_HINT, ACCENT_LABEL, ACCENT_SHAPE, targetContour, type PitchAccent } from '../data/tonelag';
+import { AccentBadge } from './AccentBadge';
 
 interface Props {
     contour: PitchContour | null;
@@ -174,9 +175,7 @@ export function MelodyView({
             {showAccent && (
                 <div className="mb-3 rounded-lg border border-violet-400/20 bg-violet-400/10 px-3 py-2">
                     <div className="flex flex-wrap items-center gap-2">
-                        <span className="rounded-full bg-violet-400/25 px-2 py-0.5 text-xs font-bold text-violet-100">
-                            {ACCENT_LABEL[targetAccent]}
-                        </span>
+                        <AccentBadge accent={targetAccent} />
                         {accentSource && accentSource !== 'lexicon' && (
                             <span
                                 className="text-[10px] font-semibold uppercase tracking-wide text-white/35"
@@ -287,9 +286,9 @@ export function MelodyView({
 
                     {saidTheOtherOne && (
                         <p className="mt-2 rounded-lg border border-amber-400/25 bg-amber-400/10 px-3 py-2 text-sm text-amber-100">
-                            That came out as <strong>{ACCENT_LABEL[produced.accent]}</strong>, but this
-                            word takes <strong>{ACCENT_LABEL[targetAccent]}</strong>.{' '}
-                            {ACCENT_HINT[targetAccent]}
+                            You gave it <strong>{ACCENT_SHAPE[produced.accent]}</strong>. This word
+                            needs <strong>{ACCENT_SHAPE[targetAccent]}</strong> —{' '}
+                            {ACCENT_LABEL[targetAccent]}. {ACCENT_HINT[targetAccent]}
                         </p>
                     )}
 

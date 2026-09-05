@@ -35,6 +35,11 @@ export interface Attempt extends AttemptScore {
 }
 
 interface SessionState {
+    /**
+     * Distinct per run, so anything counting whole runs — the points ledger —
+     * can tell a new one from a re-render of the last.
+     */
+    runId: string;
     stage: Stage;
     queue: string[];
     cursor: number;
@@ -115,7 +120,18 @@ export function usePracticeSession(
         const ordered = profile ? prioritise(profile, shuffled) : shuffled;
         const queue = ordered.slice(0, Math.max(needed, Math.min(pool.length, needed)));
         setLastAttempt(null);
-        setSession({ stage, queue, cursor: 0, cleared: 0, strikes: 0, streak: 0, bestStreak: 0, attempts: [], outcome: null });
+        setSession({
+            runId: `${stage.id}-${Date.now()}`,
+            stage,
+            queue,
+            cursor: 0,
+            cleared: 0,
+            strikes: 0,
+            streak: 0,
+            bestStreak: 0,
+            attempts: [],
+            outcome: null,
+        });
     }, [profile, toIpa, accentFor]);
 
     const quit = useCallback(() => {
@@ -228,6 +244,7 @@ export function usePracticeSession(
 
     return {
         session,
+        runId: session?.runId ?? null,
         stage: session?.stage ?? null,
         currentItem,
         threshold,

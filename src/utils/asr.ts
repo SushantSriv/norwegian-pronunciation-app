@@ -86,6 +86,83 @@ export const ASR_DTYPES = ['q8', 'fp32'] as const;
 /** The precision tried first; the rest are insurance. */
 export const ASR_DTYPE = ASR_DTYPES[0];
 
+/**
+ * Where the model actually runs.
+ *
+ * This is the difference between an app that feels instant and one that feels
+ * broken, and for a long time it was left at the default. ONNX Runtime's WASM
+ * backend was measured at 2.3x real time in Chromium — a three-second phrase
+ * taking seven seconds to come back — and on GitHub Pages it is worse still,
+ * because WASM threads need SharedArrayBuffer, which needs COOP/COEP response
+ * headers, which Pages cannot set. So the hosted app was running the whole
+ * model on ONE thread. The dev server does set those headers, which is why
+ * this felt fine while it was being built and slow once it was deployed.
+ *
+ * WebGPU sidesteps all of that by not being on the CPU at all.
+ */
+export type AsrDevice = 'webgpu' | 'wasm';
+
+export interface AsrBackend {
+    device: AsrDevice;
+    dtype: string;
+}
+
+/**
+ * What to try, in order.
+ *
+ * q4f16 is picked for WebGPU on size as much as speed: 4-bit weights with
+ * 16-bit compute come to 79 MB against the 73 MB already being downloaded, so
+ * the faster path costs a learner nothing extra to fetch. Plain fp16 would be
+ * 139 MB, which is not worth it for a model this small.
+ *
+ * The WASM entry is unchanged and is what everything falls back to. There is
+ * exactly one WebGPU attempt before that fallback, because every failed
+ * attempt is a whole model download.
+ */
+export const ASR_WEBGPU_BACKEND: AsrBackend = { device: 'webgpu', dtype: 'q4f16' };
+
+export const ASR_WASM_BACKENDS: readonly AsrBackend[] = ASR_DTYPES.map(dtype => ({
+    device: 'wasm' as const,
+    dtype,
+}));
+
+const BACKEND_KEY = 'npa-asr-backend-v1';
+
+/**
+ * The backend that worked last time.
+ *
+ * Without this, a browser that advertises WebGPU but cannot actually run this
+ * model pays for the failed download once per session, forever. Remembering
+ * costs one localStorage entry and turns that into a one-off.
+ */
+export function rememberBackend(backend: AsrBackend): void {
+    try {
+        window.localStorage.setItem(BACKEND_KEY, JSON.stringify(backend));
+    } catch {
+        // Private browsing. The cost is retrying the probe next time.
+    }
+}
+
+export function preferredBackend(): AsrBackend | null {
+    try {
+        const raw = window.localStorage.getItem(BACKEND_KEY);
+        if (!raw) return null;
+        const parsed = JSON.parse(raw) as Partial<AsrBackend>;
+        if (parsed?.device !== 'webgpu' && parsed?.device !== 'wasm') return null;
+        return typeof parsed.dtype === 'string' ? { device: parsed.device, dtype: parsed.dtype } : null;
+    } catch {
+        return null;
+    }
+}
+
+export function forgetBackend(): void {
+    try {
+        window.localStorage.removeItem(BACKEND_KEY);
+    } catch {
+        // Nothing to forget it from.
+    }
+}
+
 export const ASR_LANGUAGE = 'no';
 
 /**
@@ -129,6 +206,12 @@ export interface ModelChoice {
     dtype?: string;
     /** ONNX graph optimization level, for narrowing down loader failures. */
     graph?: string;
+    /** Force a backend, for the benchmark. Production probes for itself. */
+    device?: AsrDevice;
+    /** The backend that worked last time, tried first. */
+    prefer?: AsrBackend | null;
+    /** WASM threads, for measuring what cross-origin isolation is worth. */
+    threads?: number;
 }
 
 export type AsrRequest =
@@ -137,7 +220,7 @@ export type AsrRequest =
 
 export type AsrResponse =
     | { type: 'progress'; ratio: number }
-    | { type: 'ready'; dtype: string }
+    | { type: 'ready'; dtype: string; device: AsrDevice }
     | { type: 'failed'; message: string }
     | { type: 'result'; id: number; text: string; words: WordTiming[] }
     | { type: 'error'; id: number; message: string };
@@ -151,6 +234,8 @@ export interface AsrStatus {
     error?: string;
     /** Which weight precision the browser accepted, once it is loaded. */
     dtype?: string;
+    /** Where it is running: the GPU, or WASM on the CPU. */
+    device?: AsrDevice;
 }
 
 /**
@@ -252,7 +337,16 @@ export function createAsrClient(spawn: () => Worker = spawnWorker): AsrClient {
                     publish({ state: 'loading', progress: message.ratio });
                     break;
                 case 'ready':
-                    publish({ state: 'ready', progress: 1, dtype: message.dtype });
+                    // Remember what worked, so a browser that advertises a GPU
+                    // it cannot use pays for that discovery once rather than
+                    // once a session.
+                    rememberBackend({ device: message.device, dtype: message.dtype });
+                    publish({
+                        state: 'ready',
+                        progress: 1,
+                        dtype: message.dtype,
+                        device: message.device,
+                    });
                     break;
                 case 'failed':
                     publish({ state: 'failed', progress: 0, error: message.message });
@@ -283,7 +377,11 @@ export function createAsrClient(spawn: () => Worker = spawnWorker): AsrClient {
         load(choice) {
             if (current.state === 'ready' || current.state === 'loading') return;
             publish({ state: 'loading', progress: 0 });
-            ensureWorker().postMessage({ type: 'load', ...choice } satisfies AsrRequest);
+            ensureWorker().postMessage({
+                type: 'load',
+                prefer: preferredBackend(),
+                ...choice,
+            } satisfies AsrRequest);
         },
 
         transcribe(audio) {

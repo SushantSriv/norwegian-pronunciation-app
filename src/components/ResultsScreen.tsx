@@ -6,6 +6,8 @@ import { ITEMS_TO_WIN } from '../hooks/usePracticeSession';
 import type { Stage } from '../data/stages';
 import { getAdvice } from '../utils/pronunciationHints';
 import { ScoreRing } from './ScoreRing';
+import type { PointLine } from '../utils/learningPoints';
+import { KIND_ICON } from '../utils/pointLabels';
 
 interface Summary {
     avgScore: number;
@@ -21,6 +23,13 @@ interface Props {
     summary: Summary;
     /** What this learner finds hard, across every session so far. */
     profile: Profile;
+    /** Learning points earned during this run. */
+    pointsEarned: number;
+    /** What earned them, merged by kind, largest first. */
+    pointsBreakdown: PointLine[];
+    /** And this week's total, for the sense of a week going somewhere. */
+    weeklyPoints: number;
+    onOpenCommunity: () => void;
     onRetry: () => void;
     onChangeStage: () => void;
 }
@@ -30,6 +39,10 @@ export function ResultsScreen({
     outcome,
     summary,
     profile,
+    pointsEarned,
+    pointsBreakdown,
+    weeklyPoints,
+    onOpenCommunity,
     onRetry,
     onChangeStage,
 }: Props) {
@@ -85,6 +98,44 @@ export function ResultsScreen({
                     </div>
                 </dl>
             </div>
+
+            {pointsEarned > 0 && (
+                <div className="mt-6 rounded-2xl border border-white/10 bg-white/[0.04] p-4 text-left">
+                    <div className="flex items-baseline justify-between gap-3">
+                        <span>
+                            <span className="block text-2xl font-extrabold text-white">
+                                +{pointsEarned.toLocaleString('nb-NO')} poeng
+                            </span>
+                            <span className="block text-xs text-white/45">
+                                {weeklyPoints.toLocaleString('nb-NO')} denne uken
+                            </span>
+                        </span>
+                        <button
+                            onClick={onOpenCommunity}
+                            className="shrink-0 rounded-lg border border-white/20 px-3 py-1.5 text-sm font-semibold text-white/70 transition hover:border-white/40 hover:bg-white/10 hover:text-white"
+                        >
+                            🏆 Fellesskap →
+                        </button>
+                    </div>
+
+                    {pointsBreakdown.length > 0 && (
+                        <ul className="mt-3 space-y-1 border-t border-white/10 pt-3">
+                            {pointsBreakdown.map(line => (
+                                <li
+                                    key={line.kind}
+                                    className="flex items-center gap-2 text-sm text-white/70"
+                                >
+                                    <span aria-hidden="true">{KIND_ICON[line.kind]}</span>
+                                    <span className="min-w-0 flex-1 truncate">{line.detail}</span>
+                                    <span className="shrink-0 font-bold tabular-nums text-white/90">
+                                        +{line.points}
+                                    </span>
+                                </li>
+                            ))}
+                        </ul>
+                    )}
+                </div>
+            )}
 
             <div className="mt-5">
                 <ProfilePanel profile={profile} />

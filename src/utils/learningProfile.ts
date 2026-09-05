@@ -80,6 +80,28 @@ export function accuracy(record: SkillRecord | undefined, minimum = 3): number |
 const WORD_PASS = 0.8;
 
 /**
+ * Whether one word came out cleanly.
+ *
+ * Exported because the points engine has to agree with this exactly — it pays a
+ * mastery bonus at the moment a word climbs into the long review intervals, and
+ * two definitions of "clean" would put that moment in two different places.
+ */
+export const isWordClean = (word: WordScore): boolean =>
+    word.status === 'equal' || word.score >= WORD_PASS;
+
+/** Where a word's Leitner box goes after one attempt. */
+export const nextBox = (box: number, clean: boolean): number =>
+    clean ? Math.min(REVIEW_DAYS.length - 1, box + 1) : 0;
+
+/**
+ * The box at which a word counts as learned rather than merely survived.
+ *
+ * Box 3 is the seven-day interval: three clean attempts spread over days, not
+ * three in a row in one sitting.
+ */
+export const MASTERY_BOX = 3;
+
+/**
  * Which sounds went wrong in one word.
  *
  * The expected and heard IPA are compared symbol by symbol rather than as
@@ -138,7 +160,7 @@ export function recordAttempt(profile: Profile, attempt: AttemptRecord): Profile
     for (const word of attempt.score.wordScores) {
         const key = word.word.toLowerCase();
         const previous = next.words[key];
-        const clean = word.status === 'equal' || word.score >= WORD_PASS;
+        const clean = isWordClean(word);
 
         next.words[key] = {
             scores: [...(previous?.scores ?? []), Math.round(word.score * 100)].slice(-HISTORY),
@@ -146,7 +168,7 @@ export function recordAttempt(profile: Profile, attempt: AttemptRecord): Profile
             lastSeen: now,
             // Climb one box for a clean attempt, fall to the bottom otherwise:
             // a word you just got wrong is a word to come back to soon.
-            box: clean ? Math.min(REVIEW_DAYS.length - 1, (previous?.box ?? 0) + 1) : 0,
+            box: nextBox(previous?.box ?? 0, clean),
         };
 
         if (!clean) creditPhonemes(next, word);
@@ -168,10 +190,7 @@ export function recordAttempt(profile: Profile, attempt: AttemptRecord): Profile
 
     if (attempt.compoundWords?.length) {
         const cleanByWord = new Map(
-            attempt.score.wordScores.map(word => [
-                word.word.toLowerCase(),
-                word.status === 'equal' || word.score >= WORD_PASS,
-            ])
+            attempt.score.wordScores.map(word => [word.word.toLowerCase(), isWordClean(word)])
         );
         for (const word of attempt.compoundWords) {
             next.compounds = bump(next.compounds, cleanByWord.get(word.toLowerCase()) ?? false);

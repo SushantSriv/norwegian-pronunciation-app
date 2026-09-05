@@ -100,6 +100,31 @@ export function AboutDialog({ open, onClose }: Props) {
                                 </ol>
                             </Section>
 
+                            <Section title="What is tonelag?">
+                                <p>
+                                    Norwegian is a <em>pitch-accent</em> language: the tune you put on a
+                                    word is part of the word, not decoration. There are two, and Norwegian
+                                    calls them <strong>tonelag 1</strong> and <strong>tonelag 2</strong>.
+                                </p>
+                                <p>
+                                    Tonelag 1 is <strong>one rise</strong> — the pitch climbs once through
+                                    the word. Tonelag 2 is a <strong>fall and then a rise</strong>, heard as
+                                    two peaks rather than one.
+                                </p>
+                                <p className="rounded-lg border border-white/10 bg-white/[0.04] p-3">
+                                    The clearest proof that it matters:{' '}
+                                    <strong lang="nb">bønder</strong> (farmers) and{' '}
+                                    <strong lang="nb">bønner</strong> (beans) are said with the same sounds.
+                                    The melody is the only thing telling them apart — and get it wrong and
+                                    you have said a different word.
+                                </p>
+                                <p>
+                                    This is the thing that most often marks someone out as a non-native
+                                    speaker, and almost no app measures it. That is why this one draws your
+                                    melody against the shape the word wants.
+                                </p>
+                            </Section>
+
                             <Section title="Reading your result">
                                 <ul className="space-y-1.5">
                                     <li>
@@ -168,8 +193,9 @@ export function AboutDialog({ open, onClose }: Props) {
                                     <strong className="text-emerald-100">Your voice stays here.</strong> Speech
                                     recognition used to be handed to the browser&rsquo;s own service, which meant
                                     the audio went to Google&rsquo;s, Microsoft&rsquo;s or Apple&rsquo;s servers
-                                    to be transcribed. It now runs as a speech model inside this page instead:
-                                    about 82&nbsp;MB is downloaded the first time you use it and kept in your
+                                    to be transcribed. By default it now runs as a speech model inside this page
+                                    instead &mdash; you can switch the browser service back on, and the app says
+                                    so plainly when you do. About 82&nbsp;MB is downloaded the first time you use it and kept in your
                                     browser, and after that nothing about your recordings — not the audio, not
                                     the transcript — leaves the device, with or without a network connection.
                                 </p>

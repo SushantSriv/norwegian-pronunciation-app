@@ -33,14 +33,22 @@ your attempt, extracts the pitch contour, and draws it.
 | 🎧 **Listen back** | Play the reference and your own attempt back to back. Silence before and after you speak is trimmed automatically. |
 | 🎯 **Rising difficulty** | Clear 10 phrases before losing 3 lives. The pass bar climbs with every one you get right. |
 | 📚 **13 tracks** | Five CEFR levels from A1 words to B2 clusters, plus eight occupation tracks — helse, bygg, barnehage, butikk, restaurant, transport, renhold, kontor. |
+| 🏆 **Learning points** | Points for clearing your own level's bar, for beating your own best on a word, for mastering one, and for coming back tomorrow — with caps that make repeating an easy phrase worthless. See below. |
 
-Your voice never leaves your browser: not the recording, not the transcript, not the
-score. Recognition runs as a local model rather than a cloud service, so that is a
-property of the architecture rather than a promise.
+**By default your voice never leaves your browser** — not the recording, not the
+transcript, not the score. Recognition runs as a local model, so that is a property of
+the architecture rather than a promise.
+
+There is one thing you can switch on that changes it. The browser's own speech service
+is faster and more accurate than the model this app carries, and it works by sending
+your recording to Google, Microsoft or Apple. It is offered as an explicit choice, it is
+off until you turn it on, and the app says which engine answered each attempt. Scoring,
+pitch and melody run on your device either way.
 
 ## Requirements
 
-- **A desktop browser built on Chromium or WebKit** — Chrome, Edge, Safari. Firefox runs it too, but roughly eight times slower (see below), which is usable rather than pleasant. Recognition is a quantized Whisper model running in the page on WebAssembly rather than a browser API, so nothing is locked out by policy — but "not locked out" is not the same as "measured", and only what has been measured is claimed here.
+- **A desktop browser built on Chromium or WebKit** — Chrome, Edge, Safari. Firefox runs it too, but the on-device model is roughly eight times slower there (see below), which is usable rather than pleasant. Nothing is locked out by policy — but "not locked out" is not the same as "measured", and only what has been measured is claimed here.
+- **Optionally, the browser's own speech service**, which is faster and more accurate than the on-device model and sends your recording to your browser vendor. Off by default; it exists because the on-device model is genuinely slower and mis-hears more, and that is a trade worth putting in the learner's hands rather than deciding for them.
 - **About 82 MB on first use**, downloaded once and then cached: a quantized whisper-base (76 MB) plus the ONNX Runtime it runs on (5.7 MB gzipped). After that recognition works with the network off. The rest of the app is ~1.9 MB.
 - **A Norwegian text-to-speech voice** for the reference audio. Most systems have one; the app tells you how to add one if not.
 - **Roughly 2.3x the length of what you said**, while the model transcribes: a two-second phrase comes back in about four and a half seconds on a desktop Chromium, five and a half on WebKit. Longer on an older or smaller device. That is the cost of not sending your voice anywhere.
@@ -56,7 +64,7 @@ once the model has been fetched once.
 ```bash
 npm install
 npm run dev        # http://localhost:5173
-npm test           # 184 unit tests
+npm test           # 454 unit tests
 npm run build      # production build
 ```
 
@@ -93,10 +101,14 @@ The app ships with **no tracking**. Set `VITE_ANALYTICS_URL` at build time to en
 cookie-less page counter (GoatCounter, Plausible, etc.). Do Not Track is respected and no
 identifiers are stored. Recordings are never sent to any analytics endpoint.
 
-Speech **recognition** used to be the exception to this: it was performed by the browser's
-own service, which meant the audio went to Google's, Microsoft's or Apple's servers. It now
-runs as a local model on ONNX Runtime Web, so the recording, the transcript, the scoring and
-the pitch analysis never leave the device.
+Speech **recognition** runs as a local model on ONNX Runtime Web by default, so the
+recording, the transcript, the scoring and the pitch analysis never leave the device.
+
+The browser's own speech service can be switched on instead, in which case the recording —
+and only the recording — goes to Google, Microsoft or Apple to be transcribed, exactly as it
+does on any site using the browser's speech API. That is off unless chosen, the app shows
+which engine answered each attempt, and per-word melody is unavailable on that path because
+the service reports no word timings.
 
 </details>
 
@@ -200,6 +212,84 @@ heuristic that tried would excuse real mistakes. The fallback G2P used outside t
 lexicon is an approximation and will be wrong on loanwords. Pitch detection returns
 nothing rather than guessing on unvoiced or quiet frames. The melody target is drawn for
 single words only, since a phrase has one accent per word.
+
+## Speed
+
+Recognition runs on your device, so how fast it is depends on what it is allowed to use.
+
+| | transcribe | real time | wait after speaking |
+|---|---|---|---|
+| One WASM thread | 6.41 s | 2.85x | 5.74 s |
+| Four WASM threads | 2.96 s | 1.47x | 2.98 s |
+
+Measured in Chromium on the same clip and the same machine with `npm run bench:browser`.
+
+ONNX Runtime can only use more than one thread when the page is **cross-origin isolated**,
+which needs COOP and COEP response headers — and **GitHub Pages cannot set response
+headers**. The hosted app was therefore doing everything on one thread and taking more
+than twice as long as the dev server, which does set them.
+
+A service worker ([`public/coi.js`](public/coi.js)) supplies the headers instead. The
+first visit reloads once, and from then on the model gets its threads. Offline still
+works, and the model CDN still loads — both are checked against a header-less host.
+
+Where the browser offers a working **WebGPU** adapter the model is loaded onto the GPU
+instead (`q4f16`, 79 MB against the 73 MB the CPU build already downloads, so it costs
+nothing extra to fetch). If the adapter is missing or the build will not load, it falls
+back to WASM and remembers that, so the discovery is paid once rather than every session.
+The GPU path could not be timed here — headless Chromium has no adapter, and software
+emulation is not a number worth quoting.
+
+The model is also warmed up with one throwaway inference as soon as it loads, so the
+first thing a learner says is not the attempt that pays for kernel compilation.
+
+## Points, streaks and the leaderboard
+
+Practising earns learning points. The design constraint was that the board must **not**
+become a ranking of who has the most spare time, and must not put an A1 learner behind a
+B1 learner for reasons that have nothing to do with either of them learning anything.
+
+| Earned for | Points |
+|---|---|
+| An attempt the app was willing to judge | 5 |
+| Clearing the stage's current bar | +5 |
+| Clearing it by 12 points or more | +10 instead |
+| A new personal best on a word (8 points or better) | 10–15 |
+| A word reaching the seven-day review interval | 15, or 20 if you kept missing it |
+| Finishing a run | 25 cleared, 10 out of lives |
+| Every seventh consecutive day | 50 |
+
+Three rules do the real work:
+
+- **Clearing is measured against your own bar.** Each stage sets its own pass threshold —
+  55 at A1, 66 at B2 — and it climbs as a run goes on. An A1 learner clearing an A1 bar
+  earns what a B1 learner earns for clearing a B1 one, because both did what was asked of
+  them. A level factor exists on top of that, and is capped at ten per cent, on purpose.
+- **Improvement is paid on a personal best and nothing else.** Not on your last attempt,
+  your best ever — so deliberately doing badly and then recovering pays nothing, and each
+  payout raises the bar for the next one. A learner going 50 → 90 on a word earns more
+  than one going 70 → 95, whatever level either is at.
+- **Repetition decays.** A phrase pays full points three times a day. A phrase whose
+  words you have already mastered pays 2. The day stops at 600 points, which is three
+  committed sessions and nowhere near what grinding one phrase would need. Saying the
+  same easy sentence five hundred times earns 45 points and then nothing.
+
+"Most improved" is the change in your **median** score this week against last, and it
+refuses to report anything until there are at least ten attempts on each side — a
+percentage-change board computed from three attempts is a lottery, not a measure.
+
+The community screen shows all of this whether or not a shared board exists: your weeks
+side by side, your milestones, and the words you have beaten your own best on — which is
+the one thing a points total cannot express.
+
+**The shared board is off by default.** Points, streaks, leagues and the improvement
+figure are all computed in the browser and stored in `localStorage`, exactly like the
+pronunciation profile, and the hosted build never contacts a server. Turning the shared
+board on means deploying the optional Cloudflare Worker in [`server/`](server/) and
+building with `VITE_LEADERBOARD_URL` set; that directory's README has the deployment
+steps, the security model and its limits. Even then, what is sent is a nickname you
+chose, a random id, and the points themselves — never a recording, a transcript, or the
+phrases you practised. There is a test that asserts exactly that.
 
 ## Yrkesnorsk
 

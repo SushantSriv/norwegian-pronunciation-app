@@ -1,5 +1,90 @@
 # Progress & Goals
 
+## v2.7 — Learning points, a community screen, and the speed regression ✅
+
+### Speed: the deployed app was running on one thread
+
+Recognition felt sluggish in the hosted build and fine in development, and the reason was
+not the model. ONNX Runtime needs SharedArrayBuffer to use more than one WASM thread,
+SharedArrayBuffer needs cross-origin isolation, isolation needs COOP/COEP response
+headers, and **GitHub Pages cannot send headers**. `vite.config.ts` sets them for the dev
+server, so the difference was invisible while building.
+
+Measured in Chromium, same clip, same machine (`npm run bench:browser`):
+
+| | transcribe | real time | wait after speaking |
+|---|---|---|---|
+| 1 thread (what Pages was doing) | 6.41 s | 2.85x | 5.74 s |
+| 4 threads | 2.96 s | 1.47x | 2.98 s |
+
+- **`public/coi.js`** — a service worker that supplies COOP/COEP itself, imported into the
+  Workbox build. The first visit reloads once (`src/utils/isolation.ts`, guarded to at
+  most one reload per tab) and is isolated from then on.
+- It must also add the headers to the **speech worker's own script**: a page under COEP may
+  only start a dedicated worker whose script carries a compatible header, and without that
+  the browser blocks it with `ERR_BLOCKED_BY_RESPONSE`. Isolation would have been faster in
+  theory and would have killed recognition outright in practice. Found by running it.
+- **WebGPU**, where the browser offers a working adapter: `q4f16` is 79 MB against the
+  73 MB the CPU build already fetches, so the faster path costs nothing extra to download.
+  Falls back to WASM and remembers what worked, so a browser that advertises a GPU it
+  cannot use pays for that once rather than once a session.
+- **A warm-up inference** on load, so the first thing a learner says is not the attempt
+  that pays for kernel compilation.
+
+Verified against a header-less static host: isolation achieved, exactly one reload,
+offline still works, and the Hugging Face CDN still loads under `credentialless`.
+The WebGPU path's speed is **not** verified — headless Chromium has no adapter and
+SwiftShader could not finish, so no number is quoted for it.
+
+### Learning points
+
+A deterministic point engine strictly downstream of the pronunciation scoring
+(`src/utils/learningPoints.ts`). It cannot change a score, a threshold, or which phrase
+comes next. Three rules keep it from becoming a ranking of free time:
+
+- **Clearing is measured against your own level's bar**, not against 100. A1 clearing an
+  A1 bar earns what B1 earns for clearing a B1 one; the level factor on top is capped at
+  ten per cent on purpose.
+- **Improvement is paid on a new personal best and nothing else** — not on your last
+  attempt, your best ever — so dipping deliberately and recovering pays nothing, and each
+  payout raises the bar.
+- **Repetition decays**: full points three times a day per phrase, 2 for a mastered one,
+  600 a day in total. Saying the same easy sentence 500 times earns 45 points and then
+  nothing.
+
+"Most improved" is the change in **median** score against last week, and refuses to report
+anything under ten attempts on each side.
+
+### The community screen
+
+League ring, streak calendar, week-over-week bars, a breakdown of where the points came
+from, and the words you have beaten your own best on. With a leaderboard server it also
+shows the shared board, the podium, and your own row even when you are outside the top
+ten. Without one — every default build — the same tabs show your own history rather than
+an apology, and no nickname is asked for, because there would be nothing to name.
+
+### The server, actually tested
+
+`server/` holds an optional Cloudflare Worker over D1. It is no longer only typechecked:
+`server/sqlite-d1.ts` runs it against real SQLite with the real `schema.sql`, and 36 tests
+cover the anti-cheat table in `server/README.md` line by line — forged points, replays,
+backdating, the daily cap across requests, streak-bonus farming, posting as someone else,
+SQL injection. `npm run leaderboard:dev` runs the same worker locally over HTTP.
+
+Two client bugs were found by running the whole loop in a browser rather than by reading:
+
+- The sync sent the **oldest** 200 pending events, which for a learner with any backlog
+  are all past the server's age limit — so their recent points never arrived at all.
+- Events the server permanently refused stayed pending and were resent forever.
+
+### Not done
+
+- Leagues as cohorts with promotion and relegation. The badge is real; the competition
+  needs a population to divide up. See the bottom of `server/README.md`.
+- More vocabulary, and a *muntlig prøve* rehearsal mode.
+
+---
+
 ## v2.6 — Word-by-word melody, recognition trust, and a learning record ✅
 
 ### Fixed — and only findable in a browser
@@ -444,9 +529,10 @@ Bugs caught during that browser pass and fixed:
 ---
 
 ## Ideas / not done
-- Offline engine via `transformers.js` Whisper, to drop the Chrome-only constraint
 - Recorded native audio instead of TTS for the "Hear it" button
-- Drill mode that replays only your previously missed words
+- A *muntlig prøve* rehearsal mode: timed, multi-turn, scored the way the real exam is
+- More vocabulary, and more sentences per level
+- Leagues as cohorts, once there are enough learners to fill one
 
 ---
 

@@ -2,7 +2,7 @@ import { useEffect, useMemo } from 'react';
 import { AnimatePresence, motion } from 'framer-motion';
 import { ITEMS_TO_WIN, MAX_STRIKES, type Attempt } from '../hooks/usePracticeSession';
 import type { Stage } from '../data/stages';
-import { ACCENT_LABEL } from '../data/tonelag';
+import { ACCENT_LABEL, ACCENT_SHAPE } from '../data/tonelag';
 import { ScoreRing } from './ScoreRing';
 import { PhonemeBreakdown } from './PhonemeBreakdown';
 import { CompareAudio } from './CompareAudio';
@@ -11,6 +11,7 @@ import { PhraseMelody } from './PhraseMelody';
 import { VoiceVisualizer } from './VoiceVisualizer';
 import { VoicePicker } from './VoicePicker';
 import { DialectPicker } from './DialectPicker';
+import { SpeechEnginePicker } from './SpeechEnginePicker';
 import { SpeechTrouble } from './SpeechTrouble';
 import type { DialectId } from '../data/dialects';
 import type { AsrStatus } from '../utils/asr';
@@ -34,6 +35,10 @@ interface Props {
     model: AsrStatus;
     /** Throw the worker away and fetch the model again. */
     onRetryModel: () => void;
+    /** Which engine answered the last attempt. */
+    engine: 'cloud' | 'local' | null;
+    /** Partial text, which only the browser service can produce. */
+    interim: string;
     speechError: string | null;
     lastAttempt: Attempt | null;
     recordingUrl: string | null;
@@ -50,6 +55,8 @@ interface Props {
     lookup: (word: string) => Pronunciation;
     /** Fold a finished attempt into the learner's own record. */
     onRemember: (attempt: object | null, record: AttemptRecord, ready: boolean) => void;
+    /** Learning points earned so far in this run. */
+    runPoints: number;
     onListen: () => void;
     onStopListening: () => void;
     onNext: () => void;
@@ -77,6 +84,8 @@ export function PracticeScreen({
     transcribing,
     model,
     onRetryModel,
+    engine,
+    interim,
     speechError,
     lastAttempt,
     recordingUrl,
@@ -92,6 +101,7 @@ export function PracticeScreen({
     dialectReady,
     lookup,
     onRemember,
+    runPoints,
     onListen,
     onStopListening,
     onNext,
@@ -188,6 +198,26 @@ export function PracticeScreen({
                 </div>
 
                 <div className="flex items-center gap-3">
+                    {/*
+                      Points as they accrue. Small and to one side on purpose:
+                      the score ring is the feedback that teaches, and this is
+                      only the tally.
+                    */}
+                    <AnimatePresence>
+                        {runPoints > 0 && (
+                            <motion.span
+                                key={runPoints}
+                                initial={{ scale: 0.7, opacity: 0 }}
+                                animate={{ scale: 1, opacity: 1 }}
+                                transition={{ type: 'spring', stiffness: 400, damping: 18 }}
+                                className="rounded-full bg-white/10 px-2.5 py-1 text-xs font-bold tabular-nums text-white/75 ring-1 ring-white/15"
+                                title="Learning points earned this run"
+                            >
+                                +{runPoints}
+                            </motion.span>
+                        )}
+                    </AnimatePresence>
+
                     <AnimatePresence>
                         {streak >= 2 && (
                             <motion.span
@@ -446,9 +476,9 @@ export function PracticeScreen({
                                         </strong>{' '}
                                         The melody is the only thing telling them apart — the{' '}
                                         {POS_LABEL[soleWordEntry.pos ?? ''] ?? 'one'} takes{' '}
-                                        {ACCENT_LABEL[soleWordEntry.accent]} and the{' '}
+                                        {ACCENT_SHAPE[soleWordEntry.accent]} ({ACCENT_LABEL[soleWordEntry.accent]}) and the{' '}
                                         {POS_LABEL[twin.pos ?? ''] ?? 'other'} takes{' '}
-                                        {ACCENT_LABEL[twin.accent]}.
+                                        {ACCENT_SHAPE[twin.accent]} ({ACCENT_LABEL[twin.accent]}).
                                     </div>
                                 )}
 
@@ -530,7 +560,10 @@ export function PracticeScreen({
 
                         <div className="min-h-[3rem] text-center" role="status" aria-live="polite">
                             {listening ? (
-                                <p className="text-sm text-white/70">Listening… pause when you are done</p>
+                                <p className="text-sm text-white/70">
+                                    Listening… pause when you are done
+                                    {interim && <em className="ml-1 text-white">{interim}</em>}
+                                </p>
                             ) : transcribing ? (
                                 <p className="text-sm text-white/70">Reading what you said…</p>
                             ) : model.state === 'loading' ? (
@@ -572,6 +605,9 @@ export function PracticeScreen({
 
             <div className="mt-6 border-t border-white/10 pt-4">
                 <DialectPicker dialect={dialect} onChange={onDialectChange} ready={dialectReady} />
+                <div className="mt-3">
+                    <SpeechEnginePicker engine={engine} />
+                </div>
                 <VoicePicker
                     voices={voices}
                     activeVoiceURI={activeVoiceURI}
