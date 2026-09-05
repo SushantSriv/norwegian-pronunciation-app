@@ -16,9 +16,20 @@ import { fileURLToPath } from 'node:url';
 import { dirname, join } from 'node:path';
 import { beforeEach, afterEach, describe, expect, it } from 'vitest';
 import worker from '../worker';
-import { createTestDatabase, type TestDatabase } from '../sqlite-d1';
+import type { TestDatabase } from '../sqlite-d1';
 import { DAILY_CAP, MAX_POINTS } from '../../src/utils/leaderboardRules';
 import { weekKey } from '../../src/utils/period';
+
+/**
+ * node:sqlite is a built-in only from Node 22.5. Imported dynamically and
+ * skipped rather than thrown, so an older Node runs the other 400-odd tests
+ * instead of failing at collection — and says why it skipped these.
+ */
+const sqlite = await import('../sqlite-d1').catch(() => null);
+const describeWithSqlite = sqlite ? describe : describe.skip;
+if (!sqlite) {
+    console.warn('server/worker.test.ts skipped: node:sqlite needs Node 22.5 or newer.');
+}
 
 const here = dirname(fileURLToPath(import.meta.url));
 const SCHEMA = readFileSync(join(here, '..', 'schema.sql'), 'utf8');
@@ -29,11 +40,12 @@ let db: TestDatabase;
 let env: { DB: TestDatabase; ALLOWED_ORIGINS: string };
 
 beforeEach(() => {
-    db = createTestDatabase(SCHEMA);
+    if (!sqlite) return;
+    db = sqlite.createTestDatabase(SCHEMA);
     env = { DB: db, ALLOWED_ORIGINS: ORIGIN };
 });
 
-afterEach(() => db.close());
+afterEach(() => db?.close());
 
 // ---------------------------------------------------------------------------
 // Helpers
@@ -118,7 +130,7 @@ const totalFor = (id: string, week: string) =>
 
 // ---------------------------------------------------------------------------
 
-describe('a learner joining and syncing', () => {
+describeWithSqlite('a learner joining and syncing', () => {
     it('creates the account and banks the points', async () => {
         const kari = learner('a1', 'FjordFox');
         const result = await sync(kari, { events: [event(), event({ kind: 'attempt' })] });
@@ -168,7 +180,7 @@ describe('a learner joining and syncing', () => {
     });
 });
 
-describe('the anti-cheat rules, one by one', () => {
+describeWithSqlite('the anti-cheat rules, one by one', () => {
     const kari = learner('a1', 'FjordFox');
 
     it('refuses a forged point value instead of clamping it', async () => {
@@ -308,7 +320,7 @@ describe('the anti-cheat rules, one by one', () => {
     });
 });
 
-describe('the boards', () => {
+describeWithSqlite('the boards', () => {
     const kari = learner('a1', 'FjordFox');
     const ola = learner('b2', 'NorskNinja');
     const per = learner('c3', 'FjellTale');
@@ -442,7 +454,7 @@ describe('the boards', () => {
     });
 });
 
-describe('the level a learner is shown at', () => {
+describeWithSqlite('the level a learner is shown at', () => {
     it('is the one carrying the most of their points', async () => {
         const kari = learner('a1', 'FjordFox');
         await sync(kari, {
@@ -466,7 +478,7 @@ describe('the level a learner is shown at', () => {
     });
 });
 
-describe('the HTTP surface', () => {
+describeWithSqlite('the HTTP surface', () => {
     it('answers a preflight with the allowed origin', async () => {
         const response = await worker.fetch(
             new Request('https://board.example/v1/sync', {

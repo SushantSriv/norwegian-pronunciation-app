@@ -24,7 +24,9 @@ jobs:
 
       - uses: actions/setup-node@v4
         with:
-          node-version: 20
+          # 22, not 20: the leaderboard worker's tests run the real handler
+          # against node:sqlite, which is only a built-in from 22.5 onwards.
+          node-version: 22
           cache: npm
 
       - run: npm ci
