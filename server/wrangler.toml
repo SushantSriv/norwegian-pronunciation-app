@@ -1,0 +1,17 @@
+# Deploying the leaderboard is optional. The app works completely without it;
+# see README.md in this directory before running anything here.
+
+name = "norsk-uttale-leaderboard"
+main = "worker.ts"
+compatibility_date = "2025-01-01"
+
+# Where the app is served from. Requests from anywhere else get the first
+# origin in the list back, which browsers will refuse.
+[vars]
+ALLOWED_ORIGINS = "https://sushantsriv.github.io"
+
+[[d1_databases]]
+binding = "DB"
+database_name = "norsk-uttale-leaderboard"
+# Filled in by `wrangler d1 create norsk-uttale-leaderboard`.
+database_id = "REPLACE_ME"

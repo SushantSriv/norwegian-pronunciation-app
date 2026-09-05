@@ -28,5 +28,7 @@
     "noFallthroughCasesInSwitch": true,
     "noUncheckedSideEffectImports": true
   },
-  "include": [ "src" ]
+  /* server/ holds the optional leaderboard worker. It is type-checked with
+     the app so the rules it shares with the browser cannot drift. */
+  "include": [ "src", "server" ]
 }

@@ -12,6 +12,11 @@ interface Props {
      * may not have is worse than no drill.
      */
     canDrillWeaknesses: boolean;
+    /** Learning points earned so far this week, on this device. */
+    weeklyPoints: number;
+    /** Consecutive days practised. */
+    streak: number;
+    onOpenCommunity: () => void;
     onPick: (stage: Stage) => void;
 }
 
@@ -47,7 +52,14 @@ const fadeUp = {
     show: { opacity: 1, y: 0, transition: { type: 'spring' as const, stiffness: 200, damping: 22 } },
 };
 
-export function StageSelect({ bests, canDrillWeaknesses, onPick }: Props) {
+export function StageSelect({
+    bests,
+    canDrillWeaknesses,
+    weeklyPoints,
+    streak,
+    onOpenCommunity,
+    onPick,
+}: Props) {
     const stagesFor = (track: Track): Stage[] =>
         track === 'weakness'
             ? canDrillWeaknesses
@@ -87,6 +99,31 @@ export function StageSelect({ bests, canDrillWeaknesses, onPick }: Props) {
                     <strong className="font-semibold text-white">{MAX_STRIKES}</strong> lives — and the bar
                     climbs with every one you get right.
                 </p>
+
+                {/*
+                  The way in to the community screen. It carries this week's
+                  points rather than a rank, because a rank is the discouraging
+                  half of a leaderboard and your own progress is the half worth
+                  seeing before you start.
+                */}
+                <motion.button
+                    variants={card}
+                    onClick={onOpenCommunity}
+                    whileHover={{ y: -2 }}
+                    whileTap={{ scale: 0.98 }}
+                    className="mt-5 inline-flex items-center gap-2.5 rounded-full border border-white/15 bg-white/[0.07] px-4 py-2 text-sm font-semibold text-white/75 backdrop-blur transition hover:border-white/35 hover:bg-white/10 hover:text-white focus:outline-none focus-visible:ring-2 focus-visible:ring-sky-300/70"
+                >
+                    <span aria-hidden="true">🏆</span>
+                    <span>Fellesskap</span>
+                    {weeklyPoints > 0 && (
+                        <span className="rounded-full bg-white/15 px-2 py-0.5 text-xs font-bold tabular-nums text-white">
+                            +{weeklyPoints.toLocaleString('nb-NO')} denne uken
+                        </span>
+                    )}
+                    {streak > 1 && (
+                        <span className="text-xs font-bold text-amber-300">🔥 {streak}</span>
+                    )}
+                </motion.button>
             </motion.header>
 
             {SECTIONS.filter(section => stagesFor(section.track).length > 0).map(section => (

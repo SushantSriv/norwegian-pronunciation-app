@@ -55,6 +55,8 @@ interface Props {
     lookup: (word: string) => Pronunciation;
     /** Fold a finished attempt into the learner's own record. */
     onRemember: (attempt: object | null, record: AttemptRecord, ready: boolean) => void;
+    /** Learning points earned so far in this run. */
+    runPoints: number;
     onListen: () => void;
     onStopListening: () => void;
     onNext: () => void;
@@ -99,6 +101,7 @@ export function PracticeScreen({
     dialectReady,
     lookup,
     onRemember,
+    runPoints,
     onListen,
     onStopListening,
     onNext,
@@ -195,6 +198,26 @@ export function PracticeScreen({
                 </div>
 
                 <div className="flex items-center gap-3">
+                    {/*
+                      Points as they accrue. Small and to one side on purpose:
+                      the score ring is the feedback that teaches, and this is
+                      only the tally.
+                    */}
+                    <AnimatePresence>
+                        {runPoints > 0 && (
+                            <motion.span
+                                key={runPoints}
+                                initial={{ scale: 0.7, opacity: 0 }}
+                                animate={{ scale: 1, opacity: 1 }}
+                                transition={{ type: 'spring', stiffness: 400, damping: 18 }}
+                                className="rounded-full bg-white/10 px-2.5 py-1 text-xs font-bold tabular-nums text-white/75 ring-1 ring-white/15"
+                                title="Learning points earned this run"
+                            >
+                                +{runPoints}
+                            </motion.span>
+                        )}
+                    </AnimatePresence>
+
                     <AnimatePresence>
                         {streak >= 2 && (
                             <motion.span
