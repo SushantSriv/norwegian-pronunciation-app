@@ -15,10 +15,12 @@ import {
     type ProgressInfo,
 } from '@huggingface/transformers';
 import {
-    ASR_DTYPES,
     ASR_GRAPH_OPTIMIZATION,
     ASR_LANGUAGE,
     ASR_MODEL,
+    ASR_WASM_BACKENDS,
+    ASR_WEBGPU_BACKEND,
+    type AsrBackend,
     type AsrRequest,
     type AsrResponse,
     type ModelChoice,
@@ -28,6 +30,41 @@ import {
 // The model is fetched from the Hugging Face CDN, not from our own origin;
 // looking locally first would just add a failing request per file.
 env.allowLocalModels = false;
+
+/**
+ * How many threads the WASM backend may use.
+ *
+ * ONNX Runtime needs SharedArrayBuffer for threads, and SharedArrayBuffer needs
+ * the page to be cross-origin isolated. GitHub Pages cannot send the headers
+ * that do that, so the hosted app gets one thread whatever we ask for — but
+ * asking is free, and a self-hosted copy that CAN set the headers should not
+ * have to patch this file to benefit.
+ */
+const wasmThreads = () => {
+    if (typeof self.crossOriginIsolated !== 'undefined' && !self.crossOriginIsolated) return 1;
+    // Leave a core for the page: a locked-up UI feels slower than a slow model.
+    return Math.max(1, Math.min(4, (navigator.hardwareConcurrency || 2) - 1));
+};
+
+if (env.backends?.onnx?.wasm) env.backends.onnx.wasm.numThreads = wasmThreads();
+
+/**
+ * Whether this browser can actually run the model on its GPU.
+ *
+ * Asked properly rather than by feature-detecting `navigator.gpu`, because the
+ * object exists in browsers where requesting an adapter then fails — a machine
+ * with no supported GPU, a blocklisted driver, a headless run. Downloading a
+ * WebGPU build for one of those wastes 79 MB.
+ */
+async function hasWebGPU(): Promise<boolean> {
+    try {
+        const gpu = (navigator as Navigator & { gpu?: { requestAdapter(): Promise<unknown> } }).gpu;
+        if (!gpu) return false;
+        return Boolean(await gpu.requestAdapter());
+    } catch {
+        return false;
+    }
+}
 
 const post = (message: AsrResponse) => self.postMessage(message);
 
@@ -63,24 +100,32 @@ let loading: Promise<AutomaticSpeechRecognitionPipeline> | null = null;
  */
 async function attemptLoad(
     model: string,
-    dtypes: readonly string[],
+    backends: readonly AsrBackend[],
     graph?: string
 ): Promise<AutomaticSpeechRecognitionPipeline> {
     let last: unknown;
 
-    for (const dtype of dtypes) {
+    for (const backend of backends) {
         files.clear();
         try {
             const instance = await pipeline('automatic-speech-recognition', model, {
-                dtype: dtype as 'q8',
+                device: backend.device,
+                dtype: backend.dtype as 'q8',
                 progress_callback: reportProgress,
                 // Skipping the extended optimizations is what makes the
                 // quantized build loadable at all; see ASR_GRAPH_OPTIMIZATION.
+                // It applies to the WASM sessions; WebGPU ignores it.
                 session_options: {
                     graphOptimizationLevel: graph ?? ASR_GRAPH_OPTIMIZATION,
                 },
             } as Parameters<typeof pipeline>[2]);
-            post({ type: 'ready', dtype });
+
+            post({ type: 'ready', dtype: backend.dtype, device: backend.device });
+            // Told the page it is ready BEFORE warming up, so the microphone
+            // button unlocks immediately. A learner who takes two seconds to
+            // press it gets a warm model for free; one who is faster waits
+            // exactly as long as they would have waited anyway.
+            await warmUp(instance);
             return instance;
         } catch (error) {
             last = error;
@@ -90,26 +135,61 @@ async function attemptLoad(
     throw last instanceof Error ? last : new Error('no usable model build');
 }
 
+/**
+ * One throwaway inference, so the learner does not pay for the first one.
+ *
+ * Both backends do real work the first time they run a graph — WebGPU compiles
+ * shaders, WASM allocates and specialises kernels — and it lands on whatever
+ * attempt happens to be first. That is the attempt where someone has just
+ * spoken and is waiting, which is the worst possible moment for it.
+ */
+async function warmUp(transcriber: AutomaticSpeechRecognitionPipeline): Promise<void> {
+    try {
+        await transcriber(new Float32Array(16_000), {
+            language: ASR_LANGUAGE,
+            task: 'transcribe',
+            return_timestamps: false,
+        });
+    } catch {
+        // Best effort. A model that cannot transcribe silence will report the
+        // real problem on the first real attempt.
+    }
+}
+
+/** The backends to try, best first, given what this browser can do. */
+async function chooseBackends(choice: ModelChoice): Promise<AsrBackend[]> {
+    // The benchmark pins one; production probes.
+    if (choice.dtype) return [{ device: choice.device ?? 'wasm', dtype: choice.dtype }];
+
+    const wasm = [...ASR_WASM_BACKENDS];
+    if (choice.prefer?.device === 'wasm') return wasm;
+
+    const gpu = await hasWebGPU();
+    if (!gpu) return wasm;
+    return [choice.prefer?.device === 'webgpu' ? choice.prefer : ASR_WEBGPU_BACKEND, ...wasm];
+}
+
 function load(choice: ModelChoice = {}): Promise<AutomaticSpeechRecognitionPipeline> {
     if (loading) return loading;
 
-    loading = attemptLoad(
-        choice.model ?? ASR_MODEL,
-        // An explicit choice is taken at its word: the benchmark asks for one
-        // precision at a time on purpose.
-        choice.dtype ? [choice.dtype] : ASR_DTYPES,
-        choice.graph
-    ).catch((error: unknown) => {
-        loading = null;
-        post({
-            type: 'failed',
-            message:
-                error instanceof Error
-                    ? `The speech model could not be loaded (${error.message}).`
-                    : 'The speech model could not be loaded.',
+    // The benchmark pins a thread count to measure what isolation is worth.
+    if (choice.threads && env.backends?.onnx?.wasm) {
+        env.backends.onnx.wasm.numThreads = choice.threads;
+    }
+
+    loading = chooseBackends(choice)
+        .then(backends => attemptLoad(choice.model ?? ASR_MODEL, backends, choice.graph))
+        .catch((error: unknown) => {
+            loading = null;
+            post({
+                type: 'failed',
+                message:
+                    error instanceof Error
+                        ? `The speech model could not be loaded (${error.message}).`
+                        : 'The speech model could not be loaded.',
+            });
+            throw error;
         });
-        throw error;
-    });
 
     return loading;
 }

@@ -53,6 +53,11 @@ export default defineConfig(({ command }) => ({
                 ],
             },
             workbox: {
+                // Supplies COOP/COEP so the page is cross-origin isolated and
+                // ONNX Runtime can use more than one WASM thread. GitHub Pages
+                // cannot set response headers; a service worker can. See
+                // public/coi.js for the measurements that justify it.
+                importScripts: ['coi.js'],
                 // The parallax background art is large; raise the precache
                 // ceiling so the installed app still works offline.
                 maximumFileSizeToCacheInBytes: 6 * 1024 * 1024,

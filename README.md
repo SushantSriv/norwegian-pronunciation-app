@@ -33,6 +33,7 @@ your attempt, extracts the pitch contour, and draws it.
 | 🎧 **Listen back** | Play the reference and your own attempt back to back. Silence before and after you speak is trimmed automatically. |
 | 🎯 **Rising difficulty** | Clear 10 phrases before losing 3 lives. The pass bar climbs with every one you get right. |
 | 📚 **13 tracks** | Five CEFR levels from A1 words to B2 clusters, plus eight occupation tracks — helse, bygg, barnehage, butikk, restaurant, transport, renhold, kontor. |
+| 🏆 **Learning points** | Points for clearing your own level's bar, for beating your own best on a word, for mastering one, and for coming back tomorrow — with caps that make repeating an easy phrase worthless. See below. |
 
 **By default your voice never leaves your browser** — not the recording, not the
 transcript, not the score. Recognition runs as a local model, so that is a property of
@@ -63,7 +64,7 @@ once the model has been fetched once.
 ```bash
 npm install
 npm run dev        # http://localhost:5173
-npm test           # 184 unit tests
+npm test           # 454 unit tests
 npm run build      # production build
 ```
 
@@ -211,6 +212,84 @@ heuristic that tried would excuse real mistakes. The fallback G2P used outside t
 lexicon is an approximation and will be wrong on loanwords. Pitch detection returns
 nothing rather than guessing on unvoiced or quiet frames. The melody target is drawn for
 single words only, since a phrase has one accent per word.
+
+## Speed
+
+Recognition runs on your device, so how fast it is depends on what it is allowed to use.
+
+| | transcribe | real time | wait after speaking |
+|---|---|---|---|
+| One WASM thread | 6.41 s | 2.85x | 5.74 s |
+| Four WASM threads | 2.96 s | 1.47x | 2.98 s |
+
+Measured in Chromium on the same clip and the same machine with `npm run bench:browser`.
+
+ONNX Runtime can only use more than one thread when the page is **cross-origin isolated**,
+which needs COOP and COEP response headers — and **GitHub Pages cannot set response
+headers**. The hosted app was therefore doing everything on one thread and taking more
+than twice as long as the dev server, which does set them.
+
+A service worker ([`public/coi.js`](public/coi.js)) supplies the headers instead. The
+first visit reloads once, and from then on the model gets its threads. Offline still
+works, and the model CDN still loads — both are checked against a header-less host.
+
+Where the browser offers a working **WebGPU** adapter the model is loaded onto the GPU
+instead (`q4f16`, 79 MB against the 73 MB the CPU build already downloads, so it costs
+nothing extra to fetch). If the adapter is missing or the build will not load, it falls
+back to WASM and remembers that, so the discovery is paid once rather than every session.
+The GPU path could not be timed here — headless Chromium has no adapter, and software
+emulation is not a number worth quoting.
+
+The model is also warmed up with one throwaway inference as soon as it loads, so the
+first thing a learner says is not the attempt that pays for kernel compilation.
+
+## Points, streaks and the leaderboard
+
+Practising earns learning points. The design constraint was that the board must **not**
+become a ranking of who has the most spare time, and must not put an A1 learner behind a
+B1 learner for reasons that have nothing to do with either of them learning anything.
+
+| Earned for | Points |
+|---|---|
+| An attempt the app was willing to judge | 5 |
+| Clearing the stage's current bar | +5 |
+| Clearing it by 12 points or more | +10 instead |
+| A new personal best on a word (8 points or better) | 10–15 |
+| A word reaching the seven-day review interval | 15, or 20 if you kept missing it |
+| Finishing a run | 25 cleared, 10 out of lives |
+| Every seventh consecutive day | 50 |
+
+Three rules do the real work:
+
+- **Clearing is measured against your own bar.** Each stage sets its own pass threshold —
+  55 at A1, 66 at B2 — and it climbs as a run goes on. An A1 learner clearing an A1 bar
+  earns what a B1 learner earns for clearing a B1 one, because both did what was asked of
+  them. A level factor exists on top of that, and is capped at ten per cent, on purpose.
+- **Improvement is paid on a personal best and nothing else.** Not on your last attempt,
+  your best ever — so deliberately doing badly and then recovering pays nothing, and each
+  payout raises the bar for the next one. A learner going 50 → 90 on a word earns more
+  than one going 70 → 95, whatever level either is at.
+- **Repetition decays.** A phrase pays full points three times a day. A phrase whose
+  words you have already mastered pays 2. The day stops at 600 points, which is three
+  committed sessions and nowhere near what grinding one phrase would need. Saying the
+  same easy sentence five hundred times earns 45 points and then nothing.
+
+"Most improved" is the change in your **median** score this week against last, and it
+refuses to report anything until there are at least ten attempts on each side — a
+percentage-change board computed from three attempts is a lottery, not a measure.
+
+The community screen shows all of this whether or not a shared board exists: your weeks
+side by side, your milestones, and the words you have beaten your own best on — which is
+the one thing a points total cannot express.
+
+**The shared board is off by default.** Points, streaks, leagues and the improvement
+figure are all computed in the browser and stored in `localStorage`, exactly like the
+pronunciation profile, and the hosted build never contacts a server. Turning the shared
+board on means deploying the optional Cloudflare Worker in [`server/`](server/) and
+building with `VITE_LEADERBOARD_URL` set; that directory's README has the deployment
+steps, the security model and its limits. Even then, what is sent is a nickname you
+chose, a random id, and the points themselves — never a recording, a transcript, or the
+phrases you practised. There is a test that asserts exactly that.
 
 ## Yrkesnorsk
 

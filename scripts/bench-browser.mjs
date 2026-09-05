@@ -37,9 +37,12 @@ const VARIANTS = (flag('variants', '') || '')
     .split(',')
     .filter(Boolean)
     .map(pair => {
-        const [model, dtype, graph] = pair.split(':');
-        return { model, dtype, graph };
+        const [model, dtype, graph, device, threads] = pair.split(':');
+        return { model, dtype, graph, device, threads };
     });
+
+/** Force a software GPU on, so the WebGPU code path can be exercised at all. */
+const GPU = args.includes('--gpu');
 
 const { chromium, firefox, webkit } = await import('playwright');
 const LAUNCHERS = { chromium, firefox, webkit };
@@ -98,7 +101,9 @@ for (const engine of ENGINES) for (const variant of RUNS) {
     }
 
     const label = variant.model
-        ? `${engine} ${variant.model}:${variant.dtype}${variant.graph ? ':' + variant.graph : ''}`
+        ? `${engine} ${variant.model}:${variant.dtype}${variant.graph ? ':' + variant.graph : ''}` +
+          (variant.device ? ` on ${variant.device}` : '') +
+          (variant.threads ? ` x${variant.threads}` : '')
         : engine;
     process.stdout.write(`${label}: `);
     let browser;
@@ -108,7 +113,16 @@ for (const engine of ENGINES) for (const variant of RUNS) {
             // real microphone and without a permission prompt.
             args:
                 engine === 'chromium'
-                    ? ['--use-fake-ui-for-media-stream', '--use-fake-device-for-media-stream']
+                    ? [
+                          '--use-fake-ui-for-media-stream',
+                          '--use-fake-device-for-media-stream',
+                          // Headless Chromium has no GPU adapter, so the WebGPU
+                          // path cannot even be loaded without a software one.
+                          // SwiftShader PROVES THE PATH WORKS; it says nothing
+                          // about how fast real hardware is, so never quote its
+                          // timings as the WebGPU number.
+                          ...(GPU ? ['--enable-unsafe-webgpu', '--use-angle=swiftshader', '--enable-features=Vulkan'] : []),
+                      ]
                     : [],
         });
         const context = await browser.newContext({ permissions: ['microphone'] }).catch(() =>
@@ -119,7 +133,9 @@ for (const engine of ENGINES) for (const variant of RUNS) {
 
         const query = variant.model
             ? `?model=${encodeURIComponent(variant.model)}&dtype=${encodeURIComponent(variant.dtype)}` +
-              (variant.graph ? `&graph=${encodeURIComponent(variant.graph)}` : '')
+              (variant.graph ? `&graph=${encodeURIComponent(variant.graph)}` : '') +
+              (variant.device ? `&device=${encodeURIComponent(variant.device)}` : '') +
+              (variant.threads ? `&threads=${encodeURIComponent(variant.threads)}` : '')
             : '';
         await page.goto(`${base}/bench/bench.html${query}`, { waitUntil: 'load' });
         await page.waitForFunction(() => '__BENCH__' in window, null, { timeout: TIMEOUT_MS });
