@@ -27,12 +27,16 @@ response headers. Measured in Chromium, on the same clip:
 
 On GitHub Pages the app works around this with a service worker that supplies the headers
 itself ([`public/coi.js`](public/coi.js)), at the cost of one extra reload on a visitor's
-first ever load. On Cloudflare Pages the headers come from the host
+first ever load. On Cloudflare the headers come from the host
 ([`public/_headers`](public/_headers)) and the very first page load is already isolated.
 The service worker stays in place regardless and simply has nothing left to do.
 
 The second reason is that the optional leaderboard already runs on Cloudflare Workers and
 D1, so the whole thing ends up in one account with one bill — and at this size, no bill.
+
+Cloudflare now routes even static sites through Workers rather than Pages, which is why
+the dashboard talks about a *Worker* throughout. Nothing about this app changes: a Worker
+with static assets and no script is a static site.
 
 ---
 
@@ -55,55 +59,68 @@ is usually minutes, occasionally a day.
 
 ---
 
-## 2. Create the Pages project
+## 2. Create the Workers project
 
-In the Cloudflare dashboard: **Workers & Pages → Create → Pages → Connect to Git**, and
-pick this repository.
+Cloudflare has folded Pages into Workers, so the dashboard walks you through a **Worker**
+even for a site with no server code. That is fine — a Worker with static assets and no
+script is exactly a static site — but it does mean one thing has to exist in the repo that
+Pages would not have needed, and it already does: [`wrangler.toml`](wrangler.toml) at the
+root, pointing at `dist`. Without it `npx wrangler deploy` has nothing to deploy and the
+build fails at the last step.
+
+In the dashboard: **Workers & Pages → Create → Import a repository**, and pick this one.
 
 | Setting | Value |
 |---|---|
-| Production branch | `main` |
+| Project name | `norwegian-pronunciation-app` |
 | Build command | `npm run build` |
-| Build output directory | `dist` |
-| Node version | `22` (variable `NODE_VERSION`) |
+| Deploy command | `npx wrangler deploy` |
+| Preview command | `npx wrangler preview` |
+| Path | `/` |
 
-And these build environment variables:
+And these build variables:
 
 | Variable | Value | Why |
 |---|---|---|
-| `VITE_BASE` | `/` | The app is served from the root of a domain, not from `/<repo-name>/`. Leave it out and every asset 404s. |
-| `VITE_LEADERBOARD_URL` | *(leave unset for now)* | Set it in step 4, once the worker exists. |
+| `VITE_BASE` | `/` | The app is served from the root of a domain, not from `/<repo-name>/`. Leave it out and the HTML loads while every asset 404s one directory too deep — which looks exactly like the site being broken. |
+| `NODE_VERSION` | `22` | What CI uses. Vite 7 wants 20.19+ or 22.12+, and matching CI means a build that passes there passes here. |
+| `VITE_LEADERBOARD_URL` | *(leave empty)* | Set it in step 4, once the worker exists. Empty means the shared board stays off and the community screen shows each learner their own history. |
 
-> The build command is unchanged; `VITE_BASE` is read by
-> [`vite.config.ts`](vite.config.ts) and defaults to the GitHub Pages path, so the
-> existing deployment is unaffected by any of this.
+> `VITE_BASE` is read by [`vite.config.ts`](vite.config.ts) and defaults to the GitHub
+> Pages subpath, so none of this disturbs the existing deployment.
 
-The first deploy lands on `<project>.pages.dev`. **Check it before going further:**
+**A note on the API token.** Reusing one from another project works only if it is scoped
+to the whole account with *Workers Scripts: Edit*. If the deploy fails with a permissions
+error, that is why — make a fresh token from the **Edit Cloudflare Workers** template
+rather than widening the old one.
+
+The first deploy lands on `<project>.workers.dev`. **Check it before going further:**
 
 ```bash
-npm run check:deploy -- https://<project>.pages.dev
+npm run check:deploy -- https://<project>.workers.dev
 ```
 
 That drives a real browser and checks the things that fail silently: the base path,
-isolation, the service worker, the manifest, and whether the speech model's CDN is still
-reachable. It should report `isolation headers from the host: yes` — that is the whole
-point of moving.
+cross-origin isolation, the service worker, the manifest, and whether the speech model's
+CDN is still reachable. It should report `isolation headers from the host: yes` — that is
+the whole point of moving, and it comes from [`public/_headers`](public/_headers), which
+Vite copies into `dist` and Workers reads as configuration.
 
 ### Deploying from GitHub Actions instead
 
-[`.github/workflows/cloudflare-pages.yml`](.github/workflows/cloudflare-pages.yml) does
-the same thing from CI, and runs the tests first. It is inert until you set the repository
-**variable** `CLOUDFLARE_PAGES_PROJECT`, plus the secrets `CLOUDFLARE_API_TOKEN` and
-`CLOUDFLARE_ACCOUNT_ID`. Use one or the other, not both — two systems deploying the same
-branch will race.
+[`.github/workflows/cloudflare.yml`](.github/workflows/cloudflare.yml) does the same thing
+from CI and runs the tests first, which the dashboard's build command does not. It is
+inert until you set the repository **variable** `CLOUDFLARE_DEPLOY` to `true`, plus the
+secrets `CLOUDFLARE_API_TOKEN` and `CLOUDFLARE_ACCOUNT_ID`.
 
----
+**Use one or the other, not both.** The dashboard already deploys on every push; adding
+the workflow on top means two systems racing to deploy the same commit.
 
 ## 3. Point the domain at it
 
-**Pages project → Custom domains → Set up a domain.** Add both the apex (`example.com`)
-and `www`; Cloudflare creates the DNS records and issues the certificate itself, usually
-within a minute or two.
+**The Worker → Settings → Domains & Routes → Add → Custom domain.** Add both the apex
+(`example.com`) and `www`; Cloudflare creates the DNS records and issues the certificate
+itself, usually within a minute or two.
 
 Then check it again, at the real address:
 
@@ -135,7 +152,12 @@ Before deploying, edit [`server/wrangler.toml`](server/wrangler.toml):
 npx wrangler deploy
 ```
 
-Then set `VITE_LEADERBOARD_URL` to `https://api.example.com` in the Pages project's build
+The leaderboard is a **second** Workers project, not part of this one: wrangler reads the
+config in its working directory, so the root [`wrangler.toml`](wrangler.toml) deploys the
+site and `server/wrangler.toml` deploys the board. To build it from the dashboard too,
+create another project against the same repository with **Path** `/server`.
+
+Then set `VITE_LEADERBOARD_URL` to `https://api.example.com` in the site project's build
 variables and redeploy. [`server/README.md`](server/README.md) has the data model, the
 security model and the free-tier arithmetic.
 
@@ -161,7 +183,7 @@ Two things to know about existing visitors:
 ### Costs
 
 All of it is inside Cloudflare's free tier at any size this app will plausibly reach.
-Pages allows 500 builds a month and serves unlimited requests; Workers allows 100 000
-requests a day and D1 allows 100 000 row writes. `server/README.md` works through what
+Workers Builds allows 3 000 build minutes a month; static asset requests are unmetered,
+and the leaderboard's Worker allows 100 000 requests a day with 100 000 D1 row writes. `server/README.md` works through what
 that means in learners: roughly 1 000 people practising daily, with row writes as the
 binding constraint. The domain is the only recurring cost.

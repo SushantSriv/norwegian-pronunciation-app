@@ -226,9 +226,9 @@ single words only, since a phrase has one accent per word.
 ## Hosting it somewhere else
 
 The app is a static build and runs on any host. [`DEPLOYING.md`](DEPLOYING.md) is the
-walk-through for putting it on a domain of your own via Cloudflare Pages, which is worth
-doing for one concrete reason: Cloudflare can send response headers and GitHub Pages
-cannot, and those headers are what let the speech model use more than one CPU thread.
+walk-through for putting it on a domain of your own via Cloudflare, which is worth doing
+for one concrete reason: Cloudflare can send response headers and GitHub Pages cannot, and
+those headers are what let the speech model use more than one CPU thread.
 
 The base path is an environment variable, so a root-served build is `VITE_BASE=/ npm run
 build` rather than a code change. `npm run check:deploy -- https://your-domain` drives a
@@ -260,8 +260,8 @@ first visit reloads once, and from then on the model gets its threads. Offline s
 works, and the model CDN still loads — both are checked against a header-less host.
 
 On a host that *can* send headers there is no reload at all, because the first document is
-already isolated; [`public/_headers`](public/_headers) sets them for Cloudflare Pages and
-Netlify, and the service worker then has nothing left to do.
+already isolated; [`public/_headers`](public/_headers) sets them for Cloudflare Workers
+and Netlify, and the service worker then has nothing left to do.
 
 Where the browser offers a working **WebGPU** adapter the model is loaded onto the GPU
 instead (`q4f16`, 79 MB against the 73 MB the CPU build already downloads, so it costs

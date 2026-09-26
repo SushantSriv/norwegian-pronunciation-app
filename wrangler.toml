@@ -1,0 +1,29 @@
+# Serving the app itself from Cloudflare Workers.
+#
+# This is the static site — the built `dist` directory and nothing else. There
+# is deliberately no `main`: a Worker with assets and no script is a valid
+# static site, and adding a script here would only be code between a learner
+# and a file that is already exactly what they asked for.
+#
+# The leaderboard is a SEPARATE worker with its own config in server/. Wrangler
+# reads the config in its working directory, so `npx wrangler deploy` at the
+# repository root deploys this, and the same command inside server/ deploys
+# that. See DEPLOYING.md.
+#
+# Build with VITE_BASE=/ so asset URLs are rooted at the domain rather than at
+# the GitHub Pages subpath. Without it the HTML loads and every asset 404s,
+# which looks exactly like the site being broken.
+
+name = "norwegian-pronunciation-app"
+compatibility_date = "2026-09-26"
+
+[assets]
+directory = "./dist"
+
+# not_found_handling is deliberately left at its default, which is a plain 404.
+#
+# The single-page-application setting would answer ANY unmatched path with
+# index.html and a 200, including a missing .js — so a half-broken deploy would
+# serve the HTML shell in place of the script and show a white page with no
+# error anywhere. This app has no client-side router and exactly one URL, so
+# that fallback buys nothing and costs the ability to notice a bad deploy.

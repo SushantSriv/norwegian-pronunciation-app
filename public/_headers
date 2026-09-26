@@ -1,13 +1,19 @@
-# Response headers for hosts that can send them — Cloudflare Pages, Netlify.
+# Response headers for hosts that can send them — Cloudflare Workers static
+# assets, Cloudflare Pages, Netlify. Vite copies this file into dist/, which is
+# the assets directory wrangler.toml points at.
 #
-# GitHub Pages cannot, which is why public/coi.js exists: a service worker that
-# adds these itself, at the cost of one reload on a visitor's first load. Where
-# the host sends them properly there is no reload at all, because the very first
-# document is already cross-origin isolated.
+# GitHub Pages cannot send headers, which is why public/coi.js exists: a service
+# worker that adds these itself, at the cost of one reload on a visitor's first
+# load. Where the host sends them properly there is no reload at all, because
+# the very first document is already cross-origin isolated.
 #
 # Both together are fine. The service worker sets the same values, so it is a
 # no-op here rather than a conflict, and it keeps working if the site is ever
 # moved back to a host that cannot send headers.
+#
+# One limit worth knowing: these apply to ASSET responses. A Worker script's own
+# responses are not covered — which costs nothing here, because this site has no
+# Worker script.
 
 /*
   # Cross-origin isolation, which is what lets ONNX Runtime use more than one
