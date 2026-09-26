@@ -1,0 +1,67 @@
+# Deploy to Cloudflare Workers (static assets).
+#
+# INERT UNTIL CONFIGURED. It runs only when the repository variable
+# CLOUDFLARE_DEPLOY is set to "true", so it sits here doing nothing — and
+# failing nothing — until somebody wants it. See DEPLOYING.md.
+#
+# USE THIS **OR** THE DASHBOARD, NOT BOTH. Connecting the repository in the
+# Cloudflare dashboard (Workers Builds) already builds and deploys on every
+# push; adding this on top means two systems racing to deploy the same commit.
+# The dashboard is less to set up. This exists because it runs the tests first,
+# which the dashboard's build command does not.
+#
+# The GitHub Pages workflow is left alone deliberately: both addresses can serve
+# at once while a move is in progress, and the old one keeps working until the
+# new one is proven.
+
+name: Deploy to Cloudflare
+
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+concurrency:
+  group: cloudflare
+  cancel-in-progress: false
+
+jobs:
+  deploy:
+    # A repository *variable*, not a secret: secrets are not readable in job
+    # conditions, and this only needs to answer "has anyone turned this on".
+    if: ${{ vars.CLOUDFLARE_DEPLOY == 'true' }}
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          # 22, not 20: the leaderboard worker's tests need node:sqlite.
+          node-version: 22
+          cache: npm
+
+      - run: npm ci
+
+      - name: Lint
+        run: npm run lint
+
+      - name: Test
+        run: npm run test
+
+      - name: Build
+        env:
+          # Served from the root of a domain, not from /<repo-name>/. Without
+          # this the HTML loads and every asset 404s one directory too deep.
+          VITE_BASE: /
+          # Only set once the leaderboard worker exists; empty leaves the shared
+          # board switched off, which is the safe default.
+          VITE_LEADERBOARD_URL: ${{ vars.VITE_LEADERBOARD_URL }}
+          VITE_ANALYTICS_URL: ${{ vars.VITE_ANALYTICS_URL }}
+        run: npm run build
+
+      # Uses ./wrangler.toml, which points at dist and carries no Worker script.
+      - uses: cloudflare/wrangler-action@v3
+        with:
+          apiToken: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          accountId: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+          command: deploy
