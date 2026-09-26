@@ -15,15 +15,16 @@ import { useLearningProfile } from './hooks/useLearningProfile';
 import { useCommunity } from './hooks/useCommunity';
 import { weaknesses, type AttemptRecord } from './utils/learningProfile';
 import { countVisit } from './utils/analytics';
-import type { Recognition } from './utils/asr';
+import type { Recognition } from './utils/speech';
 
 /**
- * Shown instead of the app when the device cannot run recognition at all.
+ * Shown instead of the app when the browser cannot run recognition at all.
  *
- * This is now a much rarer screen than it was. Recognition used to need the
- * Web Speech API, which ruled out Firefox and most of iOS; it now needs a
- * microphone, WebAssembly and web workers, which is close to every browser
- * still in use.
+ * Carrying a speech model in the page made this screen nearly extinct, at the
+ * cost of a 73 MB download and a model that mis-heard people. Dropping it
+ * brings the screen back for Firefox, which has never enabled the speech
+ * service. That is a real loss, taken deliberately: better an honest "this
+ * browser cannot" than a score nobody should trust.
  */
 function UnsupportedNotice() {
     return (
@@ -33,10 +34,12 @@ function UnsupportedNotice() {
             </div>
             <h1 className="mt-3 text-xl font-bold text-white">This browser cannot listen</h1>
             <p className="mt-2 text-sm leading-relaxed text-white/65">
-                Practising needs a microphone, WebAssembly and web workers, and this browser is missing
-                one of them. A current <strong className="text-white">Firefox</strong>,{' '}
+                Practising needs a microphone and the browser&rsquo;s speech recognition service, and
+                this browser is missing one of them.{' '}
                 <strong className="text-white">Chrome</strong>, <strong className="text-white">Edge</strong>{' '}
-                or <strong className="text-white">Safari</strong> will work.
+                and <strong className="text-white">Safari</strong> have it.{' '}
+                <strong className="text-white">Firefox</strong> does not &mdash; it has never enabled
+                speech recognition &mdash; so the app cannot work there.
             </p>
         </div>
     );
@@ -125,9 +128,6 @@ export default function App() {
         recordingUrl,
         recordingAvailable,
         analyserRef,
-        model,
-        retryModel,
-        engine,
         interim,
         start,
         stop,
@@ -217,9 +217,6 @@ export default function App() {
                                         streak={streak}
                                         listening={listening}
                                         transcribing={transcribing}
-                                        model={model}
-                                        onRetryModel={retryModel}
-                                        engine={engine}
                                         interim={interim}
                                         speechError={error}
                                         lastAttempt={lastAttempt}

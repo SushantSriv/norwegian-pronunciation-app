@@ -5,20 +5,19 @@ const find = (checks: Awaited<ReturnType<typeof collectSpeechDiagnostics>>, pref
     checks.find(c => c.label.startsWith(prefix));
 
 /**
- * jsdom has neither the Cache API nor Worker, both of which a real browser has.
- * Tests that are not about those supply them here.
+ * jsdom has no speech recognition service, which a supported browser does.
+ * Tests that are not about that supply one here.
  */
-function stubBrowser(open: () => Promise<unknown> = async () => ({})) {
-    vi.stubGlobal('caches', { open });
-    vi.stubGlobal('Worker', class {});
+function stubBrowser() {
+    vi.stubGlobal('webkitSpeechRecognition', class {});
 }
 
 afterEach(() => vi.unstubAllGlobals());
 
 describe('collectSpeechDiagnostics', () => {
-    it('passes a browser that can actually run the model', async () => {
+    it('passes a browser with a microphone and a speech service', async () => {
         stubBrowser();
-        vi.stubGlobal('window', { ...window, isSecureContext: true });
+        vi.stubGlobal('window', { ...window, isSecureContext: true, webkitSpeechRecognition: class {} });
         vi.stubGlobal('navigator', {
             ...navigator,
             onLine: true,
@@ -33,11 +32,12 @@ describe('collectSpeechDiagnostics', () => {
     });
 
     /**
-     * The bug this replaces: the old checks told Firefox users to install
-     * Chrome, because the Web Speech API did not exist there. The model does.
+     * The browser matters again. It stopped mattering when recognition moved
+     * into the page, and started again when that model was removed — so a
+     * browser without a speech service must be told so plainly rather than
+     * left with a microphone button that looks fine and does nothing.
      */
-    it('does not judge the browser at all', async () => {
-        stubBrowser();
+    it('names the missing speech service, and which browsers have one', async () => {
         vi.stubGlobal('window', { ...window, isSecureContext: true });
         vi.stubGlobal('navigator', {
             ...navigator,
@@ -47,10 +47,9 @@ describe('collectSpeechDiagnostics', () => {
             permissions: { query: async () => ({ state: 'granted' }) },
         });
 
-        const checks = await collectSpeechDiagnostics();
-        // Nothing may name another browser to go and install — that was the bug.
-        expect(checks.some(c => /chrome|edge|safari|firefox/i.test(c.fix ?? ''))).toBe(false);
-        expect(checks.every(c => c.ok)).toBe(true);
+        const check = find(await collectSpeechDiagnostics(), 'Speech recognition service');
+        expect(check?.ok).toBe(false);
+        expect(check?.fix).toMatch(/Firefox/);
     });
 
     it('flags a denied microphone with the fix', async () => {
@@ -76,21 +75,14 @@ describe('collectSpeechDiagnostics', () => {
         expect(check?.fix).toMatch(/HTTPS/i);
     });
 
-    it('warns when the model cannot be cached between visits', async () => {
-        stubBrowser(() => Promise.reject(new Error('blocked')));
-        vi.stubGlobal('window', { ...window, isSecureContext: true });
-        const check = find(await collectSpeechDiagnostics(), 'Model storage');
-        expect(check?.ok).toBe(false);
-        expect(check?.fix).toMatch(/downloaded again/i);
-    });
 
-    it('mentions the network only while offline, since that is the one thing it blocks', async () => {
+    it('mentions the network only while offline, since recognition needs it', async () => {
         stubBrowser();
         vi.stubGlobal('window', { ...window, isSecureContext: true });
         vi.stubGlobal('navigator', { ...navigator, onLine: false });
         const offline = find(await collectSpeechDiagnostics(), 'Network');
         expect(offline?.ok).toBe(false);
-        expect(offline?.fix).toMatch(/first download/i);
+        expect(offline?.fix).toMatch(/needs a connection/i);
 
         vi.stubGlobal('navigator', { ...navigator, onLine: true });
         expect(find(await collectSpeechDiagnostics(), 'Network')).toBeUndefined();

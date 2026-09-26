@@ -11,15 +11,20 @@
  * confident about does not count either way.
  *
  * WHAT THIS DELIBERATELY DOES NOT DO is guess from the transcript. Whether
- * "kjøkken" coming back as "hva er det" means the model failed or the learner
+ * "kjøkken" coming back as "hva er det" means recognition failed or the learner
  * said something else entirely is not decidable from text, and a heuristic that
  * tried would excuse real mistakes — which is worse than the problem, because
- * an app that never says you were wrong teaches nothing. Every signal below is
- * evidence from the AUDIO that the model did not transcribe what was there:
- * speech with no words, or words covering only part of the speech.
+ * an app that never says you were wrong teaches nothing. The signal below is
+ * evidence from the AUDIO: speech was there, and nothing came back for it.
+ *
+ * THERE USED TO BE A SECOND CHECK, comparing how much of the measured speech
+ * the recognised words spanned. It needed per-word timings, which only the
+ * on-device model produced, and that model is gone. The browser's speech
+ * service returns nothing rather than a confident guess when it cannot make
+ * words out, so the case that check caught mostly presents as an empty
+ * transcript now — which the first branch already handles.
  */
 import type { SpeechBounds } from './pitch';
-import type { WordTiming } from './asr';
 
 export type AttemptOutcome =
     /** Nothing was said, or nothing was heard. */
@@ -42,39 +47,8 @@ export interface AttemptVerdict {
     counts: boolean;
 }
 
-/**
- * Share of the detected speech that the recognised words must span.
- *
- * Below this the model returned a transcript for only part of what was said,
- * which is direct evidence it dropped audio rather than that the learner
- * mispronounced it. Set generously: word timestamps are estimates and normally
- * leave gaps at pauses, so this only fires when a large stretch is unaccounted
- * for.
- */
-const COVERAGE_FLOOR = 0.4;
-
 /** Speech shorter than this is a cough or a click, not an attempt. */
 const MIN_SPEECH_SECONDS = 0.25;
-
-/** Total seconds the word spans cover, merging any overlap. */
-export function coveredSeconds(words: WordTiming[]): number {
-    if (!words.length) return 0;
-    const spans = [...words].sort((a, b) => a.start - b.start);
-
-    let total = 0;
-    let start = spans[0].start;
-    let end = spans[0].end;
-    for (const span of spans.slice(1)) {
-        if (span.start > end) {
-            total += end - start;
-            start = span.start;
-            end = span.end;
-        } else if (span.end > end) {
-            end = span.end;
-        }
-    }
-    return total + (end - start);
-}
 
 export interface AttemptEvidence {
     /** The cleaned transcript. */
@@ -87,8 +61,6 @@ export interface AttemptEvidence {
      * made, and the score is taken at face value.
      */
     speech?: SpeechBounds | null;
-    /** Word spans from the model, when it produced them. */
-    words?: WordTiming[];
 }
 
 /**
@@ -118,19 +90,6 @@ export function judgeAttempt(evidence: AttemptEvidence): AttemptVerdict {
             };
         }
 
-        const words = evidence.words ?? [];
-        if (words.length) {
-            const spoken = speech.end - speech.start;
-            const covered = coveredSeconds(words);
-            if (spoken > 0 && covered / spoken < COVERAGE_FLOOR) {
-                return {
-                    outcome: 'uncertain',
-                    message:
-                        'Speech recognition was uncertain — it only caught part of what you said. This one does not count; try again.',
-                    counts: false,
-                };
-            }
-        }
     }
 
     return evidence.passed

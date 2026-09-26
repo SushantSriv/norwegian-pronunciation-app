@@ -1,5 +1,53 @@
 # Progress & Goals
 
+## v2.9 — The on-device model is gone ✅
+
+Removed entirely, not hidden. The browser's speech service is now the only way the app
+transcribes.
+
+The carried whisper-base cost 73 MB, ran on ONNX Runtime Web, and mis-heard people. A
+pronunciation app that marks a correct attempt wrong is not protecting anybody — it
+teaches them to distrust the score, which is the end of its usefulness. It had already
+been demoted to a fallback in v2.8; this deletes it.
+
+**What went with it**, since none of it had anything left to do:
+
+- `@huggingface/transformers`, the ASR worker, the model client and its dtype/WebGPU/thread
+  probing — about 1 000 lines.
+- `public/coi.js` and `src/utils/isolation.ts`. The whole cross-origin isolation apparatus
+  existed to unlock WASM threads for a model that no longer exists, and with it goes the
+  one-reload-on-first-visit it cost every visitor.
+- The recognition picker, and the choice it offered.
+- Per-word melody (`phraseMelody.ts`, `PhraseMelody.tsx`) and the word-coverage check in
+  `attemptVerdict`. Both need per-word timings, which only the model produced. Whole-word
+  melody is measured from the recording and is unaffected.
+- The ASR benchmarks (`bench/`, `scripts/bench-*.mjs`), which measured a model.
+
+**The result:** `dist` went from 25 MB to **2.0 MB**, the 73 MB download is gone, and a
+cold load reaches network idle in **769 ms** measured in Chromium.
+
+### What it cost, stated plainly
+
+- **Firefox no longer works at all.** It has never enabled its speech service. The app
+  says so rather than offering a microphone button that does nothing.
+- **Offline practice is gone.** Recognition is a network service now. The PWA shell still
+  caches and opens instantly; practising needs a connection.
+- **Per-word melody is gone**, as above. It was already unreachable for most learners
+  under v2.8's default, so this makes an existing silence explicit.
+- **Accent tracking in the learner profile stops filling.** It was fed only by per-word
+  melody, so `profile.accents` — and the accent rows in the profile panel and the accent
+  branch of the weakness drill — go quiet. Also already true under v2.8.
+
+### One thing that got better
+
+Removing the fallback forced a real fix. On Android builds where the speech service takes
+the microphone exclusively, the recorder captures nothing; the old code returned early and
+the attempt was silently lost, because there was a model to fall back on. Now the
+transcript is delivered anyway, without the pitch analysis that needs audio — a score and
+no melody chart, rather than a tap that does nothing.
+
+---
+
 ## v2.8 — The browser's recogniser by default, and a domain to move to ✅
 
 ### Recognition defaults to the browser service

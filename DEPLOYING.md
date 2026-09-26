@@ -13,30 +13,19 @@ the old address keeps working until you decide otherwise.
 
 ## Why Cloudflare, specifically
 
-One reason above the others: **GitHub Pages cannot set response headers, and Cloudflare
-Pages can.**
+Honestly: less than it used to be.
 
-The speech model needs more than one CPU thread to be quick, and a browser only grants
-that to a page that is *cross-origin isolated*, which is a property conferred by two
-response headers. Measured in Chromium, on the same clip:
+The original reason was that **GitHub Pages cannot set response headers and Cloudflare
+can**, and the app needed `Cross-Origin-Opener-Policy` and `Cross-Origin-Embedder-Policy`
+to unlock WASM threads for the speech model it carried — worth 6.41 s against 2.96 s on
+the same clip. That model has since been removed in favour of the browser's own speech
+service, and with it the entire reason those headers mattered.
 
-| | transcribe | wait after speaking |
-|---|---|---|
-| one thread | 6.41 s | 5.74 s |
-| four threads | 2.96 s | 2.98 s |
-
-On GitHub Pages the app works around this with a service worker that supplies the headers
-itself ([`public/coi.js`](public/coi.js)), at the cost of one extra reload on a visitor's
-first ever load. On Cloudflare the headers come from the host
-([`public/_headers`](public/_headers)) and the very first page load is already isolated.
-The service worker stays in place regardless and simply has nothing left to do.
-
-The second reason is that the optional leaderboard already runs on Cloudflare Workers and
-D1, so the whole thing ends up in one account with one bill — and at this size, no bill.
-
-Cloudflare now routes even static sites through Workers rather than Pages, which is why
-the dashboard talks about a *Worker* throughout. Nothing about this app changes: a Worker
-with static assets and no script is a static site.
+What remains is ordinary and still sufficient: the optional leaderboard already runs on
+Cloudflare Workers and D1, so the whole thing sits in one account with one bill — and at
+this size, no bill. Cloudflare now routes even static sites through Workers rather than
+Pages, which is why the dashboard talks about a *Worker* throughout. Nothing about this
+app changes: a Worker with static assets and no script is a static site.
 
 ---
 
@@ -105,11 +94,13 @@ The first deploy lands on `<project>.workers.dev`. **Check it before going furth
 npm run check:deploy -- https://<project>.workers.dev
 ```
 
-That drives a real browser and checks the things that fail silently: the base path,
-cross-origin isolation, the service worker, the manifest, and whether the speech model's
-CDN is still reachable. It should report `isolation headers from the host: yes` — that is
-the whole point of moving, and it comes from [`public/_headers`](public/_headers), which
-Vite copies into `dist` and Workers reads as configuration.
+That drives a real browser and checks the things that fail silently: the base path, a
+secure context, whether the browser's speech service is reachable, the service worker, the
+manifest, the icons and the link previews.
+
+**The secure-context check matters more than it looks.** `getUserMedia` refuses to run
+outside one, so on plain `http` the microphone does not warn — it does not work. That is
+also the argument for `.app`.
 
 ### Deploying from GitHub Actions instead
 
