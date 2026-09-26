@@ -183,14 +183,22 @@ const write = (key: string, value: string): void => {
 };
 
 /**
- * Whether the learner has agreed to the faster path.
+ * Whether the browser's own recognition may be used.
  *
- * Defaults to OFF. Sending someone's voice to Google, Microsoft or Apple is not
- * a performance setting to opt out of afterwards — the app's whole privacy
- * claim is that recordings stay on the device, and that has to remain true
- * until the person says otherwise.
+ * Defaults to ON, and that is a deliberate reversal. It used to default to the
+ * on-device model on the principle that nothing should leave the browser until
+ * the learner said so. The principle survived contact with the model badly: the
+ * carried checkpoint is small, it mis-hears people, and a pronunciation app
+ * that marks a correct attempt wrong is not protecting anybody — it is just
+ * teaching them to distrust it. The browser's service is fast and accurate
+ * enough to be useful, so it is what a learner gets unless they say otherwise.
+ *
+ * What that costs is stated plainly wherever it is offered: the recording goes
+ * to Google, Microsoft or Apple, exactly as on any site using the browser's
+ * speech API. Scoring, pitch and melody still run only on the device, and the
+ * on-device model is one press away.
  */
-export const cloudSpeechAllowed = (): boolean => read(CHOICE_KEY) === 'yes';
+export const cloudSpeechAllowed = (): boolean => read(CHOICE_KEY) !== 'no';
 
 export const setCloudSpeechAllowed = (allowed: boolean): void =>
     write(CHOICE_KEY, allowed ? 'yes' : 'no');

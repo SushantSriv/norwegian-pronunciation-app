@@ -189,15 +189,26 @@ export function AboutDialog({ open, onClose }: Props) {
                                     There is no account, no server of mine, no tracking and no analytics. Your
                                     progress is saved only in this browser and never leaves it.
                                 </p>
+                                <p className="rounded-lg border border-sky-400/25 bg-sky-400/10 p-3 text-sky-100/80">
+                                    <strong className="text-sky-100">Where your voice goes.</strong>{' '}
+                                    Transcription uses your browser&rsquo;s own speech service by default, so
+                                    the recording &mdash; and only the recording &mdash; goes to Google,
+                                    Microsoft or Apple, exactly as on any site using the browser&rsquo;s speech
+                                    API. It is the faster and more accurate of the two, which is why it is the
+                                    default.
+                                </p>
                                 <p className="rounded-lg border border-emerald-400/25 bg-emerald-400/10 p-3 text-emerald-100/80">
-                                    <strong className="text-emerald-100">Your voice stays here.</strong> Speech
-                                    recognition used to be handed to the browser&rsquo;s own service, which meant
-                                    the audio went to Google&rsquo;s, Microsoft&rsquo;s or Apple&rsquo;s servers
-                                    to be transcribed. By default it now runs as a speech model inside this page
-                                    instead &mdash; you can switch the browser service back on, and the app says
-                                    so plainly when you do. About 82&nbsp;MB is downloaded the first time you use it and kept in your
-                                    browser, and after that nothing about your recordings — not the audio, not
-                                    the transcript — leaves the device, with or without a network connection.
+                                    <strong className="text-emerald-100">Or keep it here instead.</strong>{' '}
+                                    Under <em>Recognition</em> on the practice screen you can switch to a speech
+                                    model that runs inside this page. About 82&nbsp;MB is downloaded once and
+                                    kept in your browser, and after that nothing about your recordings &mdash;
+                                    not the audio, not the transcript &mdash; leaves the device, with or without
+                                    a network connection. It is also the only path with per-word melody, because
+                                    the browser service reports no word timings.
+                                </p>
+                                <p>
+                                    Either way the scoring, the pitch analysis and the melody run on your
+                                    device, and the app tells you which engine answered each attempt.
                                 </p>
                             </Section>
 

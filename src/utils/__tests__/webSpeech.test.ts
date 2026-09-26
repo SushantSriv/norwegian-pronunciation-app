@@ -120,11 +120,19 @@ describe('listenOnce', () => {
 });
 
 describe('the speed-versus-privacy choice', () => {
-    it('defaults to keeping the recording on the device', () => {
-        // Sending someone's voice to a vendor is not a setting to opt out of
-        // after the fact.
-        expect(cloudSpeechAllowed()).toBe(false);
+    it('defaults to the browser service, and says it has not been asked', () => {
+        // Reversed deliberately: the carried model mis-hears people often
+        // enough that defaulting to it taught learners to distrust the score.
+        // The trade is disclosed wherever the choice is offered.
+        expect(cloudSpeechAllowed()).toBe(true);
         expect(cloudSpeechDecided()).toBe(false);
+    });
+
+    it('keeps an explicit refusal', () => {
+        // The one thing that must never be overridden by a later default.
+        setCloudSpeechAllowed(false);
+        expect(cloudSpeechAllowed()).toBe(false);
+        expect(cloudSpeechDecided()).toBe(true);
     });
 
     it('remembers what the learner chose', () => {
@@ -137,8 +145,10 @@ describe('the speed-versus-privacy choice', () => {
 });
 
 describe('shouldUseCloudSpeech', () => {
-    it('stays off until the learner opts in', () => {
+    it('is used where it exists, and stops the moment it is refused', () => {
         withService();
+        expect(shouldUseCloudSpeech()).toBe(true);
+        setCloudSpeechAllowed(false);
         expect(shouldUseCloudSpeech()).toBe(false);
         setCloudSpeechAllowed(true);
         expect(shouldUseCloudSpeech()).toBe(true);
