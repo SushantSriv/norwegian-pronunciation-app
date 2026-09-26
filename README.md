@@ -35,15 +35,21 @@ your attempt, extracts the pitch contour, and draws it.
 | 📚 **13 tracks** | Five CEFR levels from A1 words to B2 clusters, plus eight occupation tracks — helse, bygg, barnehage, butikk, restaurant, transport, renhold, kontor. |
 | 🏆 **Learning points** | Points for clearing your own level's bar, for beating your own best on a word, for mastering one, and for coming back tomorrow — with caps that make repeating an easy phrase worthless. See below. |
 
-**By default your voice never leaves your browser** — not the recording, not the
-transcript, not the score. Recognition runs as a local model, so that is a property of
-the architecture rather than a promise.
+**Recognition uses the browser's own speech service by default**, which means the
+recording — and only the recording — goes to Google, Microsoft or Apple to be transcribed,
+exactly as on any site using the browser's speech API.
 
-There is one thing you can switch on that changes it. The browser's own speech service
-is faster and more accurate than the model this app carries, and it works by sending
-your recording to Google, Microsoft or Apple. It is offered as an explicit choice, it is
-off until you turn it on, and the app says which engine answered each attempt. Scoring,
-pitch and melody run on your device either way.
+That default was reversed on purpose. It used to be the carried on-device model, on the
+principle that nothing should leave the browser until you said so; the principle survived
+contact with the model badly. A small checkpoint mis-hears people, and a pronunciation app
+that marks a correct attempt wrong is not protecting anyone — it is teaching them to
+distrust the score.
+
+**The on-device model is one press away**, in the recognition picker on the practice
+screen, and it is the only path with per-word melody, because the browser service reports
+no word timings. Either way, the scoring, the pitch analysis and the melody all still run
+on your device, nothing is stored anywhere but your browser, and the app says which engine
+answered each attempt.
 
 ## Requirements
 
@@ -101,14 +107,18 @@ The app ships with **no tracking**. Set `VITE_ANALYTICS_URL` at build time to en
 cookie-less page counter (GoatCounter, Plausible, etc.). Do Not Track is respected and no
 identifiers are stored. Recordings are never sent to any analytics endpoint.
 
-Speech **recognition** runs as a local model on ONNX Runtime Web by default, so the
-recording, the transcript, the scoring and the pitch analysis never leave the device.
+Speech **recognition** uses the browser's own service by default, so the recording — and
+only the recording — goes to Google, Microsoft or Apple to be transcribed, exactly as it
+does on any site using the browser's speech API. The app says so in the recognition picker
+before you have chosen, shows which engine answered each attempt, and per-word melody is
+unavailable on that path because the service reports no word timings.
 
-The browser's own speech service can be switched on instead, in which case the recording —
-and only the recording — goes to Google, Microsoft or Apple to be transcribed, exactly as it
-does on any site using the browser's speech API. That is off unless chosen, the app shows
-which engine answered each attempt, and per-word melody is unavailable on that path because
-the service reports no word timings.
+Switching to the on-device model on ONNX Runtime Web takes one press, and then the
+recording, the transcript, the scoring and the pitch analysis never leave the device. The
+scoring, pitch and melody run on your device on both paths; only the transcription differs.
+
+Browsers with no speech service of their own — Firefox, most of iOS — get the on-device
+model regardless, and the picker is hidden rather than offering a switch that does nothing.
 
 </details>
 
@@ -213,6 +223,19 @@ lexicon is an approximation and will be wrong on loanwords. Pitch detection retu
 nothing rather than guessing on unvoiced or quiet frames. The melody target is drawn for
 single words only, since a phrase has one accent per word.
 
+## Hosting it somewhere else
+
+The app is a static build and runs on any host. [`DEPLOYING.md`](DEPLOYING.md) is the
+walk-through for putting it on a domain of your own via Cloudflare Pages, which is worth
+doing for one concrete reason: Cloudflare can send response headers and GitHub Pages
+cannot, and those headers are what let the speech model use more than one CPU thread.
+
+The base path is an environment variable, so a root-served build is `VITE_BASE=/ npm run
+build` rather than a code change. `npm run check:deploy -- https://your-domain` drives a
+real browser against a deployment and checks the things that fail silently: the base path,
+cross-origin isolation, the service worker, the manifest, and whether the model's CDN is
+still reachable.
+
 ## Speed
 
 Recognition runs on your device, so how fast it is depends on what it is allowed to use.
@@ -221,6 +244,9 @@ Recognition runs on your device, so how fast it is depends on what it is allowed
 |---|---|---|---|
 | One WASM thread | 6.41 s | 2.85x | 5.74 s |
 | Four WASM threads | 2.96 s | 1.47x | 2.98 s |
+
+(This is the on-device model. The browser's own speech service, which is the default, is
+faster than either and is not this app's code to measure.)
 
 Measured in Chromium on the same clip and the same machine with `npm run bench:browser`.
 
@@ -232,6 +258,10 @@ than twice as long as the dev server, which does set them.
 A service worker ([`public/coi.js`](public/coi.js)) supplies the headers instead. The
 first visit reloads once, and from then on the model gets its threads. Offline still
 works, and the model CDN still loads — both are checked against a header-less host.
+
+On a host that *can* send headers there is no reload at all, because the first document is
+already isolated; [`public/_headers`](public/_headers) sets them for Cloudflare Pages and
+Netlify, and the service worker then has nothing left to do.
 
 Where the browser offers a working **WebGPU** adapter the model is loaded onto the GPU
 instead (`q4f16`, 79 MB against the 73 MB the CPU build already downloads, so it costs

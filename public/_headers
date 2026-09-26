@@ -1,0 +1,40 @@
+# Response headers for hosts that can send them — Cloudflare Pages, Netlify.
+#
+# GitHub Pages cannot, which is why public/coi.js exists: a service worker that
+# adds these itself, at the cost of one reload on a visitor's first load. Where
+# the host sends them properly there is no reload at all, because the very first
+# document is already cross-origin isolated.
+#
+# Both together are fine. The service worker sets the same values, so it is a
+# no-op here rather than a conflict, and it keeps working if the site is ever
+# moved back to a host that cannot send headers.
+
+/*
+  # Cross-origin isolation, which is what lets ONNX Runtime use more than one
+  # WASM thread. Measured in Chromium: 6.41 s to transcribe on one thread
+  # against 2.96 s on four. See public/coi.js.
+  #
+  # credentialless rather than require-corp: the speech model is fetched from
+  # the Hugging Face CDN, which sends no CORP header of its own, and
+  # require-corp would block it outright.
+  Cross-Origin-Opener-Policy: same-origin
+  Cross-Origin-Embedder-Policy: credentialless
+
+  # Ordinary hardening. No frames: there is nothing here worth embedding, and
+  # a microphone prompt inside somebody else's frame is a phishing tool.
+  X-Content-Type-Options: nosniff
+  Referrer-Policy: no-referrer
+  X-Frame-Options: DENY
+  Permissions-Policy: microphone=(self), camera=(), geolocation=()
+
+# Hashed assets never change under the same name, so they can be kept forever.
+/assets/*
+  Cache-Control: public, max-age=31536000, immutable
+
+# The service worker must not be: a stale one pins an old build indefinitely.
+/sw.js
+  Cache-Control: no-cache
+/coi.js
+  Cache-Control: no-cache
+/registerSW.js
+  Cache-Control: no-cache
