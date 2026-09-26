@@ -10,6 +10,7 @@
     "preview": "vite preview",
     "test": "vitest run",
     "leaderboard:dev": "node scripts/leaderboard-dev.mjs",
+    "check:deploy": "node scripts/check-deployment.mjs",
     "bench:asr": "node scripts/bench-asr.mjs",
     "bench:browser": "node scripts/bench-browser.mjs"
   },

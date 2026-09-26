@@ -1,5 +1,52 @@
 # Progress & Goals
 
+## v2.8 — The browser's recogniser by default, and a domain to move to ✅
+
+### Recognition defaults to the browser service
+
+Reversed on purpose. The on-device checkpoint is small, and small checkpoints mis-hear
+people; a pronunciation app that marks a correct attempt wrong is not protecting anybody,
+it is teaching them to distrust the score. The browser's own service is faster and more
+accurate, so that is what a learner gets.
+
+Defaulting to it adds an obligation rather than removing one, because the recording now
+leaves the device unless the learner says otherwise. So the recognition picker states what
+is happening before anyone has chosen, marks which option is the default, and asks for an
+acknowledgement. The on-device model is one press away and is still the only path with
+per-word melody, because the browser service reports no word timings.
+
+The claims in README.md and the About dialog said the opposite and were corrected rather
+than left to rot.
+
+### Ready for a custom domain on Cloudflare
+
+Everything short of buying the domain. `DEPLOYING.md` is the walk-through.
+
+- **`VITE_BASE`** — the base path is an environment variable now, defaulting to the GitHub
+  Pages subpath. A root-served build is `VITE_BASE=/ npm run build`, not a code change.
+- **`public/_headers`** — COOP/COEP for hosts that can send headers. Cloudflare Pages can;
+  GitHub Pages cannot, which is the single best reason to move. With real headers the
+  first document is already cross-origin isolated and `public/coi.js` has nothing left to
+  do, so there is no reload at all.
+- **`public/_redirects`**, **`.github/workflows/cloudflare-pages.yml`** (inert until the
+  repository variable `CLOUDFLARE_PAGES_PROJECT` is set), and `server/wrangler.toml`
+  prepared for a custom worker route and a second allowed origin.
+- **`npm run check:deploy -- https://your-domain`** — drives a real browser and checks the
+  things that fail silently when an address changes: base path, isolation, the service
+  worker, the manifest, and whether the model's CDN is still reachable under COEP.
+
+Verified against a local stand-in that serves a root build with Cloudflare's headers:
+isolated from headers with no reload, assets resolve, the model loads, the PWA installs.
+
+### Known, and not fixed
+
+Progress does not follow a learner across origins. The profile, the points ledger and the
+leaderboard identity all live in `localStorage`, which is per-origin, so anyone who has
+been practising on the GitHub Pages address starts empty on a new domain. An export/import
+would fix it; nothing else will.
+
+---
+
 ## v2.7 — Learning points, a community screen, and the speed regression ✅
 
 ### Speed: the deployed app was running on one thread

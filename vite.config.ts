@@ -3,10 +3,23 @@ import react from '@vitejs/plugin-react';
 import { VitePWA } from 'vite-plugin-pwa';
 
 // https://vite.dev/config/
+/**
+ * Where the built app will be served from.
+ *
+ * GitHub Pages serves a project site from /<repo-name>/, so asset URLs need
+ * that prefix. A custom domain — on Cloudflare Pages or anywhere else — serves
+ * from the root instead, and the same build would then ask for every asset one
+ * directory too deep.
+ *
+ * So it is an environment variable with the Pages path as its default: nothing
+ * changes for the existing deployment, and deploying to a domain is
+ * VITE_BASE=/ rather than a code change. The manifest's start_url and scope are
+ * already relative, so they follow along.
+ */
+const BASE = process.env.VITE_BASE ?? '/norwegian-pronunciation-app/';
+
 export default defineConfig(({ command }) => ({
-    // GitHub Pages serves the app from /<repo-name>/, so built asset URLs need
-    // that prefix. The dev server stays at / for convenience.
-    base: command === 'build' ? '/norwegian-pronunciation-app/' : '/',
+    base: command === 'build' ? BASE : '/',
     // transformers.js and ONNX Runtime Web ship their own WASM and worker
     // assets. Pre-bundling rewrites the URLs they use to find those at runtime,
     // so the dependency is left alone and served as published.

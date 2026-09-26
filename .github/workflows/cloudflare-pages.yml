@@ -1,0 +1,58 @@
+# Deploy to Cloudflare Pages.
+#
+# INERT UNTIL CONFIGURED. It runs only when the repository variable
+# CLOUDFLARE_PAGES_PROJECT is set, so it sits here doing nothing — and failing
+# nothing — until there is somewhere to deploy to. See DEPLOYING.md.
+#
+# The GitHub Pages workflow is left alone deliberately. Both can run at once
+# during a move, and the old address keeps working until the new one is proven.
+
+name: Deploy to Cloudflare Pages
+
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+concurrency:
+  group: cloudflare-pages
+  cancel-in-progress: false
+
+jobs:
+  deploy:
+    # A repository *variable*, not a secret: secrets are not readable in job
+    # conditions, and this only needs to answer "has anyone set this up yet".
+    if: ${{ vars.CLOUDFLARE_PAGES_PROJECT != '' }}
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          # 22, not 20: the leaderboard worker's tests need node:sqlite.
+          node-version: 22
+          cache: npm
+
+      - run: npm ci
+
+      - name: Lint
+        run: npm run lint
+
+      - name: Test
+        run: npm run test
+
+      - name: Build
+        env:
+          # Served from the root of a domain rather than /<repo-name>/.
+          VITE_BASE: /
+          # Only set if the leaderboard worker has been deployed; an empty value
+          # leaves the shared board switched off, which is the safe default.
+          VITE_LEADERBOARD_URL: ${{ vars.VITE_LEADERBOARD_URL }}
+          VITE_ANALYTICS_URL: ${{ vars.VITE_ANALYTICS_URL }}
+        run: npm run build
+
+      - uses: cloudflare/wrangler-action@v3
+        with:
+          apiToken: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          accountId: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+          command: pages deploy dist --project-name=${{ vars.CLOUDFLARE_PAGES_PROJECT }} --branch=main
