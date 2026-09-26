@@ -18,6 +18,41 @@ import { VitePWA } from 'vite-plugin-pwa';
  */
 const BASE = process.env.VITE_BASE ?? '/norwegian-pronunciation-app/';
 
+/**
+ * The public address, for link previews only.
+ *
+ * Open Graph and Twitter cards must carry absolute URLs — crawlers do not
+ * resolve relative ones — so these are the only URLs in the app that cannot
+ * simply follow the base path. Hard-coded, they meant every link shared from a
+ * new domain advertised the old one.
+ *
+ * The default is the intended home, saynorwegian.app, rather than whichever
+ * address happens to be serving. That is deliberate: previews and the canonical
+ * link should point at the address people are meant to keep, and the app is
+ * currently live at three (GitHub Pages, workers.dev, and a stale Vercel copy).
+ * Pointing them all at one consolidates the site rather than competing with it.
+ *
+ * Until that domain resolves, `npm run check:deploy` reports the preview image
+ * as unreachable. That is correct, and it clears itself the moment DNS is live.
+ */
+const SITE_URL = (process.env.VITE_SITE_URL ?? 'https://saynorwegian.app/').replace(/\/?$/, '/');
+
+/**
+ * Substitute %BASE_URL% and %SITE_URL% in index.html.
+ *
+ * Done here rather than relying on Vite's own %VITE_*% replacement so that both
+ * have a guaranteed default: a placeholder that survives into the built HTML
+ * is a broken icon or a broken link preview, and neither announces itself.
+ */
+const htmlEnv = () => ({
+    name: 'html-env',
+    transformIndexHtml: {
+        order: 'pre' as const,
+        handler: (html: string) =>
+            html.replaceAll('%BASE_URL%', BASE).replaceAll('%SITE_URL%', SITE_URL),
+    },
+});
+
 export default defineConfig(({ command }) => ({
     base: command === 'build' ? BASE : '/',
     // transformers.js and ONNX Runtime Web ship their own WASM and worker
@@ -36,6 +71,7 @@ export default defineConfig(({ command }) => ({
     },
     worker: { format: 'es' as const },
     plugins: [
+        htmlEnv(),
         react(),
         VitePWA({
             registerType: 'autoUpdate',

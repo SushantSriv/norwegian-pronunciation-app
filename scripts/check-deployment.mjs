@@ -94,6 +94,40 @@ check(
     await page.evaluate(() => navigator.serviceWorker.getRegistration().then(r => Boolean(r)))
 );
 
+// Icons and link previews are absolute or base-relative URLs that no rendering
+// check would notice: a 404 here costs an icon on someone's home screen or a
+// broken thumbnail in a shared link, and the page still looks perfect. Both
+// were wrong on this project's first deployment to a new address.
+const head = await page.evaluate(() => ({
+    appleIcon: document.querySelector('link[rel="apple-touch-icon"]')?.href ?? null,
+    ogImage: document.querySelector('meta[property="og:image"]')?.content ?? null,
+    ogUrl: document.querySelector('meta[property="og:url"]')?.content ?? null,
+}));
+
+const reachable = async target => {
+    if (!target) return false;
+    try {
+        const response = await page.request.get(target);
+        return response.ok();
+    } catch {
+        return false;
+    }
+};
+
+check('the apple-touch-icon resolves', await reachable(head.appleIcon), head.appleIcon ?? 'missing');
+check('the link-preview image resolves', await reachable(head.ogImage), head.ogImage ?? 'missing');
+
+// Not a failure: on a temporary address like *.workers.dev you would not set
+// VITE_SITE_URL, and pointing previews at the real site is right. On the final
+// domain, pointing them anywhere else is not.
+const advertised = head.ogUrl ? new URL(head.ogUrl).host : null;
+if (advertised && advertised !== new URL(url).host) {
+    console.log(
+        `NOTE  link previews advertise ${advertised}, not ${new URL(url).host}` +
+            '  — set VITE_SITE_URL if this is the address people will share'
+    );
+}
+
 // The model is fetched eagerly; give it long enough to get going.
 await page.waitForTimeout(30000);
 check('the speech worker started', page.workers().length > 0, `${page.workers().length} workers`);

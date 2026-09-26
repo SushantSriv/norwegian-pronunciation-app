@@ -42,22 +42,27 @@ with static assets and no script is a static site.
 
 ## 1. Buy the domain
 
-Anywhere you like. **Cloudflare Registrar** is the least work because the domain arrives
-already on Cloudflare, with nothing to point anywhere, and it sells at cost with no
-first-year discount that triples on renewal.
+**`saynorwegian.app`.** The `.app` TLD is on the browsers' global HSTS preload list, which
+means every browser forces HTTPS on it before a request is ever made. That matters more
+here than on most sites: `getUserMedia` only works in a secure context, so on plain `http`
+the microphone does not merely warn — it does not work at all. With `.app` there is no
+path by which a learner lands on an insecure version and finds the app broken.
 
-`.no` is worth knowing about before you set your heart on it: Norid requires the
-registrant to be an organisation or a person registered in Norway, and it is bought
-through a Norwegian registrar rather than Cloudflare. `.com`, `.app` and `.no`-adjacent
-options like `.eu` have no such requirement. `.app` is on the HSTS preload list, which
-means it is HTTPS-only by force — a small point in its favour for a site that asks for
-microphone access, since that requires a secure context anyway.
+It reads as a tool rather than a page, too, which is worth something at the moment the
+browser asks *"saynorwegian.app wants to use your microphone"*.
 
-**If you bought it elsewhere:** add the site in the Cloudflare dashboard (*Add a domain*),
-then change the nameservers at your registrar to the two Cloudflare gives you. Propagation
-is usually minutes, occasionally a day.
+**Cloudflare Registrar** is the least work: the domain arrives already on Cloudflare with
+nothing to point anywhere, and it sells at cost. `.app` is a Google-operated TLD and
+Cloudflare resells it.
 
----
+If you buy it elsewhere, add the site in the Cloudflare dashboard (*Add a domain*) and
+change the nameservers at your registrar to the two Cloudflare gives you. Propagation is
+usually minutes.
+
+> The repository already names this domain: link previews, the canonical URL and the
+> leaderboard's allowed origins all point at `saynorwegian.app`. Until DNS resolves,
+> `npm run check:deploy` reports the preview image as unreachable — that is correct, and
+> it clears itself the moment the domain is live.
 
 ## 2. Create the Workers project
 
@@ -118,15 +123,22 @@ the workflow on top means two systems racing to deploy the same commit.
 
 ## 3. Point the domain at it
 
-**The Worker → Settings → Domains & Routes → Add → Custom domain.** Add both the apex
-(`example.com`) and `www`; Cloudflare creates the DNS records and issues the certificate
-itself, usually within a minute or two.
+**The Worker → Settings → Domains & Routes → Add → Custom domain.** Add both
+`saynorwegian.app` and `www.saynorwegian.app`; Cloudflare creates the DNS records and
+issues the certificate itself, usually within a minute or two.
 
-Then check it again, at the real address:
+Then check it at the real address:
 
 ```bash
-npm run check:deploy -- https://example.com
+npm run check:deploy -- https://saynorwegian.app
 ```
+
+Everything should pass now, including the preview image, and the `NOTE` about link
+previews advertising a different host should be gone.
+
+Once it is live, **turn the `workers.dev` URL off** — Worker → Settings → Domains &
+Routes. Leaving it on means the app is reachable at two addresses that each keep their own
+`localStorage`, so a learner who wanders between them appears to lose all their progress.
 
 ---
 
@@ -143,10 +155,10 @@ npx wrangler d1 execute norsk-uttale-leaderboard --file=./schema.sql --remote
 
 Before deploying, edit [`server/wrangler.toml`](server/wrangler.toml):
 
-- `ALLOWED_ORIGINS` — add your domain. **Do this first.** If the origin is not allowed,
-  the first thing the new domain does is fail every sync.
-- Uncomment the `[[routes]]` block to serve the worker from `api.example.com` rather than
-  `workers.dev`.
+- `ALLOWED_ORIGINS` already lists `saynorwegian.app`, `www.saynorwegian.app` and the
+  GitHub Pages origin, so both addresses work during the move. Trim it afterwards.
+- Uncomment the `[[routes]]` block to serve the worker from `api.saynorwegian.app` rather
+  than `workers.dev`.
 
 ```bash
 npx wrangler deploy
@@ -157,8 +169,8 @@ config in its working directory, so the root [`wrangler.toml`](wrangler.toml) de
 site and `server/wrangler.toml` deploys the board. To build it from the dashboard too,
 create another project against the same repository with **Path** `/server`.
 
-Then set `VITE_LEADERBOARD_URL` to `https://api.example.com` in the site project's build
-variables and redeploy. [`server/README.md`](server/README.md) has the data model, the
+Then set `VITE_LEADERBOARD_URL` to `https://api.saynorwegian.app` in the site project's
+build variables and redeploy. [`server/README.md`](server/README.md) has the data model, the
 security model and the free-tier arithmetic.
 
 ---
@@ -167,6 +179,13 @@ security model and the free-tier arithmetic.
 
 **Keep GitHub Pages running for a while.** It costs nothing, and it is somewhere to
 compare against if something on the new address behaves oddly.
+
+**Delete the Vercel project.** The repository has no Vercel configuration — the deployment
+comes from the Vercel GitHub App, configured on Vercel's side — but a copy has been live
+and broken at `norwegian-pronunciation-app.vercel.app` for some time: it was built for the
+GitHub Pages subpath and serves a white page at the root. Remove it in the Vercel
+dashboard (*Project → Settings → Delete*), and revoke the app's access to this repository
+in GitHub under *Settings → Integrations → Applications → Vercel*.
 
 Two things to know about existing visitors:
 

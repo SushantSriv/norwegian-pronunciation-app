@@ -230,6 +230,11 @@ walk-through for putting it on a domain of your own via Cloudflare, which is wor
 for one concrete reason: Cloudflare can send response headers and GitHub Pages cannot, and
 those headers are what let the speech model use more than one CPU thread.
 
+The intended home is **saynorwegian.app** — `.app` is on the browsers' HSTS preload list,
+so HTTPS is forced before a request is made, and `getUserMedia` refuses to run outside a
+secure context. Link previews, the canonical URL and the leaderboard's allowed origins all
+already name it.
+
 The base path is an environment variable, so a root-served build is `VITE_BASE=/ npm run
 build` rather than a code change. `npm run check:deploy -- https://your-domain` drives a
 real browser against a deployment and checks the things that fail silently: the base path,
