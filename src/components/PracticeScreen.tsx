@@ -1,4 +1,4 @@
-import { useEffect, useMemo } from 'react';
+import { useEffect } from 'react';
 import { AnimatePresence, motion } from 'framer-motion';
 import { ITEMS_TO_WIN, MAX_STRIKES, type Attempt } from '../hooks/usePracticeSession';
 import type { Stage } from '../data/stages';
@@ -7,17 +7,13 @@ import { ScoreRing } from './ScoreRing';
 import { PhonemeBreakdown } from './PhonemeBreakdown';
 import { CompareAudio } from './CompareAudio';
 import { MelodyView } from './MelodyView';
-import { PhraseMelody } from './PhraseMelody';
 import { VoiceVisualizer } from './VoiceVisualizer';
 import { VoicePicker } from './VoicePicker';
 import { DialectPicker } from './DialectPicker';
-import { SpeechEnginePicker } from './SpeechEnginePicker';
 import { SpeechTrouble } from './SpeechTrouble';
 import type { DialectId } from '../data/dialects';
-import type { AsrStatus } from '../utils/asr';
 import { POS_LABEL, toneTwin, type Pronunciation } from '../utils/pronunciationLexicon';
 import { useRecordingAnalysis } from '../hooks/useRecordingAnalysis';
-import { analysePhraseMelody } from '../utils/phraseMelody';
 import type { AttemptRecord } from '../utils/learningProfile';
 import { useSpokenPhrase } from '../hooks/useSpokenPhrase';
 
@@ -29,14 +25,8 @@ interface Props {
     strikes: number;
     streak: number;
     listening: boolean;
-    /** The clip has been captured and the model is reading it. */
+    /** The clip has been captured and is being read. */
     transcribing: boolean;
-    /** Download/readiness of the on-device speech model. */
-    model: AsrStatus;
-    /** Throw the worker away and fetch the model again. */
-    onRetryModel: () => void;
-    /** Which engine answered the last attempt. */
-    engine: 'cloud' | 'local' | null;
     /** Partial text, which only the browser service can produce. */
     interim: string;
     speechError: string | null;
@@ -82,9 +72,6 @@ export function PracticeScreen({
     streak,
     listening,
     transcribing,
-    model,
-    onRetryModel,
-    engine,
     interim,
     speechError,
     lastAttempt,
@@ -130,23 +117,6 @@ export function PracticeScreen({
     // Nothing demonstrates that tonelag carries meaning quite as well.
     const twin = soleWordEntry ? toneTwin(soleWordEntry) : null;
 
-    // Per-word melody for a phrase. Pitch accent is a property of a word, so a
-    // multi-word item deserves a verdict per word rather than one number for
-    // the lot — which is only possible now the speech model reports where each
-    // word sat in the recording.
-    const phraseMelody = useMemo(() => {
-        const contour = analysis?.contour;
-        if (!lastAttempt || attemptWords.length < 2 || !contour || !lastAttempt.words.length) {
-            return [];
-        }
-        return analysePhraseMelody({
-            expected: lastAttempt.expected,
-            words: lastAttempt.words,
-            contour,
-            accentFor: word => lookup(word).accent,
-        });
-    }, [lastAttempt, attemptWords.length, analysis, lookup]);
-
     // Dialect transcription of the whole phrase. Words the lexicon does not
     // carry fall back to the rule engine, which emits no stress marks, so the
     // line stays readable either way.
@@ -165,20 +135,13 @@ export function PracticeScreen({
             lastAttempt,
             {
                 score: lastAttempt,
-                melody: phraseMelody
-                    .filter(entry => entry.status === 'good' || entry.status === 'close' || entry.status === 'wrong')
-                    .map(entry => ({
-                        word: entry.word,
-                        accent: entry.expected,
-                        correct: entry.status !== 'wrong',
-                    })),
                 compoundWords: lastAttempt.expected
                     .split(/\s+/)
                     .filter(word => word && lookup(word).source === 'compound'),
             },
             !analysing
         );
-    }, [lastAttempt, phraseMelody, analysing, lookup, onRemember]);
+    }, [lastAttempt, analysing, lookup, onRemember]);
 
     return (
         <div className="glass w-full overflow-hidden rounded-3xl p-5 sm:p-7">
@@ -482,11 +445,6 @@ export function PracticeScreen({
                                     </div>
                                 )}
 
-                                {phraseMelody.length > 0 && (
-                                    <div className="mb-3">
-                                        <PhraseMelody melody={phraseMelody} />
-                                    </div>
-                                )}
 
                                 <MelodyView
                                     contour={analysis?.contour ?? null}
@@ -566,38 +524,10 @@ export function PracticeScreen({
                                 </p>
                             ) : transcribing ? (
                                 <p className="text-sm text-white/70">Reading what you said…</p>
-                            ) : model.state === 'loading' ? (
-                                // The model is ~40 MB on the first visit and
-                                // cached after that. Saying so beats a mic
-                                // button that quietly does nothing yet.
-                                <div className="text-sm text-white/50">
-                                    <p>Downloading the speech model — one time only, then it works offline.</p>
-                                    <div className="mx-auto mt-1.5 h-1 w-40 overflow-hidden rounded-full bg-white/10">
-                                        <div
-                                            className="h-full rounded-full bg-sky-400 transition-[width] duration-300"
-                                            style={{ width: `${Math.round(model.progress * 100)}%` }}
-                                        />
-                                    </div>
-                                </div>
                             ) : (
                                 <p className="text-sm text-white/45">Tap the mic, then say the phrase</p>
                             )}
-                            {model.state === 'failed' && (
-                                <div className="mt-2">
-                                    <p className="text-sm leading-relaxed text-amber-300">
-                                        The speech model did not load. If the app was updated recently,
-                                        reloading the page usually settles it.
-                                    </p>
-                                    <button
-                                        onClick={onRetryModel}
-                                        className="mt-2 rounded-lg border border-white/20 px-3 py-1.5 text-xs font-semibold text-white/80 transition hover:border-white/40 hover:bg-white/10 hover:text-white"
-                                    >
-                                        Try loading it again
-                                    </button>
-                                </div>
-                            )}
-
-                            <SpeechTrouble error={speechError ?? (model.state === 'failed' ? model.error ?? null : null)} />
+                            <SpeechTrouble error={speechError} />
                         </div>
                     </motion.div>
                 )}
@@ -605,9 +535,6 @@ export function PracticeScreen({
 
             <div className="mt-6 border-t border-white/10 pt-4">
                 <DialectPicker dialect={dialect} onChange={onDialectChange} ready={dialectReady} />
-                <div className="mt-3">
-                    <SpeechEnginePicker engine={engine} />
-                </div>
                 <VoicePicker
                     voices={voices}
                     activeVoiceURI={activeVoiceURI}

@@ -1,12 +1,9 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import {
-    cloudSpeechAllowed,
-    cloudSpeechDecided,
     cloudTakesMicrophone,
     listenOnce,
     rememberCloudTakesMicrophone,
-    setCloudSpeechAllowed,
-    shouldUseCloudSpeech,
+    speechReady,
     webSpeechAvailable,
 } from '../webSpeech';
 
@@ -119,59 +116,23 @@ describe('listenOnce', () => {
     });
 });
 
-describe('the speed-versus-privacy choice', () => {
-    it('defaults to the browser service, and says it has not been asked', () => {
-        // Reversed deliberately: the carried model mis-hears people often
-        // enough that defaulting to it taught learners to distrust the score.
-        // The trade is disclosed wherever the choice is offered.
-        expect(cloudSpeechAllowed()).toBe(true);
-        expect(cloudSpeechDecided()).toBe(false);
-    });
-
-    it('keeps an explicit refusal', () => {
-        // The one thing that must never be overridden by a later default.
-        setCloudSpeechAllowed(false);
-        expect(cloudSpeechAllowed()).toBe(false);
-        expect(cloudSpeechDecided()).toBe(true);
-    });
-
-    it('remembers what the learner chose', () => {
-        setCloudSpeechAllowed(true);
-        expect(cloudSpeechAllowed()).toBe(true);
-        expect(cloudSpeechDecided()).toBe(true);
-        setCloudSpeechAllowed(false);
-        expect(cloudSpeechAllowed()).toBe(false);
-    });
-});
-
-describe('shouldUseCloudSpeech', () => {
-    it('is used where it exists, and stops the moment it is refused', () => {
+describe('speechReady', () => {
+    it('is true where the service exists', () => {
         withService();
-        expect(shouldUseCloudSpeech()).toBe(true);
-        setCloudSpeechAllowed(false);
-        expect(shouldUseCloudSpeech()).toBe(false);
-        setCloudSpeechAllowed(true);
-        expect(shouldUseCloudSpeech()).toBe(true);
+        expect(speechReady()).toBe(true);
     });
 
-    it('stands down on a device where it takes the microphone', () => {
-        // Melody is what the app is for, so speed gives way to it.
+    it('is false where it does not — there is no local fallback any more', () => {
+        expect(speechReady()).toBe(false);
+    });
+
+    it('records a device that takes the microphone, without standing down', () => {
+        // It used to hand over to the on-device model here. That model is gone,
+        // so this is now only an observation: the transcript still arrives, and
+        // only the melody chart is lost.
         withService();
-        setCloudSpeechAllowed(true);
         rememberCloudTakesMicrophone();
         expect(cloudTakesMicrophone()).toBe(true);
-        expect(shouldUseCloudSpeech()).toBe(false);
-    });
-
-    it('stays off with no service, however keen the learner is', () => {
-        setCloudSpeechAllowed(true);
-        expect(shouldUseCloudSpeech()).toBe(false);
-    });
-
-    it('stays off while offline, since it is a network service', () => {
-        withService();
-        setCloudSpeechAllowed(true);
-        vi.stubGlobal('navigator', { ...navigator, onLine: false });
-        expect(shouldUseCloudSpeech()).toBe(false);
+        expect(speechReady()).toBe(true);
     });
 });

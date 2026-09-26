@@ -163,7 +163,6 @@ export function listenOnce(options: WebSpeechOptions = {}): Promise<WebSpeechOut
 // Whether to use it at all
 // ---------------------------------------------------------------------------
 
-const CHOICE_KEY = 'npa-cloud-speech-v1';
 const CONFLICT_KEY = 'npa-cloud-mic-conflict-v1';
 
 const read = (key: string): string | null => {
@@ -178,54 +177,35 @@ const write = (key: string, value: string): void => {
     try {
         window.localStorage.setItem(key, value);
     } catch {
-        // Storage unavailable; the choice just will not persist.
+        // Storage unavailable; the observation just will not persist.
     }
 };
-
-/**
- * Whether the browser's own recognition may be used.
- *
- * Defaults to ON, and that is a deliberate reversal. It used to default to the
- * on-device model on the principle that nothing should leave the browser until
- * the learner said so. The principle survived contact with the model badly: the
- * carried checkpoint is small, it mis-hears people, and a pronunciation app
- * that marks a correct attempt wrong is not protecting anybody — it is just
- * teaching them to distrust it. The browser's service is fast and accurate
- * enough to be useful, so it is what a learner gets unless they say otherwise.
- *
- * What that costs is stated plainly wherever it is offered: the recording goes
- * to Google, Microsoft or Apple, exactly as on any site using the browser's
- * speech API. Scoring, pitch and melody still run only on the device, and the
- * on-device model is one press away.
- */
-export const cloudSpeechAllowed = (): boolean => read(CHOICE_KEY) !== 'no';
-
-export const setCloudSpeechAllowed = (allowed: boolean): void =>
-    write(CHOICE_KEY, allowed ? 'yes' : 'no');
-
-/** Whether the learner has ever been asked. */
-export const cloudSpeechDecided = (): boolean => read(CHOICE_KEY) !== null;
 
 /**
  * Whether this device has proved the service will not share the microphone.
  *
  * Android Chrome routes recognition through the system speech service, which
- * takes the microphone exclusively, so our recorder fails — and without the
- * recording there is no pitch contour and no melody chart. Melody is what this
- * app is for, so the fast path stands down rather than the recorder, and the
- * answer is remembered so the cost is one attempt per device rather than one
- * per phrase.
+ * can take the microphone exclusively, so our own recorder captures nothing —
+ * and with it go the pitch contour and the melody chart.
+ *
+ * This used to decide something: the fast path stood down and the on-device
+ * model took over, because melody is what the app is for. There is no model to
+ * stand down to any more, so it is now only an observation, kept so the app can
+ * explain a missing melody chart rather than leave it unexplained.
  */
 export const cloudTakesMicrophone = (): boolean => read(CONFLICT_KEY) === '1';
 
 export const rememberCloudTakesMicrophone = (): void => write(CONFLICT_KEY, '1');
 
-/** Everything that has to be true before the fast path is worth trying. */
-export function shouldUseCloudSpeech(): boolean {
+/**
+ * Whether recognition can work at all right now.
+ *
+ * The service needs both a speech API to call and a network to reach. There is
+ * no longer an offline path — the on-device model was removed — so this is the
+ * honest gate rather than a preference.
+ */
+export function speechReady(): boolean {
     return (
-        webSpeechAvailable() &&
-        cloudSpeechAllowed() &&
-        !cloudTakesMicrophone() &&
-        (typeof navigator === 'undefined' || navigator.onLine !== false)
+        webSpeechAvailable() && (typeof navigator === 'undefined' || navigator.onLine !== false)
     );
 }

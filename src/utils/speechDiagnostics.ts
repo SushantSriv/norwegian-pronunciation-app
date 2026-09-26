@@ -5,15 +5,13 @@
  * worse on someone else's phone where you cannot open developer tools. These
  * checks turn it into something actionable.
  *
- * The list changed shape when recognition moved on-device. It used to be
- * dominated by which browser you were in, because the Web Speech API was a
- * vendor service reached through the browser: Firefox never implemented it,
- * several Chromium forks shipped the interface without access to the service,
- * and an installed shortcut was often refused outright. None of that applies to
- * a model running in this page — every browser with a microphone can run it —
- * so what is left is the microphone itself and whether the model can be fetched
- * and kept.
+ * The list has changed shape twice. It was dominated by which browser you were
+ * in, because recognition was the Web Speech API; then recognition moved to a
+ * model inside the page and the browser stopped mattering; and now the model is
+ * gone and the browser matters again. So the first question is back to being
+ * the hard one: does this browser have a speech service at all.
  */
+import { cloudTakesMicrophone, webSpeechAvailable } from './webSpeech';
 
 export interface SpeechDiagnostic {
     /** Short label shown to the learner. */
@@ -28,33 +26,6 @@ export function isStandalone(): boolean {
     if (typeof window === 'undefined') return false;
     const iosStandalone = (window.navigator as { standalone?: boolean }).standalone === true;
     return window.matchMedia?.('(display-mode: standalone)').matches === true || iosStandalone;
-}
-
-/**
- * Whether the model can be kept between visits.
- *
- * transformers.js stores the weights in the Cache API. Private windows and
- * "block site data" settings make that fail silently, and the only symptom is
- * that the learner re-downloads 40 MB every single session — worth naming.
- */
-async function modelCacheCheck(): Promise<SpeechDiagnostic> {
-    if (typeof caches === 'undefined') {
-        return {
-            label: 'Model storage',
-            ok: false,
-            fix: 'This browser will not let the page store the speech model, so it has to be downloaded again each visit.',
-        };
-    }
-    try {
-        await caches.open('npa-storage-probe');
-        return { label: 'Model storage', ok: true };
-    } catch {
-        return {
-            label: 'Model storage',
-            ok: false,
-            fix: 'Site storage is blocked — often a private window. The speech model will be downloaded again each visit.',
-        };
-    }
 }
 
 export async function collectSpeechDiagnostics(): Promise<SpeechDiagnostic[]> {
@@ -93,24 +64,33 @@ export async function collectSpeechDiagnostics(): Promise<SpeechDiagnostic[]> {
         fix: hasMicrophone ? undefined : 'This browser exposes no microphone to the page.',
     });
 
-    const canRunModel = typeof WebAssembly !== 'undefined' && typeof Worker !== 'undefined';
+    // The one that rules whole browsers out. Firefox has never enabled its
+    // speech service, so naming it plainly beats a microphone button that
+    // looks fine and does nothing.
+    const hasService = webSpeechAvailable();
     out.push({
-        label: 'Runs the speech model',
-        ok: canRunModel,
-        fix: canRunModel
+        label: 'Speech recognition service',
+        ok: hasService,
+        fix: hasService
             ? undefined
-            : 'Recognition needs WebAssembly and web workers, which this browser has disabled.',
+            : 'This browser has no speech recognition service. Chrome, Edge and Safari do; Firefox does not.',
     });
 
-    out.push(await modelCacheCheck());
+    if (hasService && cloudTakesMicrophone()) {
+        out.push({
+            label: 'Microphone shared with recognition',
+            ok: false,
+            fix: 'On this device the speech service takes the microphone for itself, so the pitch and melody charts cannot be drawn. Scoring still works.',
+        });
+    }
 
-    // Only worth mentioning while the model has yet to be fetched: once it is
-    // cached, being offline is fine, which is rather the point.
+    // Recognition is a network service now. There is no offline path: the
+    // on-device model that used to provide one has been removed.
     if (typeof navigator.onLine === 'boolean' && !navigator.onLine) {
         out.push({
             label: 'Network',
             ok: false,
-            fix: 'You are offline. That is fine once the speech model has been downloaded once, but the first download needs a connection.',
+            fix: 'You are offline. Recognition is provided by the browser, which needs a connection.',
         });
     }
 

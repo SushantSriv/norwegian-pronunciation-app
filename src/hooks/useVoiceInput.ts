@@ -1,36 +1,26 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
-import {
-    createAsrClient,
-    cleanTranscript,
-    looksHallucinated,
-    recognitionSupported,
-    type AsrClient,
-    type AsrStatus,
-    type Recognition,
-} from '../utils/asr';
+import { cleanTranscript, recognitionSupported, type Recognition } from '../utils/speech';
 import { decodeForRecognition, RECOGNITION_RATE } from '../utils/audioDecode';
 import { findSpeechBounds } from '../utils/pitch';
-import {
-    listenOnce,
-    rememberCloudTakesMicrophone,
-    shouldUseCloudSpeech,
-    type WebSpeechOutcome,
-} from '../utils/webSpeech';
+import { listenOnce, type WebSpeechOutcome } from '../utils/webSpeech';
 
 /**
- * Recording the learner and turning it into text, entirely on this device.
+ * Recording the learner, and letting the browser transcribe it.
  *
- * This replaces the Web Speech API, and the shape of the problem changes with
- * it. The old API owned the microphone, streamed to a vendor's servers and
- * handed back interim results as it went; a parallel MediaRecorder for
- * listen-back fought it for the microphone, which is why recording used to be
- * switched off on Android. Now there is one recorder, and recognition reads the
- * same audio afterwards — so listen-back and the melody chart work everywhere,
- * and the whole "recording is blocked on this device" mechanism is gone.
+ * Two things happen at once and they are independent. The browser's speech
+ * service listens live and returns text. A MediaRecorder captures the same
+ * audio, which is what the pitch contour, the melody chart and listen-back are
+ * built from — none of which the service provides, and all of which are the
+ * reason this app exists rather than being a dictation box.
  *
- * What is lost is interim results: the model sees the clip when it is finished,
- * not as it arrives. The UI says "Transcribing…" instead of showing text build
- * up.
+ * THE AWKWARD CASE this has to survive: on some Android builds the speech
+ * service routes through the system recogniser and takes the microphone
+ * exclusively, so our recorder captures nothing. There used to be an on-device
+ * model to fall back to; there is not any more. So a recording that comes back
+ * empty is no longer the end of the attempt — the transcript is still
+ * delivered, just without the pitch analysis that needs audio. A learner gets
+ * their score and no melody chart, rather than a tap that silently does
+ * nothing.
  */
 
 /** Silence after speech that ends the recording, in milliseconds. */
@@ -51,6 +41,8 @@ const MIC_ERRORS: Record<string, string> = {
     NotReadableError: 'The microphone is in use by another app. Close it and try again.',
 };
 
+const NOTHING_HEARD = 'I did not catch anything — try speaking a little louder.';
+
 interface Options {
     onResult: (recognition: Recognition) => void;
 }
@@ -63,25 +55,11 @@ export function useVoiceInput({ onResult }: Options) {
     const [error, setError] = useState<string | null>(null);
     const [recordingUrl, setRecordingUrl] = useState<string | null>(null);
     const [recordingAvailable, setRecordingAvailable] = useState(true);
-    const [model, setModel] = useState<AsrStatus>({ state: 'idle', progress: 0 });
-    /**
-     * Bumped to tear the worker down and start over.
-     *
-     * A model that fails to load used to be the end of the session: the message
-     * said what went wrong and offered nothing to do about it. Most causes are
-     * transient — a dropped connection mid-download, a stale service worker
-     * still serving yesterday's bundle after a deploy — and all of them are
-     * fixed by trying again with a fresh worker.
-     */
-    const [reloadKey, setReloadKey] = useState(0);
-    /** Which engine answered the last attempt, so the UI can be honest. */
-    const [engine, setEngine] = useState<'cloud' | 'local' | null>(null);
-    /** Partial text from the browser service, which the local model cannot do. */
+    /** Partial text, which the service produces as the learner speaks. */
     const [interim, setInterim] = useState('');
-    /** The browser service's answer for the attempt in flight. */
-    const cloudRef = useRef<Promise<WebSpeechOutcome> | null>(null);
+    /** The service's answer for the attempt in flight. */
+    const speechRef = useRef<Promise<WebSpeechOutcome> | null>(null);
 
-    const clientRef = useRef<AsrClient | null>(null);
     const mediaRecorderRef = useRef<MediaRecorder | null>(null);
     const chunksRef = useRef<BlobPart[]>([]);
     const recordingUrlRef = useRef<string | null>(null);
@@ -95,29 +73,6 @@ export function useVoiceInput({ onResult }: Options) {
     // Keep the latest callback without re-creating anything.
     const onResultRef = useRef(onResult);
     onResultRef.current = onResult;
-
-    // Start fetching the model on mount. It is ~40 MB the first time and then
-    // served from the browser cache; doing it now means the learner waits while
-    // they are reading the phrase rather than after they have spoken it.
-    useEffect(() => {
-        if (!supported) return;
-        const client = createAsrClient();
-        clientRef.current = client;
-        const unsubscribe = client.subscribe(setModel);
-        client.load();
-        return () => {
-            unsubscribe();
-            client.dispose();
-            clientRef.current = null;
-        };
-    }, [supported, reloadKey]);
-
-    /** Throw the worker away and fetch the model again from scratch. */
-    const retryModel = useCallback(() => {
-        setError(null);
-        setModel({ state: 'idle', progress: 0 });
-        setReloadKey(key => key + 1);
-    }, []);
 
     // Release the last object URL when the hook goes away.
     useEffect(
@@ -146,59 +101,46 @@ export function useVoiceInput({ onResult }: Options) {
         if (recorder && recorder.state !== 'inactive') recorder.stop();
     }, [clearTimers]);
 
-    /** Decode what was recorded, transcribe it, and hand the text up. */
-    const handleRecording = useCallback(async (url: string) => {
-        const client = clientRef.current;
-        if (!client) return;
-
+    /**
+     * Put the transcript together with the recording, and hand the result up.
+     *
+     * @param url The captured audio, or null when the recorder got nothing.
+     */
+    const finish = useCallback(async (url: string | null) => {
         setTranscribing(true);
         try {
+            const outcome = await speechRef.current;
+            speechRef.current = null;
+            const text = outcome?.text ? cleanTranscript(outcome.text) : '';
+
+            // No audio: the service took the microphone for itself. The
+            // transcript is still worth having, so it goes up without the
+            // speech window — everything downstream treats that as "no claim
+            // made about the recognition" rather than as silence.
+            if (!url) {
+                if (!text) {
+                    setError(NOTHING_HEARD);
+                    return;
+                }
+                onResultRef.current({ text });
+                return;
+            }
+
             const audio = await decodeForRecognition(url);
-            if (!audio?.length) {
-                setError('That recording came back empty — try once more.');
+            const speech = audio?.length ? findSpeechBounds(audio, RECOGNITION_RATE) : null;
+
+            // Nothing said and nothing heard is the one case worth refusing
+            // outright: scoring silence teaches nothing.
+            if (!text && !speech) {
+                setError(NOTHING_HEARD);
+                return;
+            }
+            if (!text) {
+                setError('I heard you, but could not make out the words — try once more.');
                 return;
             }
 
-            // Whisper does not return nothing when it hears nothing; it returns
-            // whatever its language model finds likely. Checking for speech
-            // first is cheaper and more honest than scoring a guess.
-            const speech = findSpeechBounds(audio, RECOGNITION_RATE);
-            if (!speech) {
-                setError('I did not catch anything — try speaking a little louder.');
-                return;
-            }
-
-            // The browser service, when it was running, has usually already
-            // answered by now — it listens live rather than after the fact.
-            // Taking its result skips a whole local transcription.
-            const cloud = await cloudRef.current;
-            cloudRef.current = null;
-            if (cloud?.conflict) {
-                // It will not share the microphone with our recorder. Melody
-                // matters more than speed, so the fast path stands down.
-                rememberCloudTakesMicrophone();
-            }
-
-            const cloudText = cloud?.text ? cleanTranscript(cloud.text) : '';
-            if (cloudText) {
-                setEngine('cloud');
-                // No word timings from this path, so per-word melody is
-                // unavailable; the whole-utterance chart is unaffected.
-                onResultRef.current({ text: cloudText, words: [], speech });
-                return;
-            }
-
-            setEngine('local');
-            const recognition = await client.transcribe(audio);
-            const text = cleanTranscript(recognition.text);
-            if (looksHallucinated(text)) {
-                setError('I did not catch anything — try speaking a little louder.');
-                return;
-            }
-            // The measured speech window goes up with the transcript: how much
-            // of it the model accounted for is what tells us whether to trust
-            // the result as pronunciation feedback.
-            onResultRef.current({ text, words: recognition.words, speech });
+            onResultRef.current({ text, speech });
         } catch (cause) {
             setError(cause instanceof Error ? cause.message : 'Could not read that recording.');
         } finally {
@@ -207,10 +149,10 @@ export function useVoiceInput({ onResult }: Options) {
     }, []);
 
     /**
-     * Stop on silence, the way the old streaming recogniser did.
+     * Stop on silence, so the learner does not have to tap twice.
      *
-     * Without this the learner has to tap twice for every attempt, and every
-     * clip carries a tail of dead air that the model then has to chew through.
+     * Also bounds the clip: the pitch analysis runs over whatever was captured,
+     * and a long tail of dead air is work for nothing.
      */
     const watchLevel = useCallback(
         (analyser: AnalyserNode) => {
@@ -273,29 +215,29 @@ export function useVoiceInput({ onResult }: Options) {
             setListening(false);
             setInterim('');
 
-            if (!chunksRef.current.length) return;
+            if (!chunksRef.current.length) {
+                // The recorder captured nothing. Still worth finishing: the
+                // service may well have heard the learner perfectly.
+                void finish(null);
+                return;
+            }
+
             const blob = new Blob(chunksRef.current, { type: recorder.mimeType || 'audio/webm' });
             chunksRef.current = [];
             if (recordingUrlRef.current) URL.revokeObjectURL(recordingUrlRef.current);
             const url = URL.createObjectURL(blob);
             recordingUrlRef.current = url;
             setRecordingUrl(url);
-            void handleRecording(url);
+            void finish(url);
         };
 
         recorder.start();
         mediaRecorderRef.current = recorder;
         setListening(true);
         setInterim('');
-        setEngine(null);
 
-        // Listen through the browser service in parallel, when the learner has
-        // allowed it and it has not already proved it will not share the
-        // microphone. Its answer is used if it produces one; otherwise the
-        // recording goes to the local model exactly as before.
-        cloudRef.current = shouldUseCloudSpeech()
-            ? listenOnce({ onInterim: setInterim })
-            : null;
+        // The service listens live, in parallel with the recorder.
+        speechRef.current = listenOnce({ onInterim: setInterim });
 
         // Tap the same stream for live level data, for the visualiser and for
         // deciding when the learner has stopped talking.
@@ -315,7 +257,7 @@ export function useVoiceInput({ onResult }: Options) {
             // No analyser to watch, so only the hard ceiling can end the take.
             stopTimersRef.current.push(window.setTimeout(stop, MAX_RECORDING_MS));
         }
-    }, [listening, transcribing, supported, clearTimers, releaseAudio, handleRecording, watchLevel, stop]);
+    }, [listening, transcribing, supported, clearTimers, releaseAudio, finish, watchLevel, stop]);
 
     return {
         supported,
@@ -325,9 +267,6 @@ export function useVoiceInput({ onResult }: Options) {
         recordingUrl,
         recordingAvailable,
         analyserRef,
-        model,
-        retryModel,
-        engine,
         interim,
         start,
         stop,

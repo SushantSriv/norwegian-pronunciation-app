@@ -24,7 +24,7 @@ your attempt, extracts the pitch contour, and draws it.
 
 | | |
 |---|---|
-| 🎙️ **On-device recognition** | A quantized Whisper model runs inside the page itself. Every word is aligned and scored, so a dropped or inserted word does not throw off everything after it. |
+| 🎙️ **Recognition** | Your browser's own speech service transcribes; everything after that runs here. Every word is aligned and scored, so a dropped or inserted word does not throw off everything after it. |
 | 🔤 **Phoneme feedback** | Each missed word is broken into IPA sounds, with a plain-language explanation of the target sound and what you actually said. |
 | 📈 **Melody scoring** | Your pitch contour, normalised to semitones and aligned to the *expected* shape for that word's tonelag by dynamic time warping — so a correctly shaped but unhurried delivery scores as correct. Flat delivery scores zero, by construction. |
 | 🎵 **Which tonelag you actually said** | Not just a mark out of 100. The chart names the accent your delivery fits: *"that came out as Tonelag 1, but this word takes Tonelag 2"*. It refuses to guess — a flat attempt sits equidistant from both shapes, so it says nothing rather than something untrue. |
@@ -35,35 +35,38 @@ your attempt, extracts the pitch contour, and draws it.
 | 📚 **13 tracks** | Five CEFR levels from A1 words to B2 clusters, plus eight occupation tracks — helse, bygg, barnehage, butikk, restaurant, transport, renhold, kontor. |
 | 🏆 **Learning points** | Points for clearing your own level's bar, for beating your own best on a word, for mastering one, and for coming back tomorrow — with caps that make repeating an easy phrase worthless. See below. |
 
-**Recognition uses the browser's own speech service by default**, which means the
-recording — and only the recording — goes to Google, Microsoft or Apple to be transcribed,
-exactly as on any site using the browser's speech API.
+**Recognition is your browser's own speech service.** The recording — and only the
+recording — goes to Google, Microsoft or Apple to be transcribed, exactly as on any site
+using the browser's speech API.
 
-That default was reversed on purpose. It used to be the carried on-device model, on the
-principle that nothing should leave the browser until you said so; the principle survived
-contact with the model badly. A small checkpoint mis-hears people, and a pronunciation app
-that marks a correct attempt wrong is not protecting anyone — it is teaching them to
-distrust the score.
+The app used to carry a quantized Whisper checkpoint and do it here instead. That is gone.
+A 73 MB download bought a model that mis-heard people, and a pronunciation app that marks
+a correct attempt wrong is not protecting anybody — it teaches them to distrust the score,
+which is the end of its usefulness.
 
-**The on-device model is one press away**, in the recognition picker on the practice
-screen, and it is the only path with per-word melody, because the browser service reports
-no word timings. Either way, the scoring, the pitch analysis and the melody all still run
-on your device, nothing is stored anywhere but your browser, and the app says which engine
-answered each attempt.
+**Everything after the transcript still runs on your device**: alignment, phoneme scoring,
+Norwegian G2P, pitch detection and melody, all on audio this app recorded itself. Nothing
+is stored anywhere but your browser.
+
+**What it cost, plainly.** Firefox has never enabled its speech service, so the app cannot
+work there and says so instead of pretending. Offline practice is gone, because the
+service needs a network. And per-word melody is gone, because the service reports no word
+timings — whole-word melody, measured from the recording, is unaffected and is still the
+point of the app.
 
 ## Requirements
 
-- **A desktop browser built on Chromium or WebKit** — Chrome, Edge, Safari. Firefox runs it too, but the on-device model is roughly eight times slower there (see below), which is usable rather than pleasant. Nothing is locked out by policy — but "not locked out" is not the same as "measured", and only what has been measured is claimed here.
-- **Optionally, the browser's own speech service**, which is faster and more accurate than the on-device model and sends your recording to your browser vendor. Off by default; it exists because the on-device model is genuinely slower and mis-hears more, and that is a trade worth putting in the learner's hands rather than deciding for them.
-- **About 82 MB on first use**, downloaded once and then cached: a quantized whisper-base (76 MB) plus the ONNX Runtime it runs on (5.7 MB gzipped). After that recognition works with the network off. The rest of the app is ~1.9 MB.
+- **A browser with a speech recognition service** — Chrome, Edge or Safari. **Firefox does not have one** and the app cannot work there; it says so rather than offering a microphone button that does nothing.
+- **A network connection**, because recognition is a service rather than something carried in the page.
+- **About 2 MB**, once. There is no model to download any more.
 - **A Norwegian text-to-speech voice** for the reference audio. Most systems have one; the app tells you how to add one if not.
 - **Roughly 2.3x the length of what you said**, while the model transcribes: a two-second phrase comes back in about four and a half seconds on a desktop Chromium, five and a half on WebKit. Longer on an older or smaller device. That is the cost of not sending your voice anywhere.
 
 ## Install it
 
-It is a PWA, so you can add it to your home screen or desktop and use it offline:
-open the app and choose **Install** from the address bar or menu. Recognition works offline
-once the model has been fetched once.
+It is a PWA, so you can add it to your home screen or desktop: open the app and choose
+**Install** from the address bar or menu. The app shell is cached and opens instantly, but
+practising needs a connection, because transcription is the browser's service.
 
 ## Running it yourself
 
@@ -82,9 +85,9 @@ and melody alignment — happens client-side in TypeScript.
 <summary><strong>Optional: the original FastAPI backend</strong></summary>
 
 `backend/` still holds the original Whisper-based scoring service, running a full-size
-model server-side. The browser now runs Whisper too, just a much smaller checkpoint, so
-what the backend still buys you is accuracy rather than capability. It is not what the
-hosted app uses.
+model server-side. It is not what the hosted app uses, and it is the only way left to run
+this without depending on a browser's speech service — worth knowing if that constraint
+ever matters to you.
 
 ```bash
 cd backend
@@ -107,26 +110,21 @@ The app ships with **no tracking**. Set `VITE_ANALYTICS_URL` at build time to en
 cookie-less page counter (GoatCounter, Plausible, etc.). Do Not Track is respected and no
 identifiers are stored. Recordings are never sent to any analytics endpoint.
 
-Speech **recognition** uses the browser's own service by default, so the recording — and
-only the recording — goes to Google, Microsoft or Apple to be transcribed, exactly as it
-does on any site using the browser's speech API. The app says so in the recognition picker
-before you have chosen, shows which engine answered each attempt, and per-word melody is
-unavailable on that path because the service reports no word timings.
+Speech **recognition** is the browser's own service, so the recording — and only the
+recording — goes to Google, Microsoft or Apple to be transcribed, exactly as it does on
+any site using the browser's speech API. There is no longer a second path: the on-device
+model that used to offer one has been removed.
 
-Switching to the on-device model on ONNX Runtime Web takes one press, and then the
-recording, the transcript, the scoring and the pitch analysis never leave the device. The
-scoring, pitch and melody run on your device on both paths; only the transcription differs.
-
-Browsers with no speech service of their own — Firefox, most of iOS — get the on-device
-model regardless, and the picker is hidden rather than offering a switch that does nothing.
+Everything after the transcript stays here. The scoring, the pitch analysis and the melody
+all run on your device, and nothing is stored anywhere but your browser.
 
 </details>
 
 ## How the scoring works
 
-1. A quantized **whisper-base** transcribes the recording, in a web worker, on your own
-   device. The clip is checked for actual speech first: given silence Whisper does not
-   return nothing, it returns whatever its language model finds likely.
+1. Your browser's **speech service** transcribes what you said, while a MediaRecorder
+   captures the same audio for everything that follows. The recording is checked for
+   actual speech, so silence is called silence rather than scored.
 2. Expected and heard words are **aligned** with Needleman–Wunsch, so inserted or
    dropped words do not cascade into false errors.
 3. Each mismatched word is converted to IPA — from the NB Uttale lexicon where it is
@@ -146,8 +144,8 @@ poses — `hender` is either hands or happens, and the melody is the entire diff
 you get "you said the hands one" rather than "41/100".
 
 Before any of that, two things the transcript gets to spell its own way are reconciled, so
-neither costs you a life. Whisper transcribes rather than dictates, so `fem` comes back as
-`5` while the corpus spells it out; number words and digits canonicalise to the same token,
+neither costs you a life. A speech service transcribes rather than dictates, so `fem` can
+come back as `5` while the corpus spells it out; number words and digits canonicalise to the same token,
 and a digit is given its pronunciation back before the phoneme comparison. And Norwegian
 compounds come back written apart as often as together — `skiftetøy` heard as `skifte tøy`
 — which alignment would charge as a substitution plus an insertion. Both are rejoined only
@@ -183,32 +181,7 @@ devices, and nothing here should be read as evidence about them.
 `bench/bench.html` is a plain page, so opening it through `npm run dev` on a
 phone produces the same table.
 
-#### The single biggest speed-up available
-
-Those numbers are without cross-origin isolation. With `Cross-Origin-Opener-Policy`
-and `Cross-Origin-Embedder-Policy` set, `SharedArrayBuffer` becomes available and
-ONNX Runtime can use more than one WASM thread:
-
-| engine | without isolation | with isolation |
-|---|---|---|
-| Chromium | 2.31x real time | **1.19x** |
-| Firefox | 23.52x real time | **9.16x** |
-
-Twice as fast in Chromium, nearly three times in Firefox, for two response
-headers. The dev server sets them (`credentialless`, so the model can still be
-fetched from the Hugging Face CDN, which sends no CORP header).
-
-**GitHub Pages cannot set response headers**, so the hosted build does not get
-this. The usual workaround is a service worker that re-serves responses with the
-headers attached; the app already registers one for offline support, so this is
-the obvious next piece of work rather than a research question.
-
-That benchmark earned its keep immediately. The quantized model did not load in
-any browser — a graph-rewrite failure in ONNX Runtime Web that does not happen
-under Node, where every earlier measurement had been taken — so recognition had
-shipped completely broken, invisibly to every test in this repository.
-
-**Known limits:** whisper-base is a small model and will mis-hear a learner sometimes,
+**Known limits:** the browser's speech service will still mis-hear a learner sometimes,
 which shows up as a low score they did not earn. `scripts/bench-asr.mjs` measures exactly
 that against read Norwegian from google/fleurs, and the model was picked on those numbers
 rather than on size — `tiny` scored 79% word error rate against `base`'s 48%, which in a
@@ -226,9 +199,11 @@ single words only, since a phrase has one accent per word.
 ## Hosting it somewhere else
 
 The app is a static build and runs on any host. [`DEPLOYING.md`](DEPLOYING.md) is the
-walk-through for putting it on a domain of your own via Cloudflare, which is worth doing
-for one concrete reason: Cloudflare can send response headers and GitHub Pages cannot, and
-those headers are what let the speech model use more than one CPU thread.
+walk-through for putting it on a domain of your own via Cloudflare. The original reason
+for moving was that Cloudflare can send the cross-origin isolation headers GitHub Pages
+cannot — which mattered a great deal when a WASM model needed threads, and not at all now
+that it is gone. What remains is an ordinary good reason: it is where the optional
+leaderboard already runs, so the whole thing sits in one account.
 
 The intended home is **saynorwegian.app** — `.app` is on the browsers' HSTS preload list,
 so HTTPS is forced before a request is made, and `getUserMedia` refuses to run outside a
@@ -243,40 +218,15 @@ still reachable.
 
 ## Speed
 
-Recognition runs on your device, so how fast it is depends on what it is allowed to use.
+There is no model to wait for. The app is about 2 MB and the first paint is immediate;
+transcription is the browser's own service, whose latency is not this app's code to
+measure.
 
-| | transcribe | real time | wait after speaking |
-|---|---|---|---|
-| One WASM thread | 6.41 s | 2.85x | 5.74 s |
-| Four WASM threads | 2.96 s | 1.47x | 2.98 s |
-
-(This is the on-device model. The browser's own speech service, which is the default, is
-faster than either and is not this app's code to measure.)
-
-Measured in Chromium on the same clip and the same machine with `npm run bench:browser`.
-
-ONNX Runtime can only use more than one thread when the page is **cross-origin isolated**,
-which needs COOP and COEP response headers — and **GitHub Pages cannot set response
-headers**. The hosted app was therefore doing everything on one thread and taking more
-than twice as long as the dev server, which does set them.
-
-A service worker ([`public/coi.js`](public/coi.js)) supplies the headers instead. The
-first visit reloads once, and from then on the model gets its threads. Offline still
-works, and the model CDN still loads — both are checked against a header-less host.
-
-On a host that *can* send headers there is no reload at all, because the first document is
-already isolated; [`public/_headers`](public/_headers) sets them for Cloudflare Workers
-and Netlify, and the service worker then has nothing left to do.
-
-Where the browser offers a working **WebGPU** adapter the model is loaded onto the GPU
-instead (`q4f16`, 79 MB against the 73 MB the CPU build already downloads, so it costs
-nothing extra to fetch). If the adapter is missing or the build will not load, it falls
-back to WASM and remembers that, so the discovery is paid once rather than every session.
-The GPU path could not be timed here — headless Chromium has no adapter, and software
-emulation is not a number worth quoting.
-
-The model is also warmed up with one throwaway inference as soon as it loads, so the
-first thing a learner says is not the attempt that pays for kernel compilation.
+It was not always so. The app used to carry a quantized whisper-base and run it on ONNX
+Runtime Web, which meant a 73 MB download and, in Chromium, 6.41 s to transcribe on one
+WASM thread against 2.96 s on four — the difference being whether the page was
+cross-origin isolated, which GitHub Pages cannot do. A service worker was built to supply
+those headers. All of it is gone, along with the model it existed to serve.
 
 ## Points, streaks and the leaderboard
 
