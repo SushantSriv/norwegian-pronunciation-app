@@ -12,15 +12,13 @@ compatibility_date = "2025-01-01"
 # allowed while a move is in progress. Update this BEFORE pointing the domain
 # at the site, or the first thing the new domain does is fail every sync.
 [vars]
-ALLOWED_ORIGINS = "https://sushantsriv.github.io"
-# With a domain, this becomes something like:
-# ALLOWED_ORIGINS = "https://norskuttale.no,https://www.norskuttale.no,https://sushantsriv.github.io"
+ALLOWED_ORIGINS = "https://saynorwegian.app,https://www.saynorwegian.app,https://sushantsriv.github.io"
 
 # Serve the worker from a subdomain of your own instead of workers.dev. The
 # zone must already be on Cloudflare; `wrangler deploy` creates the DNS record.
-# Then build the app with VITE_LEADERBOARD_URL=https://api.<your-domain>
+# Then build the app with VITE_LEADERBOARD_URL=https://api.saynorwegian.app
 # [[routes]]
-# pattern = "api.norskuttale.no"
+# pattern = "api.saynorwegian.app"
 # custom_domain = true
 
 [[d1_databases]]

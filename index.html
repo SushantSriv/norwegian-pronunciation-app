@@ -4,8 +4,13 @@
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover" />
     <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns=%27http://www.w3.org/2000/svg%27 viewBox=%270 0 100 100%27%3E%3Ctext y=%27.9em%27 font-size=%2790%27%3E🗣️%3C/text%3E%3C/svg%3E" />
-    <link rel="apple-touch-icon" href="/norwegian-pronunciation-app/icon-192.png" />
+    <link rel="apple-touch-icon" href="%BASE_URL%icon-192.png" />
     <meta name="theme-color" content="#0b1120" />
+
+    <!-- One canonical home. The app is reachable at more than one address while
+         it is being moved, and without this they compete with each other in
+         search results instead of adding up. -->
+    <link rel="canonical" href="%SITE_URL%" />
 
     <title>Norsk uttale — Norwegian pronunciation practice</title>
     <meta
@@ -14,7 +19,11 @@
     />
 
     <!-- Link previews for WhatsApp, Facebook, Reddit, Slack, X. Absolute URLs
-         are required here: relative paths are not resolved by crawlers. -->
+         are required here: relative paths are not resolved by crawlers, which
+         is why these alone cannot be made relative like everything else.
+         %SITE_URL% is substituted at build time from VITE_SITE_URL; see
+         vite.config.ts. Get it wrong and every link shared from this site
+         advertises a different one. -->
     <meta property="og:type" content="website" />
     <meta property="og:site_name" content="Norsk uttale" />
     <meta property="og:title" content="Norsk uttale — see your Norwegian intonation" />
@@ -22,11 +31,8 @@
         property="og:description"
         content="Say it out loud and get instant phoneme-level scoring plus a pitch-accent melody chart. Free, no sign-up, runs in your browser."
     />
-    <meta property="og:url" content="https://sushantsriv.github.io/norwegian-pronunciation-app/" />
-    <meta
-        property="og:image"
-        content="https://sushantsriv.github.io/norwegian-pronunciation-app/og-image.png"
-    />
+    <meta property="og:url" content="%SITE_URL%" />
+    <meta property="og:image" content="%SITE_URL%og-image.png" />
     <meta property="og:image:width" content="1200" />
     <meta property="og:image:height" content="630" />
     <meta property="og:image:alt" content="Norsk uttale — a microphone ringed by a sound wave, above a pitch curve" />
@@ -38,13 +44,42 @@
         name="twitter:description"
         content="Say it out loud and get instant phoneme-level scoring plus a pitch-accent melody chart. Free, no sign-up."
     />
-    <meta
-        name="twitter:image"
-        content="https://sushantsriv.github.io/norwegian-pronunciation-app/og-image.png"
-    />
+    <meta name="twitter:image" content="%SITE_URL%og-image.png" />
 </head>
 <body>
     <div id="root"></div>
+
+    <!-- Say so when the app cannot load, instead of showing a white page.
+         A build served from the wrong base path produces exactly that: the HTML
+         arrives, every script 404s, and nothing on screen explains why. It has
+         happened in the wild on this project, so the failure is now loud.
+         Registered before the module script and in the capture phase, because
+         resource errors do not bubble. -->
+    <script>
+        addEventListener(
+            'error',
+            function (event) {
+                var element = event.target;
+                if (!element || element.tagName !== 'SCRIPT' || !element.src) return;
+                var root = document.getElementById('root');
+                if (!root || root.firstChild) return;
+                root.innerHTML =
+                    '<div style="max-width:34rem;margin:15vh auto;padding:0 1.5rem;' +
+                    'font:16px/1.6 system-ui,sans-serif;color:#e2e8f0">' +
+                    '<h1 style="font-size:1.25rem;margin:0 0 .75rem">This app did not load</h1>' +
+                    '<p style="margin:0 0 .75rem;color:#94a3b8">A script failed to load:</p>' +
+                    '<code style="display:block;word-break:break-all;padding:.6rem .8rem;' +
+                    'border-radius:.5rem;background:#1e293b;color:#7dd3fc;font-size:13px">' +
+                    String(element.src).replace(/[<>&]/g, '') +
+                    '</code>' +
+                    '<p style="margin:.75rem 0 0;color:#94a3b8">If that path looks wrong for ' +
+                    'this address, the site was built for a different one &mdash; see ' +
+                    'VITE_BASE in DEPLOYING.md.</p></div>';
+            },
+            true
+        );
+    </script>
+
     <script type="module" src="/src/main.tsx"></script>
 </body>
 </html>
