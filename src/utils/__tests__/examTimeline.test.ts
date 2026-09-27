@@ -247,3 +247,47 @@ describe('the microphone is never open while the app is talking', () => {
         }
     });
 });
+
+describe('the examiner reads the task aloud', () => {
+    it('says every prompt aloud, not just shows it', () => {
+        // The candidate has the task on paper at the exam and hears it read
+        // out. An app that only put it on screen would be rehearsing reading.
+        //
+        // Per task rather than per segment: B1-B2's oppgave C is two segments,
+        // and the påstand is read in the first of them.
+        for (const nivaa of LEVELS) {
+            const timeline = buildTimeline({ nivaa });
+            for (const segment of timeline) {
+                if (!segment.oppgave) continue;
+                const spokenForThisTask = timeline
+                    .filter(other => other.letter === segment.letter)
+                    .flatMap(other => other.says)
+                    .join(' ');
+                expect(spokenForThisTask, `${nivaa} ${segment.id}`).toContain(
+                    segment.oppgave.text
+                );
+            }
+        }
+    });
+
+    it('cues the candidate after the question, not before it', () => {
+        const a = buildTimeline({ nivaa: 'A2-B1' }).find(s => s.letter === 'A');
+        expect(a?.says.at(-1)).toBe('Du kan begynne.');
+        expect(a?.says.at(-2)).toBe(a?.oppgave?.text);
+    });
+
+    it('reads out the conversation task even when it cannot be run', () => {
+        // You should hear what the task you are missing actually asks.
+        const pair = buildTimeline({ nivaa: 'A2-B1' }).find(s => s.kind === 'samtale');
+        expect(pair?.runnable).toBe(false);
+        expect(pair?.says.join(' ')).toContain(pair?.oppgave?.text ?? '###');
+    });
+
+    it('does not read the B1–B2 påstand a third time', () => {
+        // It is read once with the framing and once as the thinking segment's
+        // own line. Repeating it at the answering slot would be padding.
+        const timeline = buildTimeline({ nivaa: 'B1-B2', pick: pickId('pa-2') });
+        const answering = timeline.find(s => s.id === 'c');
+        expect(answering?.says).toEqual(['Du kan begynne.']);
+    });
+});
