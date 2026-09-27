@@ -104,3 +104,22 @@ export const MONOLOGUE: ListenProfile = {
     maxMs: 180_000,
     continuous: true,
 };
+
+/**
+ * A take bounded by the exam's own clock rather than by the speaker.
+ *
+ * The published duration is what stops you — "Eksaminator stopper hver kandidat
+ * etter 2-3 minutter" — so `maxMs` is the upper bound for that slot and the
+ * silence tolerance is set high enough that thinking can never end a take. A
+ * candidate who has finished early presses the button instead.
+ *
+ * Total silence still ends the segment, because sitting mute for three quarters
+ * of a minute is not a pause, and on the real exam it is the thing that
+ * produces "ikke nok grunnlag for vurdering".
+ */
+export const examProfile = (maxMs: number): ListenProfile => ({
+    silenceMs: 20_000,
+    noSpeechMs: 45_000,
+    maxMs,
+    continuous: true,
+});

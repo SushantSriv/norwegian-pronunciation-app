@@ -17,6 +17,8 @@ interface Props {
     /** Consecutive days practised. */
     streak: number;
     onOpenCommunity: () => void;
+    /** The way in to the muntlig-prove rehearsal. */
+    onOpenMuntlig: () => void;
     onPick: (stage: Stage) => void;
 }
 
@@ -58,6 +60,7 @@ export function StageSelect({
     weeklyPoints,
     streak,
     onOpenCommunity,
+    onOpenMuntlig,
     onPick,
 }: Props) {
     const stagesFor = (track: Track): Stage[] =>
@@ -106,24 +109,45 @@ export function StageSelect({
                   half of a leaderboard and your own progress is the half worth
                   seeing before you start.
                 */}
-                <motion.button
-                    variants={card}
-                    onClick={onOpenCommunity}
-                    whileHover={{ y: -2 }}
-                    whileTap={{ scale: 0.98 }}
-                    className="mt-5 inline-flex items-center gap-2.5 rounded-full border border-white/15 bg-white/[0.07] px-4 py-2 text-sm font-semibold text-white/75 backdrop-blur transition hover:border-white/35 hover:bg-white/10 hover:text-white focus:outline-none focus-visible:ring-2 focus-visible:ring-sky-300/70"
-                >
-                    <span aria-hidden="true">🏆</span>
-                    <span>Fellesskap</span>
-                    {weeklyPoints > 0 && (
-                        <span className="rounded-full bg-white/15 px-2 py-0.5 text-xs font-bold tabular-nums text-white">
-                            +{weeklyPoints.toLocaleString('nb-NO')} denne uken
+                <div className="mt-5 flex flex-wrap items-center justify-center gap-2.5">
+                    <motion.button
+                        variants={card}
+                        onClick={onOpenCommunity}
+                        whileHover={{ y: -2 }}
+                        whileTap={{ scale: 0.98 }}
+                        className="inline-flex items-center gap-2.5 rounded-full border border-white/15 bg-white/[0.07] px-4 py-2 text-sm font-semibold text-white/75 backdrop-blur transition hover:border-white/35 hover:bg-white/10 hover:text-white focus:outline-none focus-visible:ring-2 focus-visible:ring-sky-300/70"
+                    >
+                        <span aria-hidden="true">🏆</span>
+                        <span>Fellesskap</span>
+                        {weeklyPoints > 0 && (
+                            <span className="rounded-full bg-white/15 px-2 py-0.5 text-xs font-bold tabular-nums text-white">
+                                +{weeklyPoints.toLocaleString('nb-NO')} denne uken
+                            </span>
+                        )}
+                        {streak > 1 && (
+                            <span className="text-xs font-bold text-amber-300">🔥 {streak}</span>
+                        )}
+                    </motion.button>
+
+                    {/*
+                      The rehearsal sits beside the community button rather than
+                      among the stages: it is not a drill you score, it is the
+                      whole exam end to end, and the stages all promise a score.
+                    */}
+                    <motion.button
+                        variants={card}
+                        onClick={onOpenMuntlig}
+                        whileHover={{ y: -2 }}
+                        whileTap={{ scale: 0.98 }}
+                        className="inline-flex items-center gap-2.5 rounded-full border border-white/15 bg-white/[0.07] px-4 py-2 text-sm font-semibold text-white/75 backdrop-blur transition hover:border-white/35 hover:bg-white/10 hover:text-white focus:outline-none focus-visible:ring-2 focus-visible:ring-sky-300/70"
+                    >
+                        <span aria-hidden="true">🎓</span>
+                        <span>Prøverommet</span>
+                        <span className="rounded-full bg-white/15 px-2 py-0.5 text-xs font-bold text-white/80">
+                            muntlig prøve
                         </span>
-                    )}
-                    {streak > 1 && (
-                        <span className="text-xs font-bold text-amber-300">🔥 {streak}</span>
-                    )}
-                </motion.button>
+                    </motion.button>
+                </div>
             </motion.header>
 
             {SECTIONS.filter(section => stagesFor(section.track).length > 0).map(section => (
