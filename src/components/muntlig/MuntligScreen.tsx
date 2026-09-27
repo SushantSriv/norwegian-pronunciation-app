@@ -1,10 +1,13 @@
 import { useCallback, useEffect, useRef, useState, type ReactNode } from 'react';
 import { motion } from 'framer-motion';
 import { SessionMap } from './SessionMap';
+import { Oppsummering } from './Oppsummering';
 import { useExamSession } from '../../hooks/useExamSession';
 import { useVoiceInput } from '../../hooks/useVoiceInput';
 import { examProfile, PHRASE, recognitionSupported, type ListenProfile } from '../../utils/speech';
 import { TOTAL_MS } from '../../utils/examTimeline';
+import { decodeMono } from '../../utils/audioFrames';
+import { pausesFrom, type PauseProfile } from '../../utils/pauses';
 import { APP_SIER } from '../../data/muntlig/eksaminator';
 import type { Nivaa } from '../../data/muntlig/oppgaver';
 
@@ -165,108 +168,64 @@ function ExamRunner({ nivaa, onBack, onRestart }: RunnerProps) {
         return () => window.clearInterval(timer);
     }, [phase]);
 
+    /**
+     * Measure each take as it finishes, not all of them at the end.
+     *
+     * `useVoiceInput` revokes the previous object URL the moment a new
+     * recording lands, so at the end of a session only the last take's audio
+     * still exists. Measuring here, in the gap before the examiner's next
+     * line, is both the only moment the audio is there and the only moment the
+     * work is free.
+     *
+     * Pauses only — never the pitch contour. Running F0 over a three-minute
+     * answer would cost seconds to produce a number this mode has no business
+     * reporting.
+     */
+    const [profiles, setProfiles] = useState<Record<string, PauseProfile | null>>({});
+    const measured = useRef(new Set<string>());
+    const { takes } = session;
+
+    useEffect(() => {
+        const last = takes.at(-1);
+        if (!last || measured.current.has(last.segmentId)) return;
+        measured.current.add(last.segmentId);
+
+        const url = last.recordingUrl;
+        if (!url) {
+            // No audio at all — the speech service took the microphone. That is
+            // not zero pauses, it is nothing to measure, and the report has to
+            // be able to tell those apart.
+            setProfiles(current => ({ ...current, [last.segmentId]: null }));
+            return;
+        }
+
+        let alive = true;
+        void (async () => {
+            const decoded = await decodeMono(url);
+            if (!alive) return;
+            setProfiles(current => ({
+                ...current,
+                [last.segmentId]: decoded ? pausesFrom(decoded.data, decoded.rate) : null,
+            }));
+        })();
+        return () => {
+            alive = false;
+        };
+    }, [takes]);
+
     const segment = session.segment;
 
     if (phase === 'ferdig' || !segment) {
-        // Which lettered tasks produced nothing. Listed rather than quietly
-        // left out: a summary that shows only what ran would tell you the exam
-        // is shorter and simpler than it is, and the conversation task alone is
-        // a fifth to a third of the real thing.
-        const spoken = new Set(session.takes.map(take => take.segmentId));
-        const missed = session.timeline.filter(
-            s =>
-                s.letter &&
-                s.kind !== 'tenketid' &&
-                !spoken.has(s.id) &&
-                // Either the app could not run it, or it was your turn and
-                // nothing came of it. A slot where only the examiner speaks is
-                // not something you missed.
-                (s.unavailable !== undefined || s.floor === 'deg')
-        );
-
         return (
             <Shell onBack={onBack}>
-                <p className="text-sm text-white/65">
-                    Ferdig på {clock(session.elapsedMs)}. Den virkelige prøven tar 20–25 minutter.
-                </p>
-                <p className="mt-1.5 text-[12px] leading-relaxed text-white/35">{APP_SIER.totaltid}</p>
-
-                <div className="mt-5 space-y-3">
-                    {session.takes.length === 0 && (
-                        <p className="rounded-xl border border-white/10 bg-white/[0.03] p-4 text-sm text-white/45">
-                            Ingen opptak denne gangen.
-                        </p>
-                    )}
-                    {session.takes.map(take => {
-                        const from = session.timeline.find(s => s.id === take.segmentId);
-                        return (
-                            <div
-                                key={take.segmentId}
-                                className="rounded-xl border border-white/10 bg-white/[0.03] p-4"
-                            >
-                                <div className="flex items-baseline justify-between gap-3">
-                                    <span className="text-sm font-bold text-white">
-                                        {from?.letter ? `Oppgave ${from.letter} · ` : ''}
-                                        {from?.title}
-                                    </span>
-                                    <span className="shrink-0 text-[11px] tabular-nums text-white/40">
-                                        {clock(take.elapsedMs)}
-                                        {from?.assessed === false && ' · teller ikke'}
-                                    </span>
-                                </div>
-                                {from?.oppgave && (
-                                    <p className="mt-1.5 text-[12px] italic text-white/40">
-                                        {from.oppgave.text}
-                                    </p>
-                                )}
-                                <p className="mt-2 text-sm leading-relaxed text-white/70">
-                                    {take.transcript || (
-                                        <span className="text-white/35">Ingenting ble hørt.</span>
-                                    )}
-                                </p>
-                            </div>
-                        );
-                    })}
-                </div>
-
-                {missed.length > 0 && (
-                    <div className="mt-3 space-y-2 rounded-xl border border-white/10 bg-white/[0.02] p-4">
-                        <p className="text-sm font-semibold text-white/70">Dette ble ikke kjørt</p>
-                        {missed.map(task => (
-                            <div key={task.id}>
-                                <p className="text-[13px] font-semibold text-white/55">
-                                    Oppgave {task.letter} · {task.title}
-                                    {task.maxMs && (
-                                        <span className="ml-1.5 font-normal tabular-nums text-white/35">
-                                            {Math.round((task.minMs ?? 0) / 60_000)}–
-                                            {Math.round(task.maxMs / 60_000)} min
-                                        </span>
-                                    )}
-                                </p>
-                                <p className="mt-0.5 text-[12px] leading-relaxed text-white/40">
-                                    {task.unavailable ?? 'Du gikk videre uten å svare.'}
-                                </p>
-                            </div>
-                        ))}
-                    </div>
-                )}
-
-                <div className="mt-5 rounded-xl border border-amber-300/20 bg-amber-400/[0.06] p-4 text-[12px] leading-relaxed text-amber-100/70">
-                    <p className="font-semibold text-amber-100/90">Dette er ikke en vurdering.</p>
-                    <p className="mt-1.5">
-                        Prøven vurderer flyt, uttale, ordforråd og grammatikk. Ingen av delene er målt
-                        her — du har fått tilbake det taletjenesten hørte, og ingenting mer. For å bli
-                        plassert på et nivå må du være på nivået på alle fire kriteriene, så det finnes
-                        ikke noe regnestykke som kan gi deg et nivå ut fra dette.
-                    </p>
-                </div>
-
-                <button
-                    onClick={onRestart}
-                    className="mt-5 min-h-[48px] w-full rounded-xl bg-white text-base font-bold text-slate-900 transition hover:bg-white/90"
-                >
-                    Kjør en ny prøve
-                </button>
+                <Oppsummering
+                    nivaa={nivaa}
+                    timeline={session.timeline}
+                    takes={takes}
+                    profiles={profiles}
+                    elapsedMs={session.elapsedMs}
+                    onRestart={onRestart}
+                />
             </Shell>
         );
     }

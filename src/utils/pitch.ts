@@ -10,6 +10,7 @@
  * close-mic recording, and honest about being an estimate: unvoiced or quiet
  * frames come back as null rather than a guess.
  */
+import { decodeMono, frameRms } from './audioFrames';
 
 export interface PitchPoint {
     /** Seconds from the start of the recording. */
@@ -61,7 +62,6 @@ export function toSemitones(hz: number, reference: number): number {
     return 12 * Math.log2(hz / reference);
 }
 
-const TARGET_RATE = 16_000;
 const FRAME_SECONDS = 0.04;
 const HOP_SECONDS = 0.01;
 const MIN_HZ = 70;
@@ -70,22 +70,6 @@ const MIN_RMS = 0.012;
 const MIN_CORRELATION = 0.5;
 /** How close to the best correlation a shorter lag must score to win. */
 const OCTAVE_TOLERANCE = 0.85;
-
-/** Cheap decimation to ~16 kHz; plenty of resolution for speech F0. */
-function downsample(input: Float32Array, fromRate: number): { data: Float32Array; rate: number } {
-    if (fromRate <= TARGET_RATE) return { data: input, rate: fromRate };
-
-    const factor = Math.floor(fromRate / TARGET_RATE);
-    const outLength = Math.floor(input.length / factor);
-    const out = new Float32Array(outLength);
-    for (let i = 0; i < outLength; i++) {
-        // Average the window rather than picking one sample, to avoid aliasing.
-        let sum = 0;
-        for (let k = 0; k < factor; k++) sum += input[i * factor + k];
-        out[i] = sum / factor;
-    }
-    return { data: out, rate: fromRate / factor };
-}
 
 /** Exported for tests. */
 export function detectF0(frame: Float32Array, rate: number): number | null {
@@ -220,17 +204,7 @@ export function contourFrom(data: Float32Array, rate: number): PitchContour {
  */
 export function findSpeechBounds(data: Float32Array, rate: number): SpeechBounds | null {
     const duration = data.length / rate;
-    const frame = Math.max(1, Math.floor(0.02 * rate)); // 20 ms
-    const frames: number[] = [];
-
-    let peak = 0;
-    for (let start = 0; start + frame <= data.length; start += frame) {
-        let sum = 0;
-        for (let i = start; i < start + frame; i++) sum += data[i] * data[i];
-        const rms = Math.sqrt(sum / frame);
-        frames.push(rms);
-        if (rms > peak) peak = rms;
-    }
+    const { rms: frames, seconds: frameSeconds, peak } = frameRms(data, rate, 0.02);
 
     if (!frames.length || peak <= 0) return null;
 
@@ -243,13 +217,13 @@ export function findSpeechBounds(data: Float32Array, rate: number): SpeechBounds
     while (last > first && frames[last] < threshold) last--;
 
     // Keep a little air either side so the first consonant is not clipped.
-    const padFrames = Math.ceil(0.06 / 0.02);
+    const padFrames = Math.ceil(0.06 / frameSeconds);
     first = Math.max(0, first - padFrames);
     last = Math.min(frames.length - 1, last + padFrames);
 
     return {
-        start: (first * frame) / rate,
-        end: Math.min(duration, ((last + 1) * frame) / rate),
+        start: first * frameSeconds,
+        end: Math.min(duration, (last + 1) * frameSeconds),
         duration,
     };
 }
@@ -272,29 +246,11 @@ export async function analyseRecording(objectUrl: string): Promise<RecordingAnal
         bounds: null,
     };
 
-    const AudioCtor: typeof AudioContext | undefined =
-        window.AudioContext ??
-        (window as unknown as { webkitAudioContext?: typeof AudioContext }).webkitAudioContext;
-    if (!AudioCtor) return empty;
-
-    const response = await fetch(objectUrl);
-    const encoded = await response.arrayBuffer();
-
-    const context = new AudioCtor();
-    let decoded: AudioBuffer;
-    try {
-        decoded = await context.decodeAudioData(encoded);
-    } catch {
-        return empty;
-    } finally {
-        void context.close();
-    }
-
-    const channel = decoded.getChannelData(0);
-    const { data, rate } = downsample(channel, decoded.sampleRate);
+    const decoded = await decodeMono(objectUrl);
+    if (!decoded) return empty;
 
     return {
-        contour: contourFrom(data, rate),
-        bounds: findSpeechBounds(data, rate),
+        contour: contourFrom(decoded.data, decoded.rate),
+        bounds: findSpeechBounds(decoded.data, decoded.rate),
     };
 }
