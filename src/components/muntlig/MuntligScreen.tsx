@@ -6,7 +6,7 @@ import { Rommet, type Who } from './Rommet';
 import { Parrom } from './Parrom';
 import { useExamRoom } from '../../hooks/useExamRoom';
 import { useExamQueue } from '../../hooks/useExamQueue';
-import { seededPick, type RoomNivaa } from '../../utils/roomProtocol';
+import { seededPick, type RoomNivaa, type Seat } from '../../utils/roomProtocol';
 import type { PickOppgave } from '../../utils/examTimeline';
 import { useExamSession } from '../../hooks/useExamSession';
 import { useVoiceInput } from '../../hooks/useVoiceInput';
@@ -172,6 +172,20 @@ export function MuntligScreen({ onBack }: Props) {
     // Once the pair is connected the room decides the level, because the two
     // of them have to sit the same exam.
     const connected = room.state.phase === 'tilkoblet';
+
+    /**
+     * Let go of the partner's audio the moment the room is not connected.
+     *
+     * Closing the peer connection ends the remote tracks, so it goes quiet by
+     * itself — but the element holds a reference to a dead stream until
+     * something drops it, and leaving that lying around is the sort of thing
+     * that comes back as a bug about hearing somebody who left.
+     */
+    useEffect(() => {
+        if (connected) return;
+        partnerStream.current = null;
+        if (partnerEl.current) partnerEl.current.srcObject = null;
+    }, [connected]);
     useEffect(() => {
         if (connected && room.state.nivaa) setNivaa(room.state.nivaa);
     }, [connected, room.state.nivaa]);
@@ -545,14 +559,41 @@ function ExamRunner({ nivaa, room, onBack, onRestart }: RunnerProps) {
      * both floors are open at once and both tracks are with them. Between
      * turns the track is muted rather than closed, so the partner hears the
      * one candidate who is meant to be speaking instead of two devices
-     * reading the examiner's lines at each other. Once the session is over
-     * the room is theirs again.
+     * reading the examiner's lines at each other.
      */
-    const outgoing = phase === 'ferdig' || (listening && segment?.floor === 'deg');
+    const outgoing = phase !== 'ferdig' && listening && segment?.floor === 'deg';
     const setOutgoing = room?.setOutgoing;
     useEffect(() => {
         setOutgoing?.(outgoing);
     }, [setOutgoing, outgoing]);
+
+    /**
+     * The room closes when the exam does.
+     *
+     * It used to stay open so the pair could debrief, which sounded friendly
+     * and was wrong. The summary is where you read your own answers back, mark
+     * your own mistakes, and say a sentence out loud for the uttaleprøve —
+     * with a stranger from the queue still listening on an open microphone.
+     * The real exam ends by everybody leaving the room, and so does this one.
+     *
+     * The talk share is taken first, because it lives in the room state that
+     * is about to be thrown away.
+     */
+    const [finalShare, setFinalShare] = useState<{
+        spoke: Record<string, number>;
+        seat: Seat | null;
+    } | null>(null);
+    const leaveRoom = room?.leave;
+    const roomSpoke = room?.state.spoke;
+    const roomSeat = room?.state.seat ?? null;
+    useEffect(() => {
+        if (phase !== 'ferdig' || !leaveRoom) return;
+        setFinalShare({ spoke: roomSpoke ?? {}, seat: roomSeat });
+        leaveRoom();
+        // Deliberately not re-run when the room state changes: this fires once,
+        // on the transition into the summary, and then there is no room left.
+        // eslint-disable-next-line react-hooks/exhaustive-deps
+    }, [phase, leaveRoom]);
 
     if (phase === 'ferdig' || !segment) {
         return (
@@ -563,8 +604,9 @@ function ExamRunner({ nivaa, room, onBack, onRestart }: RunnerProps) {
                     takes={takes}
                     profiles={profiles}
                     elapsedMs={session.elapsedMs}
-                    spoke={room?.state.spoke}
-                    seat={room?.state.seat}
+                    spoke={finalShare?.spoke ?? room?.state.spoke}
+                    seat={finalShare?.seat ?? room?.state.seat}
+                    roomClosed={finalShare !== null}
                     onRestart={onRestart}
                 />
             </Shell>
