@@ -16,6 +16,13 @@ import { TOTAL_MS } from '../../utils/examTimeline';
 import { decodeMono } from '../../utils/audioFrames';
 import { pausesFrom, type PauseProfile } from '../../utils/pauses';
 import { APP_SIER } from '../../data/muntlig/eksaminator';
+import {
+    hasNorwegianVoice,
+    speakNorwegian,
+    unlockSpeech,
+    voicesKnown,
+    warmUpVoices,
+} from '../../utils/audioPlayback';
 import type { Nivaa } from '../../data/muntlig/oppgaver';
 
 /**
@@ -52,6 +59,34 @@ const ROOM_URL = (import.meta.env.VITE_ROOM_URL as string | undefined) ?? '';
 
 export function MuntligScreen({ onBack }: Props) {
     const [nivaa, setNivaa] = useState<Nivaa | null>(null);
+
+    /**
+     * Whether this device can read Norwegian aloud at all.
+     *
+     * Voices load asynchronously, so an empty list at first paint means "not
+     * yet" rather than "none". Asked again once the browser has produced one.
+     */
+    const [norskStemme, setNorskStemme] = useState<boolean | null>(null);
+    useEffect(() => {
+        warmUpVoices();
+        const look = () => {
+            if (!voicesKnown()) return false;
+            setNorskStemme(hasNorwegianVoice());
+            return true;
+        };
+        if (look()) return;
+        const timer = window.setInterval(() => {
+            if (look()) window.clearInterval(timer);
+        }, 400);
+        const giveUp = window.setTimeout(() => {
+            window.clearInterval(timer);
+            setNorskStemme(hasNorwegianVoice());
+        }, 4000);
+        return () => {
+            window.clearInterval(timer);
+            window.clearTimeout(giveUp);
+        };
+    }, []);
 
     /**
      * The partner's voice.
@@ -182,7 +217,15 @@ export function MuntligScreen({ onBack }: Props) {
                     {NIVAAER.map(level => (
                         <button
                             key={level.id}
-                            onClick={() => setNivaa(level.id)}
+                            onClick={() => {
+                                // Inside the tap, on purpose: iOS only lets
+                                // speech synthesis start from the gesture that
+                                // asked for it, and the session starts talking
+                                // from an effect a tick later. Without this the
+                                // examiner is silent for the whole rehearsal.
+                                unlockSpeech();
+                                setNivaa(level.id);
+                            }}
                             className="w-full rounded-xl border border-white/12 bg-white/[0.04] p-4 text-left transition hover:border-white/30 hover:bg-white/[0.07] focus:outline-none focus-visible:ring-2 focus-visible:ring-sky-300/70"
                         >
                             <span className="block text-base font-bold text-white">{level.id}</span>
@@ -218,6 +261,20 @@ export function MuntligScreen({ onBack }: Props) {
                         onLeaveQueue={queue.leave}
                         onLeave={room.leave}
                     />
+                )}
+
+                {norskStemme === false && (
+                    <div className="mt-5 rounded-xl border border-amber-300/25 bg-amber-400/[0.07] p-4 text-[12px] leading-relaxed text-amber-100/80">
+                        <p className="font-semibold text-amber-100">
+                            Denne enheten har ingen norsk stemme.
+                        </p>
+                        <p className="mt-1.5">
+                            Eksaminatoren leser oppgavene høyt, og uten en norsk stemme blir det
+                            enten stille eller lest med utenlandsk uttale. På iPhone og iPad legger
+                            du den til under Innstillinger → Tilgjengelighet → Talt innhold →
+                            Stemmer → Norsk. Replikkene står også på skjermen underveis.
+                        </p>
+                    </div>
                 )}
 
                 <div className="mt-5 space-y-2.5 rounded-xl border border-white/10 bg-white/[0.03] p-4 text-[12px] leading-relaxed text-white/45">
@@ -646,6 +703,27 @@ function ExamRunner({ nivaa, room, onBack, onRestart }: RunnerProps) {
                             {Math.round(segment.maxMs / 60_000)} minutter
                             {takeMs >= segment.maxMs && ' · tiden er ute'}
                         </p>
+                    )}
+
+                    {/*
+                      Say it again, from a tap.
+                      A tap is the one thing every browser will let speak,
+                      including iOS, where an utterance queued from anywhere
+                      else can be dropped without a word of explanation. It is
+                      also simply useful: the real examiner will repeat herself
+                      if you ask, and a candidate who missed the question is not
+                      being tested on their hearing.
+                    */}
+                    {segment.says.length > 0 && (
+                        <button
+                            onClick={() => {
+                                unlockSpeech();
+                                void speakNorwegian(segment.says.join(' '));
+                            }}
+                            className="mt-3 min-h-[44px] w-full rounded-xl border border-white/20 px-3 text-sm font-semibold text-white/75 transition hover:border-white/40 hover:bg-white/10"
+                        >
+                            🔊 Les opp igjen
+                        </button>
                     )}
 
                     {segment.says.length > 0 && (

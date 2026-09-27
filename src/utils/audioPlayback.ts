@@ -247,6 +247,53 @@ export function speakNorwegian(text: string, options: SpeakOptions = {}): Promis
     return finished;
 }
 
+/**
+ * Wake the speech engine up, from inside a tap.
+ *
+ * iOS will only let speech synthesis begin inside the user-gesture task that
+ * asked for it — and that applies to the FIRST utterance of the page, not just
+ * to each one. `speakNorwegian` is careful to call `speak()` synchronously, but
+ * the rehearsal starts talking from an effect a tick after the level was
+ * chosen, which is no longer the gesture. iOS dropped that utterance, the
+ * engine was never unlocked, and nothing the examiner said was ever heard.
+ *
+ * A single space is enough to unlock it and is not audible. Call it from a real
+ * click handler; after that the engine speaks when asked.
+ *
+ * Returns whether there was an engine to wake at all.
+ */
+export function unlockSpeech(): boolean {
+    if (!hasSynthesis()) return false;
+    try {
+        const silent = new SpeechSynthesisUtterance(' ');
+        silent.volume = 0;
+        window.speechSynthesis.speak(silent);
+        return true;
+    } catch {
+        return false;
+    }
+}
+
+/**
+ * Whether this device has a Norwegian voice at all.
+ *
+ * Without one the examiner either says nothing or reads Norwegian with an
+ * English voice, and on a phone that is hard to tell apart from the app being
+ * broken. Better to say which it is.
+ *
+ * Voices load asynchronously, so an empty list early on means "not yet", not
+ * "none" — callers should ask again once `warmUpVoices` has had a moment.
+ */
+export function hasNorwegianVoice(): boolean {
+    if (!hasSynthesis()) return false;
+    return rankNorwegianVoices(currentVoices()).length > 0;
+}
+
+/** True once the browser has actually produced its voice list. */
+export function voicesKnown(): boolean {
+    return hasSynthesis() && currentVoices().length > 0;
+}
+
 export function stopSpeaking() {
     if (hasSynthesis()) window.speechSynthesis.cancel();
 }
