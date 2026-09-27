@@ -26,16 +26,18 @@ const BASE = process.env.VITE_BASE ?? '/norwegian-pronunciation-app/';
  * simply follow the base path. Hard-coded, they meant every link shared from a
  * new domain advertised the old one.
  *
- * The default is the intended home, saynorwegian.app, rather than whichever
- * address happens to be serving. That is deliberate: previews and the canonical
- * link should point at the address people are meant to keep, and the app is
- * currently live at three (GitHub Pages, workers.dev, and a stale Vercel copy).
- * Pointing them all at one consolidates the site rather than competing with it.
+ * The default is the address that is actually serving, not the one that is
+ * intended. It was briefly saynorwegian.app on the reasoning that previews and
+ * the canonical link should consolidate on the real home — which is right, and
+ * was wrong to do before the domain existed: a canonical pointing at a host
+ * that does not resolve is worse than no canonical, and the preview image 404s.
  *
- * Until that domain resolves, `npm run check:deploy` reports the preview image
- * as unreachable. That is correct, and it clears itself the moment DNS is live.
+ * So: set VITE_SITE_URL to the domain on the build that serves it, and leave
+ * every other build describing itself truthfully. DEPLOYING.md says where.
  */
-const SITE_URL = (process.env.VITE_SITE_URL ?? 'https://saynorwegian.app/').replace(/\/?$/, '/');
+const SITE_URL = (
+    process.env.VITE_SITE_URL ?? 'https://sushantsriv.github.io/norwegian-pronunciation-app/'
+).replace(/\/?$/, '/');
 
 /**
  * Substitute %BASE_URL% and %SITE_URL% in index.html.
