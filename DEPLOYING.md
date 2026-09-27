@@ -48,10 +48,11 @@ If you buy it elsewhere, add the site in the Cloudflare dashboard (*Add a domain
 change the nameservers at your registrar to the two Cloudflare gives you. Propagation is
 usually minutes.
 
-> The repository already names this domain: link previews, the canonical URL and the
-> leaderboard's allowed origins all point at `saynorwegian.app`. Until DNS resolves,
-> `npm run check:deploy` reports the preview image as unreachable — that is correct, and
-> it clears itself the moment the domain is live.
+> The leaderboard's allowed origins already name this domain. Link previews and the
+> canonical link do **not** — they default to whichever address is actually serving, and
+> you point them here with `VITE_SITE_URL` in step 2, once DNS resolves. Setting it early
+> means the live site advertises a host that does not answer, which is worse than saying
+> nothing.
 
 ## 2. Create the Workers project
 
@@ -78,6 +79,7 @@ And these build variables:
 |---|---|---|
 | `VITE_BASE` | `/` | The app is served from the root of a domain, not from `/<repo-name>/`. Leave it out and the HTML loads while every asset 404s one directory too deep — which looks exactly like the site being broken. |
 | `NODE_VERSION` | `22` | What CI uses. Vite 7 wants 20.19+ or 22.12+, and matching CI means a build that passes there passes here. |
+| `VITE_SITE_URL` | `https://saynorwegian.app/` | **Set this once the domain resolves, not before.** It is the absolute address used for the canonical link and for link previews, which crawlers will not resolve relatively. Left unset, a build describes itself as the GitHub Pages copy — truthful while that is what serves, wrong once this is. |
 | `VITE_LEADERBOARD_URL` | *(leave empty)* | Set it in step 4, once the worker exists. Empty means the shared board stays off and the community screen shows each learner their own history. |
 
 > `VITE_BASE` is read by [`vite.config.ts`](vite.config.ts) and defaults to the GitHub
@@ -124,8 +126,8 @@ Then check it at the real address:
 npm run check:deploy -- https://saynorwegian.app
 ```
 
-Everything should pass now, including the preview image, and the `NOTE` about link
-previews advertising a different host should be gone.
+Everything should pass now. If `check:deploy` still prints the `NOTE` about link previews
+advertising a different host, `VITE_SITE_URL` has not been set — go back to step 2.
 
 Once it is live, **turn the `workers.dev` URL off** — Worker → Settings → Domains &
 Routes. Leaving it on means the app is reachable at two addresses that each keep their own
@@ -170,6 +172,20 @@ security model and the free-tier arithmetic.
 
 **Keep GitHub Pages running for a while.** It costs nothing, and it is somewhere to
 compare against if something on the new address behaves oddly.
+
+Watch for one thing: **GitHub Pages can switch itself off**, and the deploy then fails with
+`Get Pages site failed: Not Found` followed by `Create Pages site failed: Resource not
+accessible by integration` — the workflow's `enablement: true` cannot re-create a site the
+`GITHUB_TOKEN` is not allowed to create. It happened on this repository during the move to
+Cloudflare. The fix is one call:
+
+```bash
+gh api -X POST repos/<owner>/<repo>/pages -f build_type=workflow
+```
+
+then re-run the workflow. The symptom is a plain GitHub 404 page at the old address while
+CI reports the build as failed, so it is worth actually opening the old URL after a merge
+rather than trusting that nothing touched it.
 
 **Delete the Vercel project.** The repository has no Vercel configuration — the deployment
 comes from the Vercel GitHub App, configured on Vercel's side — but a copy has been live
