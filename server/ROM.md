@@ -37,13 +37,17 @@ gain by lying. It is a pair checking *«er vi begge aktive?»*, not a score.
 npx wrangler deploy --config server/wrangler.rom.toml
 ```
 
+It is deployed, at
+`https://norsk-uttale-rom.sushantsrivastava198.workers.dev`. To take it down
+again: `npx wrangler delete --config server/wrangler.rom.toml`.
+
 Then build the app with `VITE_ROOM_URL` pointing at the worker. **Leave that variable
 unset and the pair feature is not offered at all**, which is the right default — an app
 should not show a button that cannot work.
 
 | Setting | Value |
 |---|---|
-| `VITE_ROOM_URL` | `https://rom.saynorwegian.app`, or the `workers.dev` address while testing |
+| `VITE_ROOM_URL` | `https://norsk-uttale-rom.sushantsrivastava198.workers.dev` today; `https://rom.saynorwegian.app` once the domain exists |
 | `ALLOWED_ORIGINS` (in `wrangler.rom.toml`) | every origin the app is served from, comma separated |
 
 Update `ALLOWED_ORIGINS` **before** pointing a new domain at the site, or the first thing
