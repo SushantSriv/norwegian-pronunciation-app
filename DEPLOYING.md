@@ -81,6 +81,22 @@ And these build variables:
 | `NODE_VERSION` | `22` | What CI uses. Vite 7 wants 20.19+ or 22.12+, and matching CI means a build that passes there passes here. |
 | `VITE_SITE_URL` | `https://saynorwegian.app/` | **Set this once the domain resolves, not before.** It is the absolute address used for the canonical link and for link previews, which crawlers will not resolve relatively. Left unset, a build describes itself as the GitHub Pages copy — truthful while that is what serves, wrong once this is. |
 | `VITE_LEADERBOARD_URL` | *(leave empty)* | Set it in step 4, once the worker exists. Empty means the shared board stays off and the community screen shows each learner their own history. |
+| `VITE_ROOM_URL` | `https://norsk-uttale-rom.sushantsrivastava198.workers.dev` | Where the shared exam room lives. **Leave it out and the pair-practice lobby is not shown at all** — the app refuses to offer a button that cannot work — so a build without it looks like the feature is missing. See [server/ROM.md](server/ROM.md). |
+
+> **Build variables are dashboard-only.** None of these four can be set by a
+> commit. A build that is missing one does not fail; it quietly ships an app
+> with a subpath that 404s, or a feature that hides itself. If something you
+> just merged is not visible on the Cloudflare copy, check here first.
+
+### If the build is set to deploy manually
+
+Workers Builds can be switched from building every push to building only when
+you ask. When it is, **merging to `main` changes nothing on its own** and no
+check is reported against the commit — so a green GitHub Pages run is not
+evidence that Cloudflare shipped. Trigger it from *Deployments → New
+deployment*, and check which commit the build page names before reading
+anything into a failure: a retry re-runs the commit it already had, not the
+one you just merged.
 
 > `VITE_BASE` is read by [`vite.config.ts`](vite.config.ts) and defaults to the GitHub
 > Pages subpath, so none of this disturbs the existing deployment.
