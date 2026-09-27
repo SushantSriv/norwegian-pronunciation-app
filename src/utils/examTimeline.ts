@@ -82,25 +82,46 @@ interface Options {
 const drawFrom = (pool: PoolId, pick: PickOppgave): Oppgave =>
     pick(pool, POOLS[pool].oppgaver);
 
+/**
+ * Everything the examiner says for one task, in order.
+ *
+ * The framing, then THE TASK ITSELF READ ALOUD, then the cue to begin. The
+ * middle one is the part an app forgets: at the exam the candidate has the task
+ * on paper and hears it read out, and an app that only put it on screen would
+ * be rehearsing reading rather than listening. The B1-B2 påstand was already
+ * read aloud; this makes every task consistent with it.
+ *
+ * The cue always comes last, because it is the moment the microphone opens and
+ * that is what the candidate needs to hear. Two of the framings quote a
+ * template that already ends with it, so those say it twice — which is verbatim
+ * on both counts and is what examiners do anyway.
+ */
+const spokenFor = (intro: string[], oppgave: Oppgave): string[] => [
+    ...intro,
+    oppgave.text,
+    INNLEDNING.duKanBegynne,
+];
+
 /** One individual speaking slot. */
 function individuell(
     id: string,
     letter: Segment['letter'],
     title: string,
-    says: string[],
+    intro: string[],
     pool: PoolId,
     pick: PickOppgave,
     minMs: number,
     maxMs: number
 ): Segment {
+    const oppgave = drawFrom(pool, pick);
     return {
         id,
         kind: 'individuell',
         letter,
         title,
         floor: 'deg',
-        says,
-        oppgave: drawFrom(pool, pick),
+        says: spokenFor(intro, oppgave),
+        oppgave,
         kilde: POOLS[pool].kilde,
         minMs,
         maxMs,
@@ -121,15 +142,18 @@ function samtale(
     pairPresent: boolean,
     note?: string
 ): Segment {
+    const oppgave = drawFrom(pool, pick);
     return {
         id,
         kind: 'samtale',
         letter,
         title: 'Samtale',
         floor: pairPresent ? 'deg' : 'ingen',
-        says,
+        // Read out even when it cannot be run: a candidate should hear what
+        // the task they are missing actually asks.
+        says: [...says, oppgave.text],
         note,
-        oppgave: drawFrom(pool, pick),
+        oppgave,
         kilde: POOLS[pool].kilde,
         minMs,
         maxMs,
@@ -220,7 +244,7 @@ export function buildTimeline({ nivaa, pick = firstOf, pairPresent = false }: Op
                 'd',
                 'D',
                 'Fortelle / beskrive',
-                [INNLEDNING.duKanBegynne],
+                [],
                 'fortelle-beskrive',
                 pick,
                 2 * MIN,
@@ -235,7 +259,7 @@ export function buildTimeline({ nivaa, pick = firstOf, pairPresent = false }: Op
                 'a',
                 'A',
                 'Fortelle / beskrive',
-                [INNLEDNING.duKanBegynne],
+                [],
                 'fortelle-beskrive',
                 pick,
                 2 * MIN,
@@ -270,7 +294,7 @@ export function buildTimeline({ nivaa, pick = firstOf, pairPresent = false }: Op
                 'a',
                 'A',
                 'Uttrykke og grunngi',
-                [INNLEDNING.duKanBegynne],
+                [],
                 'synspunkt',
                 pick,
                 2 * MIN,
@@ -311,6 +335,8 @@ export function buildTimeline({ nivaa, pick = firstOf, pairPresent = false }: Op
                 letter: 'C',
                 title: 'Argumentere',
                 floor: 'deg',
+                // The påstand was read aloud a moment ago, with time to think
+                // after it. Reading it again here would be the app padding.
                 says: [INNLEDNING.duKanBegynne],
                 oppgave: paastand,
                 kilde: KILDER.b1b2,

@@ -9,6 +9,7 @@ import { seededPick } from '../../utils/roomProtocol';
 import type { PickOppgave } from '../../utils/examTimeline';
 import { useExamSession } from '../../hooks/useExamSession';
 import { useVoiceInput } from '../../hooks/useVoiceInput';
+import { PREP_MS } from '../../hooks/useExamSession';
 import { examProfile, PHRASE, recognitionSupported, type ListenProfile } from '../../utils/speech';
 import { TOTAL_MS } from '../../utils/examTimeline';
 import { decodeMono } from '../../utils/audioFrames';
@@ -370,6 +371,7 @@ function ExamRunner({ nivaa, room, onBack, onRestart }: RunnerProps) {
 
     const listening = phase === 'lytter';
     const speaking = phase === 'snakker';
+    const preparing = phase === 'forbereder';
 
     /**
      * Who is lit up in the room.
@@ -406,13 +408,17 @@ function ExamRunner({ nivaa, room, onBack, onRestart }: RunnerProps) {
                         className={[
                             'rounded-xl border px-3.5 py-2 text-sm font-semibold',
                             speaking ? 'border-violet-300/30 bg-violet-400/10 text-violet-100' : '',
+                            preparing ? 'border-amber-300/30 bg-amber-400/10 text-amber-100' : '',
                             listening ? 'border-emerald-300/35 bg-emerald-400/10 text-emerald-100' : '',
-                            !speaking && !listening ? 'border-white/10 bg-white/[0.04] text-white/55' : '',
+                            !speaking && !listening && !preparing
+                                ? 'border-white/10 bg-white/[0.04] text-white/55'
+                                : '',
                         ].join(' ')}
                     >
                         {speaking && 'Eksaminator snakker'}
+                        {preparing && 'Tenk deg om — mikrofonen åpner straks'}
                         {listening && 'Din tur — snakk nå'}
-                        {!speaking && !listening && 'Klar'}
+                        {!speaking && !listening && !preparing && 'Klar'}
                     </div>
 
                     {segment.says.length > 0 && (
@@ -448,6 +454,29 @@ function ExamRunner({ nivaa, room, onBack, onRestart }: RunnerProps) {
                         <p className="mt-3 rounded-lg border border-amber-300/25 bg-amber-400/[0.07] px-3 py-2 text-[12px] leading-relaxed text-amber-100/75">
                             {segment.unavailable}
                         </p>
+                    )}
+
+                    {preparing && (
+                        <>
+                            <button
+                                onClick={session.startNow}
+                                className="mt-4 min-h-[48px] w-full rounded-xl bg-white text-base font-bold text-slate-900 transition hover:bg-white/90"
+                            >
+                                Jeg er klar
+                            </button>
+                            {/*
+                              Said every time, because a candidate who took this
+                              for the exam's preparation time would walk in
+                              expecting one. The exam gives preparation time in
+                              exactly one place — before the B1–B2 påstand — and
+                              publishes no number even there.
+                            */}
+                            <p className="mt-2 text-[11px] leading-relaxed text-white/35">
+                                Appen venter {Math.round(PREP_MS / 1000)} sekunder her, slik at
+                                taletjenesten ikke fanger opp at du trekker pusten. Det er appens
+                                pause, ikke prøvens.
+                            </p>
+                        </>
                     )}
 
                     {listening && voice.interim && (

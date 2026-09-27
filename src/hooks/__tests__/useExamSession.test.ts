@@ -43,6 +43,19 @@ function harness(nivaa: Nivaa = 'A2-B1', heard: Record<string, string> = {}) {
     return { ...rendered, events, endTake, listen, speak };
 }
 
+/**
+ * Walk from wherever the session is to the floor being open.
+ *
+ * There is a deliberate pause between the examiner finishing and the
+ * microphone opening, and the candidate can end it. Skipping it here keeps
+ * these tests about turn-taking rather than about a timer.
+ */
+async function openTheFloor(exam: { result: { current: ReturnType<typeof useExamSession> } }) {
+    await waitFor(() => expect(exam.result.current.phase).toBe('forbereder'));
+    act(() => exam.result.current.startNow());
+    await waitFor(() => expect(exam.result.current.phase).toBe('lytter'));
+}
+
 /** Let every pending microtask land, so a stale run has its chance to misfire. */
 const settled = () =>
     act(async () => {
@@ -62,10 +75,32 @@ describe('the microphone and the voice never overlap', () => {
         ]);
 
         act(() => exam.result.current.next());
-        await waitFor(() => expect(exam.result.current.phase).toBe('lytter'));
+        await openTheFloor(exam);
 
         // The warm-up line was said in full, and only then did listening start.
         expect(exam.events.map(e => e.kind)).toEqual(['sier', 'sier', 'lytter']);
+    });
+
+    it('does not open the microphone during the pause before a take', () => {
+        // The pause exists so the service does not catch somebody drawing
+        // breath. If it listened through it, it would have no purpose.
+        const exam = harness();
+        act(() => exam.result.current.begin());
+        expect(exam.listen).not.toHaveBeenCalled();
+    });
+
+    it('waits before opening the floor, and lets the candidate skip it', async () => {
+        const exam = harness();
+        act(() => exam.result.current.begin());
+        await waitFor(() => expect(exam.result.current.phase).toBe('klar'));
+        act(() => exam.result.current.next());
+
+        await waitFor(() => expect(exam.result.current.phase).toBe('forbereder'));
+        expect(exam.listen).not.toHaveBeenCalled();
+
+        act(() => exam.result.current.startNow());
+        await waitFor(() => expect(exam.result.current.phase).toBe('lytter'));
+        expect(exam.listen).toHaveBeenCalled();
     });
 
     it('never listens on a segment the app cannot run', async () => {
@@ -75,9 +110,15 @@ describe('the microphone and the voice never overlap', () => {
         // Walk the whole session through, ending each take as it opens.
         for (let step = 0; step < 20; step++) {
             await waitFor(() =>
-                expect(['klar', 'lytter', 'ferdig']).toContain(exam.result.current.phase)
+                expect(['klar', 'forbereder', 'lytter', 'ferdig']).toContain(
+                    exam.result.current.phase
+                )
             );
             if (exam.result.current.phase === 'ferdig') break;
+            if (exam.result.current.phase === 'forbereder') {
+                act(() => exam.result.current.startNow());
+                await waitFor(() => expect(exam.result.current.phase).toBe('lytter'));
+            }
             if (exam.result.current.phase === 'lytter') {
                 act(() => exam.result.current.finishTake());
                 await waitFor(() => expect(exam.result.current.phase).toBe('klar'));
@@ -100,7 +141,7 @@ describe('what comes back', () => {
         await waitFor(() => expect(exam.result.current.phase).toBe('klar'));
 
         act(() => exam.result.current.next());
-        await waitFor(() => expect(exam.result.current.phase).toBe('lytter'));
+        await openTheFloor(exam);
         act(() => exam.result.current.finishTake());
         await waitFor(() => expect(exam.result.current.takes).toHaveLength(1));
 
@@ -123,7 +164,7 @@ describe('what comes back', () => {
         act(() => exam.result.current.begin());
         await waitFor(() => expect(exam.result.current.phase).toBe('klar'));
         act(() => exam.result.current.next());
-        await waitFor(() => expect(exam.result.current.phase).toBe('lytter'));
+        await openTheFloor(exam);
 
         // The warm-up is one to two minutes, so the take may run two.
         expect(exam.listen).toHaveBeenCalledWith(120_000);
@@ -136,7 +177,7 @@ describe('leaving', () => {
         act(() => exam.result.current.begin());
         await waitFor(() => expect(exam.result.current.phase).toBe('klar'));
         act(() => exam.result.current.next());
-        await waitFor(() => expect(exam.result.current.phase).toBe('lytter'));
+        await openTheFloor(exam);
 
         act(() => exam.result.current.quit());
         expect(exam.endTake).toHaveBeenCalled();

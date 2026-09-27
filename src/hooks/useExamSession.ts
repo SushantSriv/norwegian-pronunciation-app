@@ -17,7 +17,20 @@ import type { Nivaa, Oppgave, PoolId } from '../data/muntlig/oppgaver';
  * screen says so once rather than the mode pretending otherwise.
  */
 
-export type Phase = 'klar' | 'snakker' | 'lytter' | 'venter' | 'ferdig';
+export type Phase = 'klar' | 'snakker' | 'forbereder' | 'lytter' | 'venter' | 'ferdig';
+
+/**
+ * How long the app waits after the examiner stops before opening the mic.
+ *
+ * THIS IS THE APP'S PAUSE, NOT THE EXAM'S, and every screen that shows it says
+ * so. HK-dir publishes no preparation time for these tasks — the only one in
+ * the whole exam is before the B1-B2 påstand, and no number is published for
+ * that either. What this is for is smaller and real: a recogniser that starts
+ * the instant a synthetic voice stops will catch the room noise of somebody
+ * drawing breath, and a candidate who has just heard a question needs a moment
+ * to have an answer. It can always be skipped.
+ */
+export const PREP_MS = 5_000;
 
 export interface Take {
     segmentId: string;
@@ -74,6 +87,8 @@ export function useExamSession({
     speakRef.current = speak;
     /** Bumped on quit, so a segment still in flight does not advance after it. */
     const runId = useRef(0);
+    /** Ends the preparation pause early, when the candidate says they are ready. */
+    const skipPrep = useRef<(() => void) | null>(null);
 
     const segment = timeline[index] ?? null;
     const done = index >= timeline.length;
@@ -91,6 +106,7 @@ export function useExamSession({
     const quit = useCallback(() => {
         runId.current += 1;
         stopSpeaking();
+        skipPrep.current?.();
         endTake();
         setPhase('ferdig');
     }, [endTake]);
@@ -122,6 +138,19 @@ export function useExamSession({
                 setPhase('klar');
                 return;
             }
+
+            // A beat between the examiner finishing and the microphone
+            // opening. Skippable, and never presented as the exam's doing.
+            setPhase('forbereder');
+            await new Promise<void>(resolve => {
+                const timer = window.setTimeout(resolve, PREP_MS);
+                skipPrep.current = () => {
+                    window.clearTimeout(timer);
+                    resolve();
+                };
+            });
+            skipPrep.current = null;
+            if (cancelled || runId.current !== mine) return;
 
             setPhase('lytter');
             setLive('');
@@ -161,6 +190,9 @@ export function useExamSession({
         endTake();
     }, [phase, endTake]);
 
+    /** "Jeg er klar" — stop waiting and open the microphone now. */
+    const startNow = useCallback(() => skipPrep.current?.(), []);
+
     return {
         timeline,
         segment,
@@ -175,6 +207,7 @@ export function useExamSession({
         begin,
         next,
         finishTake,
+        startNow,
         quit,
     };
 }

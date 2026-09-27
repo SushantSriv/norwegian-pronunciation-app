@@ -46,6 +46,11 @@ jobs:
 
       - name: Build
         run: npm run build
+        env:
+          # Where the shared exam room lives. Unset, the pair feature is not
+          # offered at all — an app should not show a button that cannot work —
+          # so this is what makes "øv sammen" visible on the deployed site.
+          VITE_ROOM_URL: https://norsk-uttale-rom.sushantsrivastava198.workers.dev
 
       # enablement lets the workflow switch Pages back on by itself. Toggling
       # the repo private and public again silently disables Pages, and without
