@@ -68,6 +68,12 @@ export interface RoomState {
  * found — is the expensive one, and running it is not free, so this app does
  * not pretend to have it.
  */
+/** Nothing may sit on "connecting" for ever; this is when it gives up. */
+const CONNECT_TIMEOUT_MS = 25_000;
+
+/** How long to wait for the room worker before calling it unreachable. */
+const FETCH_TIMEOUT_MS = 10_000;
+
 const ICE: RTCIceServer[] = [
     { urls: ['stun:stun.l.google.com:19302', 'stun:stun.cloudflare.com:3478'] },
 ];
@@ -96,6 +102,8 @@ export function useExamRoom({ url = '', onRemoteStream }: Options = {}) {
     const socket = useRef<WebSocket | null>(null);
     const peer = useRef<RTCPeerConnection | null>(null);
     const local = useRef<MediaStream | null>(null);
+    /** Fails the whole attempt if the connection never comes up. */
+    const deadline = useRef<number | null>(null);
     const seat = useRef<Seat | null>(null);
     const remoteHandler = useRef(onRemoteStream);
     remoteHandler.current = onRemoteStream;
@@ -108,7 +116,46 @@ export function useExamRoom({ url = '', onRemoteStream }: Options = {}) {
         }
     }, []);
 
+    /**
+     * Ask for the microphone NOW, while a tap is still in hand.
+     *
+     * On iOS — which is every browser on an iPhone or iPad, Chrome included,
+     * because Apple requires them all to use WebKit — getUserMedia has to be
+     * reached from a user gesture. It used to be called when the partner
+     * arrived, from a WebSocket message handler, which is not a gesture: on
+     * iOS that call does not reject, it simply never settles, and the screen
+     * sat on "Kobler lyden ..." for ever.
+     *
+     * Called from the lobby buttons, so by the time a partner turns up the
+     * stream is already held. Safe to call more than once.
+     */
+    const prepareMicrophone = useCallback(async (): Promise<boolean> => {
+        if (local.current) return true;
+        try {
+            local.current = await navigator.mediaDevices.getUserMedia({
+                audio: {
+                    // Without these, each candidate hears themselves back
+                    // through the other's speaker half a second late, which is
+                    // the single most disorienting thing a call can do.
+                    echoCancellation: true,
+                    noiseSuppression: true,
+                    autoGainControl: true,
+                },
+            });
+            return true;
+        } catch {
+            setState(current => ({
+                ...current,
+                phase: 'feilet',
+                problem: 'Mikrofonen ble ikke sluppet til, so partneren din kan ikke hore deg.',
+            }));
+            return false;
+        }
+    }, []);
+
     const teardown = useCallback(() => {
+        if (deadline.current !== null) window.clearTimeout(deadline.current);
+        deadline.current = null;
         peer.current?.close();
         peer.current = null;
         local.current?.getTracks().forEach(track => track.stop());
@@ -137,28 +184,27 @@ export function useExamRoom({ url = '', onRemoteStream }: Options = {}) {
         if (peer.current) return;
         setState(current => ({ ...current, phase: 'kobler-lyd' }));
 
-        let stream: MediaStream;
-        try {
-            stream = await navigator.mediaDevices.getUserMedia({
-                audio: {
-                    // Without these, each candidate hears themselves back
-                    // through the other's speaker half a second late, which is
-                    // the single most disorienting thing a call can do.
-                    echoCancellation: true,
-                    noiseSuppression: true,
-                    autoGainControl: true,
-                },
-            });
-        } catch {
-            setState(current => ({
-                ...current,
-                phase: 'feilet',
-                problem: 'Mikrofonen ble ikke sluppet til, så partneren din kan ikke høre deg.',
-            }));
-            return;
-        }
+        // Normally already held from the lobby tap. This is the fallback for
+        // a browser that grants it without one.
+        if (!(await prepareMicrophone())) return;
+        const stream = local.current;
+        if (!stream) return;
 
-        local.current = stream;
+        // Nothing may sit on "Kobler lyden" for ever. A connection that has not
+        // come up by now is one that is not going to.
+        deadline.current = window.setTimeout(() => {
+            setState(current =>
+                current.phase === 'tilkoblet'
+                    ? current
+                    : {
+                          ...current,
+                          phase: 'feilet',
+                          problem:
+                              'Fikk ikke apnet lyden mellom dere i tide. Det skjer pa en del bedrifts- og mobilnett, og pa nett som blokkerer direkte forbindelser. Prov et annet nett - helst begge pa vanlig wifi.',
+                      }
+            );
+        }, CONNECT_TIMEOUT_MS);
+
         const connection = new RTCPeerConnection({ iceServers: ICE });
         peer.current = connection;
 
@@ -175,11 +221,27 @@ export function useExamRoom({ url = '', onRemoteStream }: Options = {}) {
             }
         };
 
-        connection.onconnectionstatechange = () => {
-            const status = connection.connectionState;
-            if (status === 'connected') {
+        /**
+         * Up, or not up — read from BOTH state machines.
+         *
+         * `connectionState` is the modern one, and the only one this used to
+         * watch. Safari did not implement it until late, and on an iPhone every
+         * browser IS Safari — Apple requires it — so on those devices the event
+         * never fired and the screen stayed on "Kobler lyden" even when the
+         * audio was flowing perfectly. `iceConnectionState` has been there from
+         * the beginning and is what those browsers actually report.
+         */
+        const settled = () => {
+            const ice = connection.iceConnectionState;
+            const overall = connection.connectionState;
+
+            if (overall === 'connected' || ice === 'connected' || ice === 'completed') {
+                if (deadline.current !== null) window.clearTimeout(deadline.current);
+                deadline.current = null;
                 setState(current => ({ ...current, phase: 'tilkoblet', problem: null }));
-            } else if (status === 'failed') {
+                return;
+            }
+            if (overall === 'failed' || ice === 'failed') {
                 setState(current => ({
                     ...current,
                     phase: 'feilet',
@@ -189,12 +251,15 @@ export function useExamRoom({ url = '', onRemoteStream }: Options = {}) {
             }
         };
 
+        connection.onconnectionstatechange = settled;
+        connection.oniceconnectionstatechange = settled;
+
         if (seat.current === 'a') {
             const offer = await connection.createOffer();
             await connection.setLocalDescription(offer);
             send({ t: 'signal', payload: JSON.stringify({ sdp: connection.localDescription }) });
         }
-    }, [send]);
+    }, [send, prepareMicrophone]);
 
     const onSignal = useCallback(
         async (payload: string) => {
@@ -324,27 +389,58 @@ export function useExamRoom({ url = '', onRemoteStream }: Options = {}) {
     );
 
     /** Ask the worker for a code nobody is using. */
-    const create = useCallback(async (nivaa: RoomNivaa): Promise<string | null> => {
-        if (!available) return null;
-        try {
-            const response = await fetch(`${url}/room/new`);
-            const body: unknown = await response.json();
-            const code =
-                typeof body === 'object' && body !== null && 'code' in body
-                    ? String((body as { code: unknown }).code)
-                    : '';
-            if (!validCode(code)) return null;
-            join(code, nivaa);
-            return code;
-        } catch {
-            setState({
-                ...EMPTY,
-                phase: 'feilet',
-                problem: 'Fikk ikke laget et rom. Er du på nett?',
-            });
-            return null;
-        }
-    }, [available, url, join]);
+    /**
+     * Ask the worker for a code nobody is using.
+     *
+     * The failure message used to be "Fikk ikke laget et rom. Er du på nett?"
+     * for every possible cause, which is useless to the person reading it and
+     * worse than useless to whoever they report it to: a blocked request, a
+     * refused origin and a worker that is down all looked identical. It now
+     * says which of those happened.
+     */
+    const create = useCallback(
+        async (nivaa: RoomNivaa): Promise<string | null> => {
+            if (!available) return null;
+
+            const fail = (problem: string) => {
+                setState({ ...EMPTY, phase: 'feilet', problem });
+                return null;
+            };
+
+            // A request that never answers must not leave the button dead.
+            const abort = new AbortController();
+            const timer = window.setTimeout(() => abort.abort(), FETCH_TIMEOUT_MS);
+
+            try {
+                const response = await fetch(`${url}/room/new`, { signal: abort.signal });
+                if (!response.ok) {
+                    return fail(
+                        `Rom-tjenesten svarte ${response.status}. Det er ikke noe galt med nettet ditt — prøv igjen om litt.`
+                    );
+                }
+                const body: unknown = await response.json();
+                const code =
+                    typeof body === 'object' && body !== null && 'code' in body
+                        ? String((body as { code: unknown }).code)
+                        : '';
+                if (!validCode(code)) {
+                    return fail('Rom-tjenesten svarte noe uventet. Prøv igjen om litt.');
+                }
+                join(code, nivaa);
+                return code;
+            } catch (cause) {
+                const aborted = cause instanceof DOMException && cause.name === 'AbortError';
+                return fail(
+                    aborted
+                        ? 'Rom-tjenesten svarte ikke i tide. Er du på et nett som blokkerer?'
+                        : 'Nådde ikke rom-tjenesten i det hele tatt. Det skjer hvis nettet er nede, eller hvis en annonseblokker eller et bedriftsnett stopper forespørselen.'
+                );
+            } finally {
+                window.clearTimeout(timer);
+            }
+        },
+        [available, url, join]
+    );
 
     return {
         available,
@@ -352,6 +448,7 @@ export function useExamRoom({ url = '', onRemoteStream }: Options = {}) {
         create,
         join,
         leave,
+        prepareMicrophone,
         /**
          * Open or close this candidate's outgoing microphone.
          *

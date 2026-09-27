@@ -11,6 +11,9 @@ import {
 interface Props {
     state: RoomState;
     queue: QueueState;
+    /** True when the browser refused to start the partner's audio by itself. */
+    needsTap: boolean;
+    onPlayPartner: () => void;
     onCreate: (nivaa: RoomNivaa) => void;
     onJoin: (code: string, nivaa: RoomNivaa) => void;
     onQueue: (nivaa: RoomNivaa) => void;
@@ -54,6 +57,8 @@ const clock = (ms: number) => {
 export function Parrom({
     state,
     queue,
+    needsTap,
+    onPlayPartner,
     onCreate,
     onJoin,
     onQueue,
@@ -261,6 +266,15 @@ export function Parrom({
                     >
                         {STATUS[state.phase]}
                     </p>
+
+                    {needsTap && state.phase === 'tilkoblet' && (
+                        <button
+                            onClick={onPlayPartner}
+                            className="mt-3 min-h-[48px] w-full rounded-xl bg-white text-base font-bold text-slate-900 transition hover:bg-white/90"
+                        >
+                            🔊 Trykk for å høre partneren
+                        </button>
+                    )}
 
                     {state.problem && (
                         <p className="mt-1.5 text-[12px] leading-relaxed text-amber-200/75">

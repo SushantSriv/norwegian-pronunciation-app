@@ -147,6 +147,8 @@ export default function App() {
         interim,
         start,
         stop,
+        standDownRecorder,
+        recorderStoodDown,
     } = useVoiceInput({ onResult: handleResult });
     const { voices, activeVoiceURI, chooseVoice, rate, setRate } = useNorwegianVoices();
 
@@ -239,6 +241,8 @@ export default function App() {
                                         transcribing={transcribing}
                                         interim={interim}
                                         speechError={error}
+                                        onStandDownRecorder={standDownRecorder}
+                                        recorderStoodDown={recorderStoodDown}
                                         lastAttempt={lastAttempt}
                                         recordingUrl={recordingUrl}
                                         recordingAvailable={recordingAvailable}

@@ -68,8 +68,32 @@ export function MuntligScreen({ onBack }: Props) {
      * mounts pick it up.
      */
     const partnerStream = useRef<MediaStream | null>(null);
+    const partnerEl = useRef<HTMLAudioElement | null>(null);
+    /** Set when the browser refused to start the audio without a tap. */
+    const [needsTap, setNeedsTap] = useState(false);
+
     const attachPartner = useCallback((element: HTMLAudioElement | null) => {
-        if (element && partnerStream.current) element.srcObject = partnerStream.current;
+        partnerEl.current = element;
+        if (!element || !partnerStream.current) return;
+        element.srcObject = partnerStream.current;
+        // `autoplay` is not enough on iOS: an element whose stream arrives
+        // after it was created stays silent, and nothing says so. Asking
+        // explicitly turns that silence into either sound or a rejection we
+        // can put a button on.
+        void element.play().then(
+            () => setNeedsTap(false),
+            () => setNeedsTap(true)
+        );
+    }, []);
+
+    /** The tap that iOS wants before it will play somebody else's voice. */
+    const playPartner = useCallback(() => {
+        const element = partnerEl.current;
+        if (!element) return;
+        void element.play().then(
+            () => setNeedsTap(false),
+            () => setNeedsTap(true)
+        );
     }, []);
 
     const room = useExamRoom({
@@ -77,9 +101,9 @@ export function MuntligScreen({ onBack }: Props) {
         onRemoteStream: useCallback(
             (stream: MediaStream) => {
                 partnerStream.current = stream;
-                // The element may already be on screen, or may not exist yet;
-                // this covers the first case and the ref callback the second.
-                attachPartner(document.getElementById('partner-lyd') as HTMLAudioElement | null);
+                // The element is already mounted; re-attaching also triggers
+                // the explicit play() above.
+                attachPartner(partnerEl.current);
             },
             [attachPartner]
         ),
@@ -171,9 +195,26 @@ export function MuntligScreen({ onBack }: Props) {
                     <Parrom
                         state={room.state}
                         queue={queue.state}
-                        onCreate={level => void room.create(level)}
-                        onJoin={(code, level) => room.join(code, level)}
-                        onQueue={queue.join}
+                        needsTap={needsTap}
+                        onPlayPartner={playPartner}
+                        /*
+                          Every one of these asks for the microphone first, and
+                          from inside the tap. On iOS a getUserMedia call that
+                          is not reached from a user gesture never settles at
+                          all, which is what used to freeze the screen on
+                          "Kobler lyden" once a partner arrived.
+                        */
+                        onCreate={level => {
+                            void room.prepareMicrophone().then(() => room.create(level));
+                        }}
+                        onJoin={(code, level) => {
+                            void room.prepareMicrophone().then(() => room.join(code, level));
+                        }}
+                        onQueue={level => {
+                            void room.prepareMicrophone().then(ok => {
+                                if (ok) queue.join(level);
+                            });
+                        }}
                         onLeaveQueue={queue.leave}
                         onLeave={room.leave}
                     />
@@ -545,6 +586,32 @@ function ExamRunner({ nivaa, room, onBack, onRestart }: RunnerProps) {
                     >
                         {voice.error ?? ''}
                     </p>
+
+                    {/*
+                      The escape hatch, offered exactly where the problem is
+                      read. On some devices the recorder and the speech service
+                      cannot share the microphone, and the app cannot always
+                      tell that is what happened — browsers differ in whether the
+                      starved side errors, returns nothing, or never finishes.
+                      Without this, somebody on such a device reads the same
+                      message after every attempt they will ever make.
+                    */}
+                    {voice.error?.includes('fikk ikke tak i ordene') && !voice.recorderStoodDown && (
+                        <button
+                            onClick={voice.standDownRecorder}
+                            className="mb-2 min-h-[44px] w-full rounded-xl border border-amber-300/40 px-3 text-sm font-semibold text-amber-200 transition hover:bg-amber-400/10"
+                        >
+                            Skjer dette hver gang? Trykk her — appen slutter å ta opp, så taletjenesten
+                            får mikrofonen alene
+                        </button>
+                    )}
+
+                    {voice.recorderStoodDown && (
+                        <p className="mb-2 text-[11px] leading-relaxed text-white/35">
+                            Appen tar ikke opp på denne enheten, så taletjenesten får mikrofonen
+                            alene. Du får teksten, men ikke melodikurven eller avspilling.
+                        </p>
+                    )}
 
                     <div
                         role="status"
