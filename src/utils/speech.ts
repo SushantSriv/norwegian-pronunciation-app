@@ -56,3 +56,51 @@ export function recognitionSupported(): boolean {
     const scope = window as unknown as { SpeechRecognition?: unknown; webkitSpeechRecognition?: unknown };
     return Boolean(scope.SpeechRecognition ?? scope.webkitSpeechRecognition);
 }
+
+// ---------------------------------------------------------------------------
+// How long to listen for
+// ---------------------------------------------------------------------------
+
+/**
+ * When a take ends.
+ *
+ * A practice phrase and an exam answer are different shapes of speech and need
+ * different rules. Three seconds of silence means "finished" for someone saying
+ * "god morgen" and means "thinking" for someone a minute into describing their
+ * working week — so the limits are a profile the caller picks, not constants
+ * the recorder assumes.
+ */
+export interface ListenProfile {
+    /** Silence after speech that ends the take. */
+    silenceMs: number;
+    /** Give up if nothing has been said by now. */
+    noSpeechMs: number;
+    /** Hard ceiling, so a stuck take cannot grow without bound. */
+    maxMs: number;
+    /** Whether the speech service should keep listening across pauses. */
+    continuous: boolean;
+}
+
+/** One phrase, ending when the learner does. */
+export const PHRASE: ListenProfile = {
+    silenceMs: 1_200,
+    noSpeechMs: 6_000,
+    maxMs: 15_000,
+    continuous: false,
+};
+
+/**
+ * A spoken answer of up to three minutes.
+ *
+ * Four seconds of silence rather than one: the pause where somebody works out
+ * how to say the next thing is part of the answer, and cutting it off is both
+ * wrong and the single most discouraging thing a rehearsal tool could do. The
+ * ceiling is above the longest task in the real exam, so it only ever catches a
+ * take nobody ended.
+ */
+export const MONOLOGUE: ListenProfile = {
+    silenceMs: 4_000,
+    noSpeechMs: 20_000,
+    maxMs: 180_000,
+    continuous: true,
+};

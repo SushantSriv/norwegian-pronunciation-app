@@ -1,8 +1,14 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
-import { cleanTranscript, recognitionSupported, type Recognition } from '../utils/speech';
+import {
+    cleanTranscript,
+    PHRASE,
+    recognitionSupported,
+    type ListenProfile,
+    type Recognition,
+} from '../utils/speech';
 import { decodeForRecognition, RECOGNITION_RATE } from '../utils/audioDecode';
 import { findSpeechBounds } from '../utils/pitch';
-import { listenOnce, type WebSpeechOutcome } from '../utils/webSpeech';
+import { listen, type WebSpeechSession } from '../utils/webSpeech';
 
 /**
  * Recording the learner, and letting the browser transcribe it.
@@ -23,12 +29,6 @@ import { listenOnce, type WebSpeechOutcome } from '../utils/webSpeech';
  * nothing.
  */
 
-/** Silence after speech that ends the recording, in milliseconds. */
-const SILENCE_MS = 1_200;
-/** Give up if nothing has been said by now. */
-const NO_SPEECH_MS = 6_000;
-/** Hard ceiling, so a stuck recording cannot grow without bound. */
-const MAX_RECORDING_MS = 15_000;
 /** RMS above which a frame counts as speech, on the analyser's 0-1 scale. */
 const SPEECH_LEVEL = 0.025;
 /** How often the level is sampled while recording. */
@@ -45,9 +45,11 @@ const NOTHING_HEARD = 'I did not catch anything — try speaking a little louder
 
 interface Options {
     onResult: (recognition: Recognition) => void;
+    /** How long a take may run. Defaults to one phrase. */
+    profile?: ListenProfile;
 }
 
-export function useVoiceInput({ onResult }: Options) {
+export function useVoiceInput({ onResult, profile = PHRASE }: Options) {
     const supported = recognitionSupported();
 
     const [listening, setListening] = useState(false);
@@ -57,8 +59,11 @@ export function useVoiceInput({ onResult }: Options) {
     const [recordingAvailable, setRecordingAvailable] = useState(true);
     /** Partial text, which the service produces as the learner speaks. */
     const [interim, setInterim] = useState('');
-    /** The service's answer for the attempt in flight. */
-    const speechRef = useRef<Promise<WebSpeechOutcome> | null>(null);
+    /** The listening session for the take in flight. */
+    const speechRef = useRef<WebSpeechSession | null>(null);
+    /** The profile in force, read inside callbacks without re-creating them. */
+    const profileRef = useRef(profile);
+    profileRef.current = profile;
 
     const mediaRecorderRef = useRef<MediaRecorder | null>(null);
     const chunksRef = useRef<BlobPart[]>([]);
@@ -109,8 +114,12 @@ export function useVoiceInput({ onResult }: Options) {
     const finish = useCallback(async (url: string | null) => {
         setTranscribing(true);
         try {
-            const outcome = await speechRef.current;
+            const session = speechRef.current;
             speechRef.current = null;
+            // Ask the service to finish and flush: the recorder has stopped, so
+            // whatever it is still holding belongs to this take.
+            session?.stop();
+            const outcome = await session?.done;
             const text = outcome?.text ? cleanTranscript(outcome.text) : '';
 
             // No audio: the service took the microphone for itself. The
@@ -172,7 +181,7 @@ export function useVoiceInput({ onResult }: Options) {
                 if (rms >= SPEECH_LEVEL) {
                     hasSpoken = true;
                     spokeAt = Date.now();
-                } else if (hasSpoken && Date.now() - spokeAt > SILENCE_MS) {
+                } else if (hasSpoken && Date.now() - spokeAt > profileRef.current.silenceMs) {
                     stop();
                 }
             }, LEVEL_POLL_MS);
@@ -180,8 +189,8 @@ export function useVoiceInput({ onResult }: Options) {
             stopTimersRef.current.push(
                 window.setTimeout(() => {
                     if (!hasSpoken) stop();
-                }, NO_SPEECH_MS),
-                window.setTimeout(stop, MAX_RECORDING_MS)
+                }, profileRef.current.noSpeechMs),
+                window.setTimeout(stop, profileRef.current.maxMs)
             );
         },
         [stop]
@@ -237,7 +246,10 @@ export function useVoiceInput({ onResult }: Options) {
         setInterim('');
 
         // The service listens live, in parallel with the recorder.
-        speechRef.current = listenOnce({ onInterim: setInterim });
+        speechRef.current = listen({
+            onInterim: setInterim,
+            continuous: profileRef.current.continuous,
+        });
 
         // Tap the same stream for live level data, for the visualiser and for
         // deciding when the learner has stopped talking.
@@ -255,7 +267,7 @@ export function useVoiceInput({ onResult }: Options) {
             watchLevel(analyser);
         } else {
             // No analyser to watch, so only the hard ceiling can end the take.
-            stopTimersRef.current.push(window.setTimeout(stop, MAX_RECORDING_MS));
+            stopTimersRef.current.push(window.setTimeout(stop, profileRef.current.maxMs));
         }
     }, [listening, transcribing, supported, clearTimers, releaseAudio, finish, watchLevel, stop]);
 
