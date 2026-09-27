@@ -1,4 +1,4 @@
-import { motion } from 'framer-motion';
+import { motion, useReducedMotion } from 'framer-motion';
 import type { Floor } from '../../utils/examTimeline';
 
 /**
@@ -42,6 +42,10 @@ interface Tint {
 }
 
 interface SeatProps {
+    /** A slug for the SVG gradient id. NOT the label: "Kandidat 2" contains a
+     *  space, which makes `url(#seat-Kandidat 2)` invalid and renders the
+     *  figure black. */
+    seatId: string;
     label: string;
     role: string;
     tint: Tint;
@@ -52,7 +56,16 @@ interface SeatProps {
     silent?: boolean;
 }
 
-function Person({ label, role, tint, active, empty, silent }: SeatProps) {
+function Person({ seatId, label, role, tint, active, empty, silent }: SeatProps) {
+    /**
+     * An endless pulse is the exact thing this setting exists to stop.
+     *
+     * Turned off rather than slowed down: the glow is one of two signals for
+     * whose turn it is (the other is the status line in words), so it keeps its
+     * steady lit state and loses only the animation.
+     */
+    const still = useReducedMotion();
+
     return (
         <div className="flex min-w-0 flex-col items-center gap-1.5 text-center">
             <motion.div
@@ -69,8 +82,16 @@ function Person({ label, role, tint, active, empty, silent }: SeatProps) {
                     <motion.span
                         aria-hidden="true"
                         initial={{ opacity: 0, scale: 0.7 }}
-                        animate={{ opacity: [0.45, 0.85, 0.45], scale: [1, 1.18, 1] }}
-                        transition={{ duration: 1.6, repeat: Infinity, ease: 'easeInOut' }}
+                        animate={
+                            still
+                                ? { opacity: 0.7, scale: 1.1 }
+                                : { opacity: [0.45, 0.85, 0.45], scale: [1, 1.18, 1] }
+                        }
+                        transition={
+                            still
+                                ? { duration: 0.2 }
+                                : { duration: 1.6, repeat: Infinity, ease: 'easeInOut' }
+                        }
                         className={`absolute -inset-2 rounded-full bg-gradient-to-br ${tint.glow} blur-md`}
                     />
                 )}
@@ -82,7 +103,7 @@ function Person({ label, role, tint, active, empty, silent }: SeatProps) {
                     aria-label={`${label}, ${role}${active ? ', snakker nå' : ''}`}
                 >
                     <defs>
-                        <linearGradient id={`seat-${label}`} x1="0" y1="0" x2="0" y2="1">
+                        <linearGradient id={`seat-${seatId}`} x1="0" y1="0" x2="0" y2="1">
                             <stop offset="0%" stopColor={tint.from} />
                             <stop offset="100%" stopColor={tint.to} />
                         </linearGradient>
@@ -97,10 +118,10 @@ function Person({ label, role, tint, active, empty, silent }: SeatProps) {
                         </g>
                     ) : (
                         <>
-                            <circle cx="20" cy="12" r="9" fill={`url(#seat-${label})`} />
+                            <circle cx="20" cy="12" r="9" fill={`url(#seat-${seatId})`} />
                             <path
                                 d="M4 46c0-9.5 7.2-17 16-17s16 7.5 16 17z"
-                                fill={`url(#seat-${label})`}
+                                fill={`url(#seat-${seatId})`}
                             />
                         </>
                     )}
@@ -152,6 +173,7 @@ export function Rommet({ floor, pairPresent = false, partnerName }: Props) {
                 {/* Across the table: the examiner, who does the talking. */}
                 <div className="flex flex-1 justify-center">
                     <Person
+                        seatId="eksaminator"
                         label="Eksaminator"
                         role="leser oppgavene og spør"
                         tint={TINTS.eksaminator}
@@ -162,6 +184,7 @@ export function Rommet({ floor, pairPresent = false, partnerName }: Props) {
                 {/* The sensor sits apart, by design and on the plan. */}
                 <div className="w-[4.5rem] shrink-0 border-l border-dashed border-white/12 pl-3 sm:w-24 sm:pl-4">
                     <Person
+                        seatId="sensor"
                         label="Sensor"
                         role="sier ingenting, hører alt"
                         tint={TINTS.sensor}
@@ -179,12 +202,14 @@ export function Rommet({ floor, pairPresent = false, partnerName }: Props) {
 
             <div className="flex items-start justify-center gap-6 sm:gap-10">
                 <Person
+                    seatId="deg"
                     label="Du"
                     role="her sitter du"
                     tint={TINTS.deg}
                     active={floor === 'deg'}
                 />
                 <Person
+                    seatId="andre"
                     label={partnerName?.trim() || 'Kandidat 2'}
                     role={pairPresent ? 'den andre kandidaten' : 'ingen her ennå'}
                     tint={TINTS.andre}

@@ -352,6 +352,26 @@ export function useExamRoom({ url = '', onRemoteStream }: Options = {}) {
         create,
         join,
         leave,
+        /**
+         * Open or close this candidate's outgoing microphone.
+         *
+         * On a task the pair takes one at a time only one of them is meant to
+         * be heard, and both devices read the examiner's lines aloud — so a
+         * track that is open all session sends the partner a second copy of
+         * the examiner on top of their own, and the room around whoever is not
+         * speaking on top of whoever is.
+         *
+         * `enabled = false` sends silence rather than closing anything: the
+         * connection stays up, nothing is renegotiated, and the floor coming
+         * back is a boolean rather than a reconnection. It touches ONLY what
+         * leaves this device — the microphone this device records from, and
+         * therefore the transcript, is untouched.
+         */
+        setOutgoing: useCallback((open: boolean) => {
+            local.current?.getAudioTracks().forEach(track => {
+                track.enabled = open;
+            });
+        }, []),
         advance: useCallback((index: number) => send({ t: 'advance', index }), [send]),
         reportSpoken: useCallback((ms: number) => send({ t: 'spoke', ms: Math.round(ms) }), [send]),
         setReady: useCallback((ready: boolean) => send({ t: 'ready', ready }), [send]),

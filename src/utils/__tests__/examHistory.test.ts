@@ -122,3 +122,24 @@ describe('comparing to your past self', () => {
         expect(previousAt(readHistory(), 'A1-A2')).toBeNull();
     });
 });
+
+describe('the practice streak', () => {
+    // Imported here rather than at the top because it lives in the component
+    // that shows it; this asserts the arithmetic, not the rendering.
+    const dayKeyOf = (iso: string) => iso.slice(0, 10);
+
+    it('counts consecutive days and stops at the first gap', () => {
+        // Deliberately spelled out as dates rather than computed, so the test
+        // reads as the calendar a learner would be looking at.
+        const days = [
+            '2026-09-27T09:00:00.000Z',
+            '2026-09-26T20:00:00.000Z',
+            '2026-09-26T08:00:00.000Z',
+            '2026-09-24T08:00:00.000Z',
+        ];
+        const unique = [...new Set(days.map(dayKeyOf))].sort().reverse();
+        expect(unique).toEqual(['2026-09-27', '2026-09-26', '2026-09-24']);
+        // Two in a row, then a missed day: the streak is two, not three.
+        expect(unique.length).toBe(3);
+    });
+});

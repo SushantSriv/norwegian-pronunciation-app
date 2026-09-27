@@ -2,6 +2,7 @@ import { useCallback, useEffect, useRef, useState } from 'react';
 import { buildTimeline, type Segment } from '../utils/examTimeline';
 import { speakNorwegian, stopSpeaking } from '../utils/audioPlayback';
 import type { Nivaa, Oppgave, PoolId } from '../data/muntlig/oppgaver';
+import type { Seat } from '../utils/roomProtocol';
 
 /**
  * Running one rehearsal.
@@ -32,6 +33,19 @@ export type Phase = 'klar' | 'snakker' | 'forbereder' | 'lytter' | 'venter' | 'f
  */
 export const PREP_MS = 5_000;
 
+/**
+ * How long to wait for one spoken line before giving up on it.
+ *
+ * speechSynthesis is not reliable about `onend`. A voice that is still loading,
+ * a tab that was backgrounded mid-utterance, or an engine that simply drops the
+ * event all leave the promise pending — and the session then sits on
+ * "Eksaminator snakker" for ever, with no control on screen because it is not
+ * the candidate's turn. Generous, because cutting a real line short is worse
+ * than waiting: roughly twice the time the line would take at speaking pace,
+ * plus a fixed allowance for the voice to start.
+ */
+const speechDeadline = (line: string) => 3_000 + line.length * 120;
+
 export interface Take {
     segmentId: string;
     /** What the browser's speech service made of it. */
@@ -45,6 +59,16 @@ export interface Take {
 interface Options {
     nivaa: Nivaa;
     pairPresent?: boolean;
+    /**
+     * Which chair this device is in, when there is a partner in the other one.
+     *
+     * Passed straight through to the timeline, which is the only thing that
+     * decides whose turn it is. Nothing here works out a floor of its own: on
+     * a task the pair takes one at a time, this device runs the partner's turn
+     * exactly the way it runs a task it cannot record — the lines are read and
+     * the microphone stays shut.
+     */
+    seat?: Seat;
     /** Injected so a test is not at the mercy of a shuffle. */
     pick?: (pool: PoolId, oppgaver: Oppgave[]) => Oppgave;
     /** Start a take. Resolves with what was heard when the take ends. */
@@ -58,12 +82,13 @@ interface Options {
 export function useExamSession({
     nivaa,
     pairPresent = false,
+    seat,
     pick,
     listen,
     endTake,
     speak = speakNorwegian,
 }: Options) {
-    const [timeline] = useState<Segment[]>(() => buildTimeline({ nivaa, pick, pairPresent }));
+    const [timeline] = useState<Segment[]>(() => buildTimeline({ nivaa, pick, pairPresent, seat }));
     const [index, setIndex] = useState(0);
     const [phase, setPhase] = useState<Phase>('klar');
     const [takes, setTakes] = useState<Take[]>([]);
@@ -128,7 +153,14 @@ export function useExamSession({
             setPhase('snakker');
             for (const line of segment.says) {
                 if (cancelled || runId.current !== mine) return;
-                await speakRef.current(line);
+                // Whichever comes first: the voice finishing, or the deadline.
+                // A line that never reports finishing must not strand the run.
+                await Promise.race([
+                    speakRef.current(line),
+                    new Promise<void>(resolve => {
+                        window.setTimeout(resolve, speechDeadline(line));
+                    }),
+                ]);
             }
             if (cancelled || runId.current !== mine) return;
 

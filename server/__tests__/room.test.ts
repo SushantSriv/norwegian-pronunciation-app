@@ -1,5 +1,5 @@
 import { afterAll, beforeAll, beforeEach, describe, expect, it } from 'vitest';
-import { ExamRoom } from '../room';
+import { ExamQueue, ExamRoom } from '../room';
 import { MAX_MESSAGES_PER_SECOND, type ServerMessage } from '../../src/utils/roomProtocol';
 
 /**
@@ -300,6 +300,96 @@ describe('what the room never holds', () => {
 
         for (const message of [...seats[0].messages(), ...seats[1].messages()]) {
             expect(['joined', 'room', 'signal', 'advance', 'spoke', 'error']).toContain(message.t);
+        }
+    });
+});
+
+// ---------------------------------------------------------------------------
+// The queue
+// ---------------------------------------------------------------------------
+
+const queueUpgrade = (nivaa = 'A2-B1') =>
+    ({
+        url: `https://example.test/queue?nivaa=${nivaa}`,
+        headers: new Headers({ Upgrade: 'websocket' }),
+        method: 'GET',
+    }) as unknown as Request;
+
+/** A queue with however many browsers are waiting in it. */
+async function queue(joins = 2, nivaa = 'A2-B1') {
+    const instance = new ExamQueue();
+    for (let i = 0; i < joins; i++) await instance.fetch(queueUpgrade(nivaa));
+    return { instance, waiting: sockets.slice() };
+}
+
+/** What the queue can say, as far as these assertions need to know. */
+interface QueueFrame {
+    t: string;
+    code?: string;
+    nivaa?: string;
+    waiting?: number;
+}
+
+const sent = (socket: FakeSocket, type: string): QueueFrame[] =>
+    socket.sent.map(line => JSON.parse(line) as QueueFrame).filter(m => m.t === type);
+
+describe('pairing two strangers', () => {
+    it('leaves one person waiting, and says how many that is', async () => {
+        const { waiting } = await queue(1);
+        expect(sent(waiting[0], 'matched')).toHaveLength(0);
+        expect(sent(waiting[0], 'queue').at(-1)).toEqual({ t: 'queue', waiting: 1 });
+    });
+
+    it('gives both halves of a pair the same room code', async () => {
+        const { waiting } = await queue(2);
+        const first = sent(waiting[0], 'matched')[0];
+        const second = sent(waiting[1], 'matched')[0];
+
+        expect(first?.code).toMatch(/^[A-Z2-9]{6}$/);
+        // Two people sent to different rooms would each sit alone in one.
+        expect(second?.code).toBe(first?.code);
+        expect(first?.nivaa).toBe('A2-B1');
+    });
+
+    it('drops both from the queue once they are paired', async () => {
+        const { instance, waiting } = await queue(2);
+        sockets.length = 0;
+        await instance.fetch(queueUpgrade());
+        // A third arrival is alone, not matched with somebody already in a room.
+        expect(sent(sockets[0], 'matched')).toHaveLength(0);
+        expect(sent(sockets[0], 'queue').at(-1)).toEqual({ t: 'queue', waiting: 1 });
+        expect(waiting[0].closed || waiting[1].closed).toBeDefined();
+    });
+
+    it('lets somebody give up their place', async () => {
+        const { waiting } = await queue(1);
+        waiting[0].deliver({ t: 'leave' });
+        expect(waiting[0].closed).toBe(true);
+    });
+
+    it('refuses a request that is not a websocket upgrade', async () => {
+        const instance = new ExamQueue();
+        const response = await instance.fetch({
+            url: 'https://example.test/queue?nivaa=A2-B1',
+            headers: new Headers(),
+            method: 'GET',
+        } as unknown as Request);
+        expect((response as unknown as { status: number }).status).toBe(426);
+    });
+});
+
+describe('what the queue never holds', () => {
+    it('sends nothing about who is waiting', async () => {
+        // The queue keeps a socket and a timestamp. A name, an id or anything
+        // said would have to appear in one of these frames to exist at all.
+        const { waiting } = await queue(2);
+        const everything = waiting.flatMap(socket => socket.sent).join(' ');
+        expect(everything).not.toMatch(/nickname|name|id"|transcript|blob:/i);
+
+        for (const socket of waiting) {
+            for (const message of socket.messages() as unknown as QueueFrame[]) {
+                expect(['queue', 'matched', 'error']).toContain(message.t);
+            }
         }
     });
 });

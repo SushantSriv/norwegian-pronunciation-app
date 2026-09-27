@@ -64,6 +64,8 @@ export function Uttaleprove() {
         setSetning(current => pick(current));
     };
 
+    const missed = result?.wordScores.filter(word => word.status !== 'equal') ?? [];
+
     return (
         <div className="mt-5 rounded-xl border border-white/12 bg-white/[0.03] p-4">
             <h2 className="text-sm font-bold uppercase tracking-wide text-white/70">Uttaleprøve</h2>
@@ -108,33 +110,71 @@ export function Uttaleprove() {
 
             {result && (
                 <div className="mt-4">
+                    {/*
+                      Underlines as well as colour, and the sounds spelled out
+                      below rather than hidden in a tooltip. A tooltip cannot be
+                      opened by touch at all, and this screen used to tell people
+                      to hover — on a phone, which is where most of them are.
+                    */}
                     <p className="text-sm leading-relaxed">
                         {result.wordScores.map(word => (
                             <span
                                 key={`${word.word}-${word.index}`}
-                                title={
-                                    word.expectedIpa
-                                        ? `forventet ${word.expectedIpa}${word.heardIpa ? `, hørte ${word.heardIpa}` : ''}`
-                                        : undefined
-                                }
                                 className={
                                     word.status === 'equal'
                                         ? 'text-emerald-200'
                                         : word.score >= 0.6
-                                          ? 'text-amber-200'
-                                          : 'text-rose-300'
+                                          ? 'text-amber-200 underline decoration-dotted decoration-2 underline-offset-4'
+                                          : 'text-rose-300 underline decoration-wavy decoration-2 underline-offset-4'
                                 }
                             >
-                                {word.word}{' '}
+                                {word.word}
+                                {word.status !== 'equal' && (
+                                    <span className="sr-only">
+                                        {word.score >= 0.6 ? ' (nesten)' : ' (kom ikke fram)'}
+                                    </span>
+                                )}{' '}
                             </span>
                         ))}
                     </p>
 
-                    <p className="mt-2.5 text-[12px] leading-relaxed text-white/45">
-                        {result.wordScores.filter(word => word.status !== 'equal').length === 0
-                            ? 'Hvert ord kom fram slik det skulle.'
-                            : `${result.wordScores.filter(word => word.status !== 'equal').length} av ${result.wordScores.length} ord kom ikke fram. Hold pekeren over et ord for å se lydene.`}
-                    </p>
+                    {missed.length === 0 ? (
+                        <p className="mt-2.5 text-[12px] leading-relaxed text-white/45">
+                            Hvert ord kom fram slik det skulle.
+                        </p>
+                    ) : (
+                        <div className="mt-3 space-y-1.5">
+                            <p className="text-[12px] text-white/45">
+                                {missed.length} av {result.wordScores.length} ord kom ikke fram:
+                            </p>
+                            <ul className="space-y-1">
+                                {missed.map(word => (
+                                    <li
+                                        key={`miss-${word.word}-${word.index}`}
+                                        className="flex flex-wrap items-baseline gap-x-2 text-[12px] text-white/60"
+                                    >
+                                        <span className="font-semibold text-white/85">
+                                            {word.word}
+                                        </span>
+                                        {word.expectedIpa && (
+                                            <span className="text-white/40">
+                                                skal være <span className="text-white/70">
+                                                    /{word.expectedIpa}/
+                                                </span>
+                                            </span>
+                                        )}
+                                        {word.heardIpa && (
+                                            <span className="text-white/40">
+                                                — hørt som <span className="text-white/70">
+                                                    /{word.heardIpa}/
+                                                </span>
+                                            </span>
+                                        )}
+                                    </li>
+                                ))}
+                            </ul>
+                        </div>
+                    )}
 
                     <button
                         onClick={again}

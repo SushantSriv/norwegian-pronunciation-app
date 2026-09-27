@@ -30,6 +30,9 @@
  */
 import {
     MAX_MESSAGES_PER_SECOND,
+    parseQueueClientMessage,
+    QUEUE_STALE_MS,
+    type QueueServerMessage,
     MAX_SEATS,
     MAX_SESSION_MS,
     makeCode,
@@ -73,12 +76,15 @@ interface DurableState {
     storage: DurableStorage;
 }
 
+interface Namespace {
+    idFromName(name: string): unknown;
+    get(id: unknown): { fetch(request: Request): Promise<Response> };
+}
+
 export interface RoomEnv {
     ALLOWED_ORIGINS?: string;
-    ROOM: {
-        idFromName(name: string): unknown;
-        get(id: unknown): { fetch(request: Request): Promise<Response> };
-    };
+    ROOM: Namespace;
+    QUEUE: Namespace;
 }
 
 interface Occupant {
@@ -282,6 +288,122 @@ export class ExamRoom {
 }
 
 // ---------------------------------------------------------------------------
+// The queue
+// ---------------------------------------------------------------------------
+
+interface Waiting {
+    socket: WebSocketLike;
+    /** Last sign of life, so a closed laptop does not hold a place for ever. */
+    seenAt: number;
+}
+
+/**
+ * Pairing two strangers who picked the same level.
+ *
+ * One of these per level, so everybody in it wants the same exam and a match is
+ * simply "are there two of us". The alternative — one queue with levels as a
+ * filter — buys nothing here and makes the matching a search.
+ *
+ * IT HOLDS NOTHING ABOUT ANYBODY. A waiting entry is a socket and a timestamp.
+ * There is no name, no identifier, no history, and when a pair is matched both
+ * entries are dropped: what the queue knows about you stops existing the moment
+ * it stops needing to know it.
+ *
+ * THE MATCH IS JUST A CODE. The queue mints a room code and tells both sides.
+ * Everything after that is the ordinary room, and the queue is not part of it.
+ */
+export class ExamQueue {
+    private waiting: Waiting[] = [];
+
+    async fetch(request: Request): Promise<Response> {
+        if (request.headers.get('Upgrade') !== 'websocket') {
+            return new Response('expected websocket', { status: 426 });
+        }
+
+        const pair = new (globalThis as unknown as { WebSocketPair: new () => WebSocketPairLike })
+            .WebSocketPair();
+        const client = pair[0];
+        const server = pair[1];
+        server.accept();
+
+        const entry: Waiting = { socket: server, seenAt: Date.now() };
+        this.sweep();
+        this.waiting.push(entry);
+
+        server.addEventListener('message', event => {
+            const message = parseQueueClientMessage(event.data);
+            if (!message) return;
+            if (message.t === 'leave') {
+                this.drop(entry);
+                try {
+                    server.close(1000, 'left');
+                } catch {
+                    // Already gone.
+                }
+                return;
+            }
+            entry.seenAt = Date.now();
+        });
+        server.addEventListener('close', () => this.drop(entry));
+        server.addEventListener('error', () => this.drop(entry));
+
+        this.tryMatch(request);
+
+        return new Response(null, {
+            status: 101,
+            webSocket: client,
+        } as ResponseInit & { webSocket: WebSocketLike });
+    }
+
+    /** Forget anybody who has stopped saying they are still here. */
+    private sweep(): void {
+        const now = Date.now();
+        this.waiting = this.waiting.filter(entry => now - entry.seenAt < QUEUE_STALE_MS);
+    }
+
+    private drop(entry: Waiting): void {
+        this.waiting = this.waiting.filter(other => other !== entry);
+        this.announce();
+    }
+
+    private tryMatch(request: Request): void {
+        const url = new URL(request.url);
+        const asked = url.searchParams.get('nivaa');
+        const nivaa = validNivaa(asked) ? asked : 'A2-B1';
+
+        this.sweep();
+        while (this.waiting.length >= 2) {
+            const [first, second] = this.waiting.splice(0, 2);
+            const code = makeCode(bytes => crypto.getRandomValues(bytes));
+            const matched: QueueServerMessage = { t: 'matched', code, nivaa };
+            for (const entry of [first, second]) {
+                try {
+                    entry.socket.send(JSON.stringify(matched));
+                    entry.socket.close(1000, 'matched');
+                } catch {
+                    // If one of them vanished between the check and the send,
+                    // the other is told by the room never filling and can queue
+                    // again — better than silently re-queueing them here, which
+                    // would make the wait look shorter than it is.
+                }
+            }
+        }
+        this.announce();
+    }
+
+    private announce(): void {
+        const message: QueueServerMessage = { t: 'queue', waiting: this.waiting.length };
+        for (const entry of this.waiting) {
+            try {
+                entry.socket.send(JSON.stringify(message));
+            } catch {
+                // Tidied up by the close handler.
+            }
+        }
+    }
+}
+
+// ---------------------------------------------------------------------------
 // The worker in front of it
 // ---------------------------------------------------------------------------
 
@@ -310,6 +432,14 @@ export default {
             return new Response(JSON.stringify({ code }), {
                 headers: { ...cors, 'Content-Type': 'application/json' },
             });
+        }
+
+        // The queue: one per level, so a match is simply "are there two of us".
+        if (url.pathname === '/queue') {
+            const nivaa = url.searchParams.get('nivaa');
+            if (!validNivaa(nivaa)) return new Response('bad level', { status: 400, headers: cors });
+            const queue = env.QUEUE.get(env.QUEUE.idFromName(`ko:${nivaa}`));
+            return queue.fetch(request);
         }
 
         if (url.pathname === '/room') {

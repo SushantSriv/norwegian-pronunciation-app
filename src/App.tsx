@@ -72,7 +72,21 @@ export default function App() {
 
     const [showConfetti, setShowConfetti] = useState(false);
     const [showCommunity, setShowCommunity] = useState(false);
-    const [showMuntlig, setShowMuntlig] = useState(false);
+    /**
+     * A room link opens the rehearsal, not the stage picker.
+     *
+     * Read here rather than inside MuntligScreen, which is where it used to
+     * be: that screen is not mounted until somebody presses a button, so a
+     * partner following an invite landed on the pronunciation game with their
+     * room code sitting unread in the address bar.
+     */
+    const [showMuntlig, setShowMuntlig] = useState(() => {
+        try {
+            return new URLSearchParams(window.location.search).has('rom');
+        } catch {
+            return false;
+        }
+    });
 
     /**
      * Price the attempt, then remember it.

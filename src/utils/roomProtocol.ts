@@ -110,9 +110,50 @@ export const MAX_SPOKEN_MS = 15 * 60_000;
 /** How long an unused room is kept before it is forgotten. */
 export const ROOM_TTL_MS = 3 * 60 * 60_000;
 
+/**
+ * The queue.
+ *
+ * Most people preparing for this exam do not know somebody else preparing for
+ * it, so a feature that needs a partner you already have is a feature almost
+ * nobody can use. The queue pairs two strangers who picked the same level.
+ *
+ * WHAT A STRANGER LEARNS ABOUT YOU, and the screen says this before you join
+ * rather than after: a direct audio connection is made by each browser telling
+ * the other how to reach it, so they see your IP address. That is true of every
+ * video call ever made, but it is a different thing with somebody you have
+ * never met than with a friend you sent a link to, so it is stated where the
+ * decision is made.
+ *
+ * WHAT THEY DO NOT LEARN: your name, because the app never asks for one; your
+ * transcript, which never leaves your own device; or anything you said, because
+ * the audio goes between the two browsers and is never recorded by either.
+ *
+ * Nobody waits for ever. A queue that keeps you hoping is worse than one that
+ * says plainly that nobody else is here.
+ */
+export const QUEUE_TIMEOUT_MS = 3 * 60_000;
+
+/** How long a waiting entry survives without a heartbeat. */
+export const QUEUE_STALE_MS = 45_000;
+
 // ---------------------------------------------------------------------------
 // Messages
 // ---------------------------------------------------------------------------
+
+/** What a browser sends the queue. */
+export type QueueClientMessage =
+    /** Still here, still waiting. */
+    | { t: 'wait' }
+    /** Give up my place. */
+    | { t: 'leave' };
+
+/** What the queue sends back. */
+export type QueueServerMessage =
+    /** How many are waiting at this level, including you. */
+    | { t: 'queue'; waiting: number }
+    /** Paired. Both sides are told the same code at the same moment. */
+    | { t: 'matched'; code: string; nivaa: RoomNivaa }
+    | { t: 'error'; reason: string };
 
 export type ClientMessage =
     /** Relayed verbatim to the other seat. The server does not parse it. */
@@ -249,6 +290,48 @@ export function parseServerMessage(raw: unknown): ServerMessage | null {
                 ? { t: 'error', reason: parsed.reason.slice(0, 200) }
                 : null;
 
+        default:
+            return null;
+    }
+}
+
+export function parseQueueClientMessage(raw: unknown): QueueClientMessage | null {
+    if (typeof raw !== 'string' || raw.length > 256) return null;
+    let parsed: unknown;
+    try {
+        parsed = JSON.parse(raw);
+    } catch {
+        return null;
+    }
+    if (!isObject(parsed)) return null;
+    if (parsed.t === 'wait') return { t: 'wait' };
+    if (parsed.t === 'leave') return { t: 'leave' };
+    return null;
+}
+
+export function parseQueueServerMessage(raw: unknown): QueueServerMessage | null {
+    if (typeof raw !== 'string' || raw.length > 1024) return null;
+    let parsed: unknown;
+    try {
+        parsed = JSON.parse(raw);
+    } catch {
+        return null;
+    }
+    if (!isObject(parsed)) return null;
+
+    switch (parsed.t) {
+        case 'queue':
+            return wholeNumber(parsed.waiting, 10_000) ? { t: 'queue', waiting: parsed.waiting } : null;
+        case 'matched':
+            return typeof parsed.code === 'string' &&
+                validCode(parsed.code) &&
+                validNivaa(parsed.nivaa)
+                ? { t: 'matched', code: parsed.code, nivaa: parsed.nivaa }
+                : null;
+        case 'error':
+            return typeof parsed.reason === 'string'
+                ? { t: 'error', reason: parsed.reason.slice(0, 200) }
+                : null;
         default:
             return null;
     }

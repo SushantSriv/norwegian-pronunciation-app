@@ -10,6 +10,12 @@
  * whether the microphone is open. Everything else in the mode reads it rather
  * than deciding for itself; a bug where the app listens while it is talking
  * then has exactly one place to be.
+ *
+ * In a pair the floor is per seat, which is why `seat` is an argument here
+ * rather than something a component works out afterwards. Both devices build
+ * the same segments in the same order from the same shared seed — the two of
+ * them step through one index together — and the only thing that differs
+ * between them is which turn says 'deg' and which says 'den-andre'.
  */
 import {
     AAPNING,
@@ -19,6 +25,7 @@ import {
     OPPVARMING,
 } from '../data/muntlig/eksaminator';
 import { KILDER, POOLS, type Kilde, type Nivaa, type Oppgave, type PoolId } from '../data/muntlig/oppgaver';
+import { SEATS, type Seat } from './roomProtocol';
 
 /** Whose turn it is. 'ingen' means nobody is being recorded. */
 export type Floor = 'eksaminator' | 'deg' | 'den-andre' | 'ingen';
@@ -77,10 +84,85 @@ interface Options {
      * and hiding the task would misrepresent a fifth of the exam.
      */
     pairPresent?: boolean;
+    /**
+     * Which of the two chairs this device is sitting in.
+     *
+     * The two devices build the SAME segments, in the same order, with the
+     * same prompts — so the index the pair steps through together still means
+     * the same turn on both screens — and they differ only in who holds the
+     * floor on each of them. Undefined is sitting alone, and then every turn
+     * is yours.
+     */
+    seat?: Seat;
+}
+
+/** One candidate's go at a stretch of the exam that is taken one at a time. */
+interface Tur {
+    /** Whose figure lights up, and therefore whether this device records. */
+    floor: Floor;
+    /** Keeps the two goes apart in the ids and in the map down the side. */
+    suffix: string;
+    /** Says whose go it is, where the title is shown. */
+    label: string;
+    /** The examiner's framing is read once, before the first go. */
+    first: boolean;
+}
+
+/**
+ * How a one-at-a-time stretch is taken, from this device's point of view.
+ *
+ * Alone, once. With a partner, twice: "I oppgave A skal dere snakke én og én",
+ * "I oppgave C skal dere snakke én og én om ett tema hver" — everything except
+ * the conversation task is taken by one candidate at a time, and an app that
+ * hands both of them the floor at once has two people talking over each other
+ * down a live microphone.
+ *
+ * WHICH CHAIR GOES FIRST IS THE APP'S DOING, not something transcribed: HK-dir
+ * publishes nothing about how an examiner chooses who begins. What it does
+ * publish — that exactly one candidate speaks at a time — is what this
+ * reproduces, and the order falls out of the seat letters the room has already
+ * handed out, so the two devices agree on it without negotiating anything.
+ */
+function turer(pairPresent: boolean, seat?: Seat): Tur[] {
+    if (!pairPresent) return [{ floor: 'deg', suffix: '', label: '', first: true }];
+
+    // A pair whose seat has somehow not arrived is treated as the first
+    // candidate rather than as both: the one thing that must never happen is
+    // one device holding the floor on both turns.
+    const mine = seat ?? SEATS[0];
+    return SEATS.map((chair, index) => ({
+        floor: chair === mine ? 'deg' : 'den-andre',
+        suffix: `-${index + 1}`,
+        label: chair === mine ? ' (du)' : ' (den andre)',
+        first: index === 0,
+    }));
 }
 
 const drawFrom = (pool: PoolId, pick: PickOppgave): Oppgave =>
     pick(pool, POOLS[pool].oppgaver);
+
+/**
+ * A second topic from the same pool, different from the first.
+ *
+ * Oppgave C at A2-B1 is the one slot where the examiner promises "ett tema
+ * hver" and tells the second candidate "Du skal få en annen oppgave etterpå".
+ * Drawing once and handing the same prompt to both would have the app
+ * contradict the line it has just read aloud.
+ *
+ * EXACTLY TWO DRAWS, ALWAYS, in the same order on both devices. A retry loop
+ * would make the number of draws depend on what came back, and the moment the
+ * two devices disagree about how many times they have asked, every later draw
+ * is a different question on each screen. When the same item comes back twice
+ * the next published one takes its place instead — which also means a pool
+ * with a single item in it returns that item rather than spinning.
+ */
+function annetTemaEnn(first: Oppgave, pool: PoolId, pick: PickOppgave): Oppgave {
+    const oppgaver = POOLS[pool].oppgaver;
+    const drawn = drawFrom(pool, pick);
+    if (drawn.id !== first.id) return drawn;
+    const at = oppgaver.findIndex(candidate => candidate.id === first.id);
+    return oppgaver[(at + 1) % oppgaver.length];
+}
 
 /**
  * Everything the examiner says for one task, in order.
@@ -102,7 +184,14 @@ const spokenFor = (intro: string[], oppgave: Oppgave): string[] => [
     INNLEDNING.duKanBegynne,
 ];
 
-/** One individual speaking slot. */
+/**
+ * One individual speaking slot, as the turns it is actually taken in.
+ *
+ * `ettTemaHver` is the single slot whose framing promises the pair a topic
+ * each; everywhere else the framing either says the opposite outright ("Dere
+ * får samme oppgave") or says nothing, and the app is not going to invent a
+ * second topic where the examiner has not promised one.
+ */
 function individuell(
     id: string,
     letter: Segment['letter'],
@@ -111,23 +200,38 @@ function individuell(
     pool: PoolId,
     pick: PickOppgave,
     minMs: number,
-    maxMs: number
-): Segment {
+    maxMs: number,
+    turns: Tur[],
+    ettTemaHver = false
+): Segment[] {
     const oppgave = drawFrom(pool, pick);
-    return {
-        id,
+    // Drawn whether or not anybody is in the other chair, and whichever chair
+    // this device is in: the pair's shared seed only keeps the two of them on
+    // the same questions while both ask `pick` for the same things in the same
+    // order.
+    const annet = ettTemaHver ? annetTemaEnn(oppgave, pool, pick) : oppgave;
+
+    return turns.map(tur => ({
+        id: `${id}${tur.suffix}`,
         kind: 'individuell',
         letter,
-        title,
-        floor: 'deg',
-        says: spokenFor(intro, oppgave),
-        oppgave,
+        title: `${title}${tur.label}`,
+        floor: tur.floor,
+        // The second candidate's own topic is read out, because they have not
+        // heard it yet. A topic the two of them share was read a moment ago,
+        // so there only the cue to begin is left to say.
+        says: tur.first
+            ? spokenFor(intro, oppgave)
+            : ettTemaHver
+              ? spokenFor([], annet)
+              : [INNLEDNING.duKanBegynne],
+        oppgave: tur.first ? oppgave : annet,
         kilde: POOLS[pool].kilde,
         minMs,
         maxMs,
         assessed: true,
         runnable: true,
-    };
+    }));
 }
 
 /** The conversation task, which needs a person the app cannot supply. */
@@ -171,7 +275,13 @@ function samtale(
  * counts; the other two have three tasks, an unassessed warm-up, and a
  * conversation slot twice as long.
  */
-export function buildTimeline({ nivaa, pick = firstOf, pairPresent = false }: Options): Segment[] {
+export function buildTimeline({
+    nivaa,
+    pick = firstOf,
+    pairPresent = false,
+    seat,
+}: Options): Segment[] {
+    const turns = turer(pairPresent, seat);
     const out: Segment[] = [
         {
             id: 'apning',
@@ -186,24 +296,30 @@ export function buildTimeline({ nivaa, pick = firstOf, pairPresent = false }: Op
     ];
 
     if (nivaa !== 'A1-A2') {
-        out.push({
-            id: 'oppvarming',
-            kind: 'oppvarming',
-            title: 'Oppvarming',
-            floor: 'deg',
-            says: [OPPVARMING.says],
-            note: OPPVARMING.note,
-            kilde: KILDER.mal,
-            minMs: 1 * MIN,
-            maxMs: 2 * MIN,
-            assessed: false,
-            runnable: true,
-        });
+        out.push(
+            ...turns.map(tur => ({
+                id: `oppvarming${tur.suffix}`,
+                kind: 'oppvarming' as const,
+                title: `Oppvarming${tur.label}`,
+                floor: tur.floor,
+                // "Vil dere begynne med å fortelle helt kort om dere selv? Du
+                // kan begynne." is put to both candidates and cues one of
+                // them; the second hears the cue and nothing else, because
+                // the question was asked of the pair.
+                says: tur.first ? [OPPVARMING.says] : [INNLEDNING.duKanBegynne],
+                note: OPPVARMING.note,
+                kilde: KILDER.mal,
+                minMs: 1 * MIN,
+                maxMs: 2 * MIN,
+                assessed: false,
+                runnable: true,
+            }))
+        );
     }
 
     if (nivaa === 'A1-A2') {
         out.push(
-            individuell(
+            ...individuell(
                 'a',
                 'A',
                 'Fortelle',
@@ -211,7 +327,8 @@ export function buildTimeline({ nivaa, pick = firstOf, pairPresent = false }: Op
                 'fortelle-selv',
                 pick,
                 1 * MIN,
-                2 * MIN
+                2 * MIN,
+                turns
             ),
             {
                 // The picture task. HK-dir's own drawings cannot be
@@ -240,7 +357,7 @@ export function buildTimeline({ nivaa, pick = firstOf, pairPresent = false }: Op
                 3 * MIN,
                 pairPresent
             ),
-            individuell(
+            ...individuell(
                 'd',
                 'D',
                 'Fortelle / beskrive',
@@ -248,14 +365,15 @@ export function buildTimeline({ nivaa, pick = firstOf, pairPresent = false }: Op
                 'fortelle-beskrive',
                 pick,
                 2 * MIN,
-                3 * MIN
+                3 * MIN,
+                turns
             )
         );
     }
 
     if (nivaa === 'A2-B1') {
         out.push(
-            individuell(
+            ...individuell(
                 'a',
                 'A',
                 'Fortelle / beskrive',
@@ -263,7 +381,8 @@ export function buildTimeline({ nivaa, pick = firstOf, pairPresent = false }: Op
                 'fortelle-beskrive',
                 pick,
                 2 * MIN,
-                3 * MIN
+                3 * MIN,
+                turns
             ),
             samtale(
                 'b',
@@ -275,7 +394,7 @@ export function buildTimeline({ nivaa, pick = firstOf, pairPresent = false }: Op
                 7 * MIN,
                 pairPresent
             ),
-            individuell(
+            ...individuell(
                 'c',
                 'C',
                 'Uttrykke synspunkt',
@@ -283,14 +402,19 @@ export function buildTimeline({ nivaa, pick = firstOf, pairPresent = false }: Op
                 'synspunkt',
                 pick,
                 2 * MIN,
-                3 * MIN
+                3 * MIN,
+                turns,
+                // "I oppgave C skal dere snakke én og én om ett tema hver …
+                // Til den andre kandidaten: Du skal få en annen oppgave
+                // etterpå."
+                true
             )
         );
     }
 
     if (nivaa === 'B1-B2') {
         out.push(
-            individuell(
+            ...individuell(
                 'a',
                 'A',
                 'Uttrykke og grunngi',
@@ -298,7 +422,8 @@ export function buildTimeline({ nivaa, pick = firstOf, pairPresent = false }: Op
                 'synspunkt',
                 pick,
                 2 * MIN,
-                3 * MIN
+                3 * MIN,
+                turns
             ),
             samtale(
                 'b',
@@ -315,28 +440,35 @@ export function buildTimeline({ nivaa, pick = firstOf, pairPresent = false }: Op
 
         const paastand = drawFrom('paastand', pick);
 
-        out.push(
-            {
-                id: 'c-tenketid',
-                kind: 'tenketid',
-                letter: 'C',
-                title: 'Tenketid',
-                floor: 'ingen',
-                says: [INNLEDNING.argumentere, paastand.text, INNLEDNING.tenketid],
-                note: APP_SIER.ingenTenketall,
-                oppgave: paastand,
-                kilde: KILDER.b1b2,
-                assessed: false,
-                runnable: true,
-            },
-            {
-                id: 'c',
+        out.push({
+            id: 'c-tenketid',
+            kind: 'tenketid',
+            letter: 'C',
+            title: 'Tenketid',
+            floor: 'ingen',
+            says: [INNLEDNING.argumentere, paastand.text, INNLEDNING.tenketid],
+            note: APP_SIER.ingenTenketall,
+            oppgave: paastand,
+            kilde: KILDER.b1b2,
+            assessed: false,
+            runnable: true,
+        });
+
+        // Oppgave C is a block rather than a slot: "Etterpå får dere noen
+        // spørsmål til temaet" — the follow-ups are put to the candidate who
+        // has just answered, about what they said. So a pair takes the whole
+        // block one after the other, rather than the examiner working through
+        // both candidates once per question.
+        for (const tur of turns) {
+            out.push({
+                id: `c${tur.suffix}`,
                 kind: 'individuell',
                 letter: 'C',
-                title: 'Argumentere',
-                floor: 'deg',
+                title: `Argumentere${tur.label}`,
+                floor: tur.floor,
                 // The påstand was read aloud a moment ago, with time to think
-                // after it. Reading it again here would be the app padding.
+                // after it, and both candidates heard it. Reading it again
+                // here would be the app padding.
                 says: [INNLEDNING.duKanBegynne],
                 oppgave: paastand,
                 kilde: KILDER.b1b2,
@@ -344,42 +476,45 @@ export function buildTimeline({ nivaa, pick = firstOf, pairPresent = false }: Op
                 maxMs: 3 * MIN,
                 assessed: true,
                 runnable: true,
-            }
-        );
+            });
 
-        // Two of the published follow-ups must be asked. Where none are
-        // published the app says so rather than writing its own.
-        const followUps = paastand.followUps ?? [];
-        if (followUps.length) {
-            followUps.slice(0, 2).forEach((question, index) => {
+            // Two of the published follow-ups must be asked. Where none are
+            // published the app says so rather than writing its own.
+            const followUps = paastand.followUps ?? [];
+            if (followUps.length) {
+                followUps.slice(0, 2).forEach((question, index) => {
+                    out.push({
+                        id: `c-oppfolging-${index + 1}${tur.suffix}`,
+                        kind: 'oppfolging',
+                        letter: 'C',
+                        title: `Oppfølging ${index + 1}${tur.label}`,
+                        floor: tur.floor,
+                        // Asked again of the second candidate, in the words it
+                        // is published in: it is a question to be answered,
+                        // not a framing that has already been heard.
+                        says: [question],
+                        kilde: KILDER.b1b2,
+                        minMs: 1 * MIN,
+                        maxMs: 2 * MIN,
+                        assessed: true,
+                        runnable: true,
+                    });
+                });
+            } else {
                 out.push({
-                    id: `c-oppfolging-${index + 1}`,
+                    id: `c-oppfolging-mangler${tur.suffix}`,
                     kind: 'oppfolging',
                     letter: 'C',
-                    title: `Oppfølging ${index + 1}`,
-                    floor: 'deg',
-                    says: [question],
+                    title: `Oppfølging${tur.label}`,
+                    floor: 'ingen',
+                    says: [],
+                    note: APP_SIER.oppfolgingIkkePublisert,
                     kilde: KILDER.b1b2,
-                    minMs: 1 * MIN,
-                    maxMs: 2 * MIN,
-                    assessed: true,
-                    runnable: true,
+                    assessed: false,
+                    runnable: false,
+                    unavailable: APP_SIER.oppfolgingIkkePublisert,
                 });
-            });
-        } else {
-            out.push({
-                id: 'c-oppfolging-mangler',
-                kind: 'oppfolging',
-                letter: 'C',
-                title: 'Oppfølging',
-                floor: 'ingen',
-                says: [],
-                note: APP_SIER.oppfolgingIkkePublisert,
-                kilde: KILDER.b1b2,
-                assessed: false,
-                runnable: false,
-                unavailable: APP_SIER.oppfolgingIkkePublisert,
-            });
+            }
         }
     }
 

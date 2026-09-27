@@ -32,6 +32,22 @@ const clock = (ms: number) => {
 };
 
 /**
+ * Whether the answer was far shorter than its slot allows, in words.
+ *
+ * A published lower bound is one of the very few hard facts this mode has, and
+ * being cut off — or stopping two minutes early — is the thing candidates most
+ * often get wrong on the day. It is stated as a fact about the clock, not as a
+ * judgement of the answer: a short answer can be a complete one.
+ */
+function shortfall(take: Take, from: Segment | undefined): string | null {
+    if (!from?.minMs || !from.assessed) return null;
+    if (take.elapsedMs >= from.minMs) return null;
+    return `Du snakket ${clock(take.elapsedMs)}. Oppgaven varer ${Math.round(
+        from.minMs / 60_000
+    )}–${Math.round((from.maxMs ?? from.minMs) / 60_000)} minutter.`;
+}
+
+/**
  * What a rehearsal leaves you with.
  *
  * The order is deliberate and is the argument the screen makes. First what you
@@ -168,6 +184,37 @@ export function Oppsummering({
                                     <span className="text-white/35">Ingenting ble hørt.</span>
                                 )}
                             </p>
+
+                            {/*
+                              Hearing yourself back is the most useful thing on
+                              this screen, and the one thing here that is not an
+                              estimate of anything: it is simply what you said.
+                              Everything else the app reports about a free answer
+                              is hedged, because it has to be. This is not.
+                            */}
+                            {take.recordingUrl ? (
+                                <div className="mt-3">
+                                    <audio
+                                        controls
+                                        preload="none"
+                                        src={take.recordingUrl}
+                                        className="h-9 w-full"
+                                        aria-label={`Hør svaret ditt på ${
+                                            from?.letter ? `oppgave ${from.letter}` : from?.title
+                                        }`}
+                                    />
+                                    {shortfall(take, from) && (
+                                        <p className="mt-1.5 text-[12px] text-amber-200/60">
+                                            {shortfall(take, from)}
+                                        </p>
+                                    )}
+                                </div>
+                            ) : (
+                                <p className="mt-2 text-[12px] text-white/30">
+                                    Ingen lyd å spille av — taletjenesten tok mikrofonen for seg
+                                    selv på denne enheten.
+                                </p>
+                            )}
                         </div>
                     );
                 })}
@@ -195,16 +242,26 @@ export function Oppsummering({
                 </div>
             )}
 
-            {measuring ? (
-                <p
-                    role="status"
-                    className="mt-5 rounded-xl border border-white/10 bg-white/[0.03] p-4 text-sm text-white/45"
-                >
-                    Måler pausene i opptaket …
-                </p>
-            ) : (
-                <Vurderingskort report={report} />
-            )}
+            {/*
+              The live region is mounted whatever happens and only its TEXT
+              changes. A region that appears at the same moment as its first
+              message is a region whose first message is never announced — and
+              the first message here is the one that matters, because the card
+              below it is the result.
+            */}
+            <p
+                role="status"
+                aria-live="polite"
+                className={
+                    measuring
+                        ? 'mt-5 rounded-xl border border-white/10 bg-white/[0.03] p-4 text-sm text-white/45'
+                        : 'sr-only'
+                }
+            >
+                {measuring ? 'Måler pausene i opptaket …' : 'Vurderingskriteriene er klare.'}
+            </p>
+
+            {!measuring && <Vurderingskort report={report} nivaa={nivaa} />}
 
             {spoke && seat && <Taletid spoke={spoke} seat={seat} />}
 

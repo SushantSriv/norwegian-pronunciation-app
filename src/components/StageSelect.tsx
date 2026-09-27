@@ -129,26 +129,59 @@ export function StageSelect({
                         )}
                     </motion.button>
 
-                    {/*
-                      The rehearsal sits beside the community button rather than
-                      among the stages: it is not a drill you score, it is the
-                      whole exam end to end, and the stages all promise a score.
-                    */}
-                    <motion.button
-                        variants={card}
-                        onClick={onOpenMuntlig}
-                        whileHover={{ y: -2 }}
-                        whileTap={{ scale: 0.98 }}
-                        className="inline-flex items-center gap-2.5 rounded-full border border-white/15 bg-white/[0.07] px-4 py-2 text-sm font-semibold text-white/75 backdrop-blur transition hover:border-white/35 hover:bg-white/10 hover:text-white focus:outline-none focus-visible:ring-2 focus-visible:ring-sky-300/70"
-                    >
-                        <span aria-hidden="true">🎓</span>
-                        <span>Prøverommet</span>
-                        <span className="rounded-full bg-white/15 px-2 py-0.5 text-xs font-bold text-white/80">
-                            muntlig prøve
-                        </span>
-                    </motion.button>
                 </div>
             </motion.header>
+
+            {/*
+              The rehearsal gets a card of its own, above the stages.
+              It used to be a pill in the header saying only "Prøverommet",
+              which told a Norskprøven candidate nothing — and they are the
+              people it was built for. It is not a drill you score, it is the
+              whole exam end to end, so it does not belong among tracks that all
+              promise a score either.
+            */}
+            <motion.button
+                variants={card}
+                onClick={onOpenMuntlig}
+                whileHover={{ y: -4 }}
+                whileTap={{ scale: 0.99 }}
+                className="glass group relative mb-9 flex w-full items-center gap-4 overflow-hidden rounded-2xl p-5 text-left transition-[border-color] duration-300 hover:border-white/30 focus:outline-none focus-visible:ring-2 focus-visible:ring-sky-300/70"
+            >
+                <div
+                    className="absolute inset-x-0 top-0 h-[3px] bg-gradient-to-r from-violet-400 to-sky-400"
+                    aria-hidden="true"
+                />
+                <div
+                    className="pointer-events-none absolute -right-16 -top-16 h-40 w-40 rounded-full bg-gradient-to-br from-violet-400 to-sky-400 opacity-0 blur-2xl transition-opacity duration-500 group-hover:opacity-30"
+                    aria-hidden="true"
+                />
+
+                <span
+                    className="flex h-12 w-12 shrink-0 items-center justify-center rounded-xl bg-gradient-to-br from-violet-400 to-sky-500 text-2xl shadow-lg"
+                    aria-hidden="true"
+                >
+                    🎓
+                </span>
+
+                <span className="relative min-w-0 flex-1">
+                    <span className="block text-lg font-bold text-white">Prøverommet</span>
+                    <span className="mt-1 block text-sm leading-relaxed text-white/60">
+                        Generalprøve på delprøven i muntlig kommunikasjon — samme oppgaver, samme
+                        rekkefølge, samme klokke. Eksaminatoren leser spørsmålene høyt, og du blir
+                        stoppet når tiden er ute.
+                    </span>
+                    <span className="mt-2 flex flex-wrap gap-1.5">
+                        {['A1–A2', 'A2–B1', 'B1–B2', '20–25 min'].map(tag => (
+                            <span
+                                key={tag}
+                                className="rounded-full border border-white/15 bg-white/10 px-2 py-0.5 text-[11px] font-bold text-white/70"
+                            >
+                                {tag}
+                            </span>
+                        ))}
+                    </span>
+                </span>
+            </motion.button>
 
             {SECTIONS.filter(section => stagesFor(section.track).length > 0).map(section => (
                 <motion.section

@@ -5,7 +5,8 @@ import { Oppsummering } from './Oppsummering';
 import { Rommet, type Who } from './Rommet';
 import { Parrom } from './Parrom';
 import { useExamRoom } from '../../hooks/useExamRoom';
-import { seededPick } from '../../utils/roomProtocol';
+import { useExamQueue } from '../../hooks/useExamQueue';
+import { seededPick, type RoomNivaa } from '../../utils/roomProtocol';
 import type { PickOppgave } from '../../utils/examTimeline';
 import { useExamSession } from '../../hooks/useExamSession';
 import { useVoiceInput } from '../../hooks/useVoiceInput';
@@ -52,15 +53,43 @@ const ROOM_URL = (import.meta.env.VITE_ROOM_URL as string | undefined) ?? '';
 export function MuntligScreen({ onBack }: Props) {
     const [nivaa, setNivaa] = useState<Nivaa | null>(null);
 
-    // The partner's voice. An audio element rather than the Web Audio graph:
-    // nothing is measured about what they say — that is their device's job and
-    // their transcript — so it only has to be audible.
-    const partnerAudio = useRef<HTMLAudioElement | null>(null);
+    /**
+     * The partner's voice.
+     *
+     * An audio element rather than the Web Audio graph: nothing is measured
+     * about what they say — that is their device's job, and their transcript —
+     * so it only has to be audible.
+     *
+     * THE STREAM IS HELD AS WELL AS ATTACHED. It arrives once, when the
+     * connection opens, and it used to be attached to whichever element existed
+     * at that moment. Choosing a level swaps the lobby's element for the
+     * session's, and the new one had no stream — so the partner went silent at
+     * exactly the moment the exam started. Keeping it lets any element that
+     * mounts pick it up.
+     */
+    const partnerStream = useRef<MediaStream | null>(null);
+    const attachPartner = useCallback((element: HTMLAudioElement | null) => {
+        if (element && partnerStream.current) element.srcObject = partnerStream.current;
+    }, []);
+
     const room = useExamRoom({
         url: ROOM_URL,
-        onRemoteStream: useCallback((stream: MediaStream) => {
-            if (partnerAudio.current) partnerAudio.current.srcObject = stream;
-        }, []),
+        onRemoteStream: useCallback(
+            (stream: MediaStream) => {
+                partnerStream.current = stream;
+                // The element may already be on screen, or may not exist yet;
+                // this covers the first case and the ref callback the second.
+                attachPartner(document.getElementById('partner-lyd') as HTMLAudioElement | null);
+            },
+            [attachPartner]
+        ),
+    });
+
+    const queue = useExamQueue({
+        url: ROOM_URL,
+        // Both halves of a match are handed the same code at the same moment,
+        // and joining it is the ordinary room path from there on.
+        onMatched: useCallback((code: string, level: RoomNivaa) => room.join(code, level), [room]),
     });
 
     /**
@@ -88,6 +117,22 @@ export function MuntligScreen({ onBack }: Props) {
         if (connected && room.state.nivaa) setNivaa(room.state.nivaa);
     }, [connected, room.state.nivaa]);
 
+    /**
+     * One audio element for the whole screen.
+     *
+     * Rendered once, outside every branch, so that moving from the lobby into
+     * the session does not swap it for a fresh one with no stream attached.
+     */
+    const partnerLyd = (
+        <audio
+            id="partner-lyd"
+            ref={attachPartner}
+            autoPlay
+            playsInline
+            className="hidden"
+        />
+    );
+
     if (!recognitionSupported()) {
         return (
             <Shell onBack={onBack}>
@@ -102,6 +147,7 @@ export function MuntligScreen({ onBack }: Props) {
     if (!nivaa) {
         return (
             <Shell onBack={onBack}>
+                {partnerLyd}
                 <p className="text-sm leading-relaxed text-white/65">
                     Samme oppgaver, samme rekkefølge, samme klokke som på delprøven i muntlig
                     kommunikasjon. Eksaminatoren leser replikkene sine høyt, og du blir stoppet når
@@ -124,8 +170,11 @@ export function MuntligScreen({ onBack }: Props) {
                 {room.available && (
                     <Parrom
                         state={room.state}
+                        queue={queue.state}
                         onCreate={level => void room.create(level)}
                         onJoin={(code, level) => room.join(code, level)}
+                        onQueue={queue.join}
+                        onLeaveQueue={queue.leave}
                         onLeave={room.leave}
                     />
                 )}
@@ -137,7 +186,6 @@ export function MuntligScreen({ onBack }: Props) {
                     <p className="text-white/35">{APP_SIER.ikkeHkdir}</p>
                 </div>
 
-                <audio ref={partnerAudio} autoPlay playsInline className="hidden" />
             </Shell>
         );
     }
@@ -146,6 +194,7 @@ export function MuntligScreen({ onBack }: Props) {
     // rather than the first pick being frozen in for the whole visit.
     return (
         <>
+            {partnerLyd}
             <ExamRunner
                 key={nivaa}
                 nivaa={nivaa}
@@ -156,7 +205,6 @@ export function MuntligScreen({ onBack }: Props) {
                     setNivaa(null);
                 }}
             />
-            <audio ref={partnerAudio} autoPlay playsInline className="hidden" />
         </>
     );
 }
@@ -248,6 +296,11 @@ function ExamRunner({ nivaa, room, onBack, onRestart }: RunnerProps) {
         nivaa,
         pick,
         pairPresent: room !== null,
+        // Which chair this device is in. The timeline is the only thing that
+        // decides whose turn it is, so the seat goes in there rather than
+        // being second-guessed on screen: both devices build the same
+        // segments, and the floor is the one field that differs between them.
+        seat: room?.state.seat ?? undefined,
         listen,
         endTake,
     });
@@ -351,6 +404,37 @@ function ExamRunner({ nivaa, room, onBack, onRestart }: RunnerProps) {
     }, [profiles, reportSpoken]);
 
     const segment = session.segment;
+    /**
+     * How long this take has run.
+     *
+     * Off the second-by-second tick that already drives the session clock, so
+     * it costs nothing extra. The bounds it counts against are published, which
+     * is why it can be shown at all — being stopped at three minutes is the
+     * pressure the exam really applies, and a rehearsal without it rehearses
+     * the wrong thing.
+     */
+    const takeStarted = useRef(0);
+    if (phase === 'lytter' && takeStarted.current === 0) takeStarted.current = Date.now();
+    if (phase !== 'lytter' && takeStarted.current !== 0) takeStarted.current = 0;
+    const takeMs = takeStarted.current ? Date.now() - takeStarted.current : 0;
+
+    const listening = phase === 'lytter';
+
+    /**
+     * Your voice only leaves this device while you have the floor.
+     *
+     * The pair speaks one at a time on every task but the conversation, where
+     * both floors are open at once and both tracks are with them. Between
+     * turns the track is muted rather than closed, so the partner hears the
+     * one candidate who is meant to be speaking instead of two devices
+     * reading the examiner's lines at each other. Once the session is over
+     * the room is theirs again.
+     */
+    const outgoing = phase === 'ferdig' || (listening && segment?.floor === 'deg');
+    const setOutgoing = room?.setOutgoing;
+    useEffect(() => {
+        setOutgoing?.(outgoing);
+    }, [setOutgoing, outgoing]);
 
     if (phase === 'ferdig' || !segment) {
         return (
@@ -369,9 +453,12 @@ function ExamRunner({ nivaa, room, onBack, onRestart }: RunnerProps) {
         );
     }
 
-    const listening = phase === 'lytter';
     const speaking = phase === 'snakker';
     const preparing = phase === 'forbereder';
+    /** A turn of the other candidate's: this device reads it out and listens. */
+    const theirTurn = segment.floor === 'den-andre';
+    /** Their turn, once the examiner has finished reading it out. */
+    const waiting = theirTurn && !speaking;
 
     /**
      * Who is lit up in the room.
@@ -379,8 +466,20 @@ function ExamRunner({ nivaa, room, onBack, onRestart }: RunnerProps) {
      * Derived from the phase AND the floor, not from the floor alone: the
      * examiner reads the framing of a task whose floor is yours, so during
      * 'snakker' it is always her turn whatever the segment says.
+     *
+     * On the other candidate's turn this device never opens its own
+     * microphone, so there is no 'lytter' to hang their glow on — it follows
+     * the floor for as long as the turn lasts. What the app knows is whose
+     * turn it is, not whether they have started talking, and the figure says
+     * the first of those.
      */
-    const talking: Who = speaking ? 'eksaminator' : listening ? segment.floor : 'ingen';
+    const talking: Who = speaking
+        ? 'eksaminator'
+        : theirTurn
+          ? 'den-andre'
+          : listening
+            ? segment.floor
+            : 'ingen';
 
     return (
         <Shell onBack={onBack} onQuit={session.quit}>
@@ -402,6 +501,31 @@ function ExamRunner({ nivaa, room, onBack, onRestart }: RunnerProps) {
                         <Rommet floor={talking} pairPresent={room !== null} />
                     </div>
 
+                    {/*
+                      "Din tur" is announced assertively, because the microphone
+                      is already recording by the time it appears — a polite
+                      message waits its turn behind whatever else is queued, and
+                      a candidate who hears it late has already lost the opening
+                      of their answer. Everything else stays polite.
+                    */}
+                    <p role="alert" aria-live="assertive" className="sr-only">
+                        {listening ? 'Din tur. Mikrofonen er på.' : ''}
+                    </p>
+
+                    {/*
+                      Errors live in their own region, mounted always so that a
+                      change of text is what announces them. Rendered
+                      conditionally, the node and its first message arrive
+                      together and the message is never read out.
+                    */}
+                    <p
+                        role="alert"
+                        aria-live="assertive"
+                        className={voice.error ? 'mb-2 text-sm text-amber-300' : 'sr-only'}
+                    >
+                        {voice.error ?? ''}
+                    </p>
+
                     <div
                         role="status"
                         aria-live="polite"
@@ -410,7 +534,8 @@ function ExamRunner({ nivaa, room, onBack, onRestart }: RunnerProps) {
                             speaking ? 'border-violet-300/30 bg-violet-400/10 text-violet-100' : '',
                             preparing ? 'border-amber-300/30 bg-amber-400/10 text-amber-100' : '',
                             listening ? 'border-emerald-300/35 bg-emerald-400/10 text-emerald-100' : '',
-                            !speaking && !listening && !preparing
+                            waiting ? 'border-sky-300/30 bg-sky-400/10 text-sky-100' : '',
+                            !speaking && !listening && !preparing && !waiting
                                 ? 'border-white/10 bg-white/[0.04] text-white/55'
                                 : '',
                         ].join(' ')}
@@ -418,8 +543,23 @@ function ExamRunner({ nivaa, room, onBack, onRestart }: RunnerProps) {
                         {speaking && 'Eksaminator snakker'}
                         {preparing && 'Tenk deg om — mikrofonen åpner straks'}
                         {listening && 'Din tur — snakk nå'}
-                        {!speaking && !listening && !preparing && 'Klar'}
+                        {/*
+                          Whose turn it is, which is what the app knows — not
+                          that they are speaking, which it does not. Their
+                          microphone is on their own device, and nothing about
+                          what they say is measured here.
+                        */}
+                        {waiting && 'Den andre kandidaten har ordet'}
+                        {!speaking && !listening && !preparing && !waiting && 'Klar'}
                     </div>
+
+                    {listening && segment.maxMs && (
+                        <p className="mt-2 text-[12px] tabular-nums text-white/45">
+                            {clock(takeMs)} av {Math.round((segment.minMs ?? 0) / 60_000)}–
+                            {Math.round(segment.maxMs / 60_000)} minutter
+                            {takeMs >= segment.maxMs && ' · tiden er ute'}
+                        </p>
+                    )}
 
                     {segment.says.length > 0 && (
                         <div className="mt-4 space-y-1.5 rounded-xl border border-white/10 bg-white/[0.04] p-4">
@@ -503,7 +643,7 @@ function ExamRunner({ nivaa, room, onBack, onRestart }: RunnerProps) {
                         </button>
                     )}
 
-                    {voice.error && <p className="mt-3 text-sm text-amber-300">{voice.error}</p>}
+
                 </div>
             </div>
         </Shell>
@@ -519,6 +659,16 @@ function Shell({
     onBack: () => void;
     onQuit?: () => void;
 }) {
+    /**
+     * Ending the whole run asks first.
+     *
+     * It sat one button away from "Jeg er ferdig", which ends an ANSWER, and a
+     * mis-tap threw away every answer so far. Two taps, and the second says
+     * what it does: the summary is still written, because a rehearsal you
+     * abandoned halfway is still one you learn from.
+     */
+    const [confirming, setConfirming] = useState(false);
+
     return (
         <motion.div
             initial={{ opacity: 0, y: 14 }}
@@ -534,10 +684,14 @@ function Shell({
                 <div className="flex shrink-0 gap-2">
                     {onQuit && (
                         <button
-                            onClick={onQuit}
+                            onClick={() => {
+                                if (confirming) onQuit();
+                                else setConfirming(true);
+                            }}
+                            onBlur={() => setConfirming(false)}
                             className="rounded-lg border border-white/20 px-3 py-1.5 text-sm font-semibold text-white/70 transition hover:border-white/40 hover:bg-white/10 hover:text-white"
                         >
-                            Avslutt
+                            {confirming ? 'Avslutt prøven?' : 'Avslutt'}
                         </button>
                     )}
                     <button
