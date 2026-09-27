@@ -6,6 +6,7 @@ import { StageSelect } from './components/StageSelect';
 import { PracticeScreen } from './components/PracticeScreen';
 import { ResultsScreen } from './components/ResultsScreen';
 import { CommunityScreen } from './components/CommunityScreen';
+import { MuntligScreen } from './components/muntlig/MuntligScreen';
 import { AwardToast } from './components/AwardToast';
 import { usePracticeSession } from './hooks/usePracticeSession';
 import { useVoiceInput } from './hooks/useVoiceInput';
@@ -71,6 +72,7 @@ export default function App() {
 
     const [showConfetti, setShowConfetti] = useState(false);
     const [showCommunity, setShowCommunity] = useState(false);
+    const [showMuntlig, setShowMuntlig] = useState(false);
 
     /**
      * Price the attempt, then remember it.
@@ -172,7 +174,7 @@ export default function App() {
                     />
                 ))}
 
-            {showPractice && !showCommunity && (
+            {showPractice && !showCommunity && !showMuntlig && (
                 <AwardToast award={community.lastAward} onDone={community.clearAward} />
             )}
 
@@ -184,7 +186,11 @@ export default function App() {
                         </div>
                     ) : (
                         <AnimatePresence mode="wait">
-                            {showCommunity ? (
+                            {showMuntlig ? (
+                                <motion.div key="muntlig" exit={{ opacity: 0, y: -12 }}>
+                                    <MuntligScreen onBack={() => setShowMuntlig(false)} />
+                                </motion.div>
+                            ) : showCommunity ? (
                                 <motion.div key="community" exit={{ opacity: 0, y: -12 }}>
                                     <CommunityScreen
                                         community={community}
@@ -248,6 +254,7 @@ export default function App() {
                                         weeklyPoints={community.weekly}
                                         streak={community.streak}
                                         onOpenCommunity={() => setShowCommunity(true)}
+                                        onOpenMuntlig={() => setShowMuntlig(true)}
                                         onPick={begin}
                                     />
                                 </motion.div>

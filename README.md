@@ -33,6 +33,7 @@ your attempt, extracts the pitch contour, and draws it.
 | 🎧 **Listen back** | Play the reference and your own attempt back to back. Silence before and after you speak is trimmed automatically. |
 | 🎯 **Rising difficulty** | Clear 10 phrases before losing 3 lives. The pass bar climbs with every one you get right. |
 | 📚 **13 tracks** | Five CEFR levels from A1 words to B2 clusters, plus eight occupation tracks — helse, bygg, barnehage, butikk, restaurant, transport, renhold, kontor. |
+| 🎓 **Prøverommet** | A rehearsal of Norskprøven's oral exam at all three levels — the examiner's real lines read aloud, the real task order, the published clock. It scores nothing and says so: you get your transcript back and no number. See below. |
 | 🏆 **Learning points** | Points for clearing your own level's bar, for beating your own best on a word, for mastering one, and for coming back tomorrow — with caps that make repeating an easy phrase worthless. See below. |
 
 **Recognition is your browser's own speech service.** The recording — and only the
@@ -299,6 +300,35 @@ writes the result as one word. They are now **split into members the lexicon doe
 know** — `skifte + tøy`, `hente + tid` — and reassembled with the compound's own stress
 and pitch accent, instead of falling back to the rule engine whose weakest point was
 exactly that.
+
+## Prøverommet — muntlig prøve
+
+A rehearsal of Norskprøven's **delprøve i muntlig kommunikasjon**, at all three levels
+(A1–A2, A2–B1, B1–B2). The examiner's lines are read aloud verbatim from HK-dir's own
+"Mal … Til eksaminator" templates, the tasks are lettered A–D the way the real papers
+letter them, and every slot runs against its published duration.
+
+**It measures nothing, on purpose.** What you get back is the transcript of each answer
+and how long you spoke — no score, no band, no CEFR estimate. The exam is graded on
+flyt, uttale, ordforråd *and* grammatikk together, and no number this app could produce
+would mean what a candidate would read into it.
+
+What it will not do is as deliberate as what it does:
+
+| | |
+|---|---|
+| **Oppgave B at A1–A2** | needs HK-dir's own drawing. We do not have the rights, and a wrong picture is a wrong task — so the clock and the script run, and the picture does not. |
+| **The conversation task** | needs a second candidate. No synthetic partner: a recorded voice that always agrees teaches the wrong thing. |
+| **B1–B2 follow-up questions** | published for one påstand only. Where HK-dir has not published them, the app says so rather than writing its own. |
+| **Thinking time** | HK-dir publishes no number of minutes for it, so the app does not invent one. |
+
+Tasks it could not run are still listed, with their real letter and real duration, in the
+session map and in the summary — hiding them would tell you the exam is shorter and
+simpler than it is, and the conversation task alone is a fifth to a third of it.
+
+Every prompt is quoted from HK-dir's published examples with a link to the source. The
+real tasks are confidential — printed from PAD a week before the exam period and
+shredded afterwards — so no app can give you them, and one that claims to is guessing.
 
 ## Pronunciation data
 

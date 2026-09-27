@@ -82,7 +82,26 @@ export interface WebSpeechOptions {
     lang?: string;
     /** Called with partial text as it arrives, which the local path cannot do. */
     onInterim?: (text: string) => void;
+    /**
+     * Keep listening across pauses, for a monologue rather than a phrase.
+     *
+     * A phrase ends when the learner stops talking, so the default is to stop
+     * with them. Somebody answering an exam question stops to think, and a
+     * recogniser that took the first pause for the end would cut them off
+     * mid-answer.
+     */
+    continuous?: boolean;
+    /** Called with the text so far each time a chunk is finalised. */
+    onFinal?: (text: string) => void;
     signal?: AbortSignal;
+}
+
+/** A listening session that the caller ends, rather than the speaker. */
+export interface WebSpeechSession {
+    /** What was heard, once it has finished. */
+    done: Promise<WebSpeechOutcome>;
+    /** Ask it to finish and hand over what it has. */
+    stop(): void;
 }
 
 /**
@@ -92,71 +111,129 @@ export interface WebSpeechOptions {
 const MIC_CONFLICT = new Set(['not-allowed', 'audio-capture', 'service-not-allowed']);
 
 /**
- * Listen once and resolve with what was heard.
+ * Start listening. The caller decides when it ends.
  *
  * Resolves rather than rejects on failure: a failure here is not an error the
- * learner should see, it is a signal to use the local model instead.
+ * learner should see, it is something the caller has to cope with.
+ *
+ * THE RESTART IS NOT OPTIONAL for long answers. Even with continuous set, the
+ * browser service ends a session on its own after a stretch of silence -- and
+ * somebody two sentences into a two-minute exam answer, pausing to think, is
+ * exactly that stretch of silence. So while the session is open and the caller
+ * has not stopped it, an end nobody asked for starts it again, keeping the text
+ * accumulated so far.
  */
-export function listenOnce(options: WebSpeechOptions = {}): Promise<WebSpeechOutcome> {
+export function listen(options: WebSpeechOptions = {}): WebSpeechSession {
     const Ctor = speechRecognitionCtor();
-    if (!Ctor) return Promise.resolve({ text: null, error: 'unavailable' });
+    if (!Ctor) {
+        return { done: Promise.resolve({ text: null, error: 'unavailable' }), stop: () => {} };
+    }
 
-    return new Promise<WebSpeechOutcome>(resolve => {
-        const recognition = new Ctor();
-        recognition.lang = options.lang ?? 'nb-NO';
-        recognition.continuous = false;
-        recognition.interimResults = true;
-        recognition.maxAlternatives = 1;
+    let settled = false;
+    let stopped = false;
+    let final = '';
+    let recognition: SpeechRecognitionLike | null = null;
+    let resolveDone: (outcome: WebSpeechOutcome) => void = () => {};
 
-        let settled = false;
-        let final = '';
+    const done = new Promise<WebSpeechOutcome>(resolve => {
+        resolveDone = resolve;
+    });
 
-        const finish = (outcome: WebSpeechOutcome) => {
-            if (settled) return;
-            settled = true;
+    const finish = (outcome: WebSpeechOutcome) => {
+        if (settled) return;
+        settled = true;
+        stopped = true;
+        if (recognition) {
             recognition.onresult = null;
             recognition.onerror = null;
             recognition.onend = null;
-            resolve(outcome);
-        };
+        }
+        resolveDone(outcome);
+    };
 
-        recognition.onresult = event => {
+    const begin = () => {
+        const instance = new Ctor();
+        recognition = instance;
+        instance.lang = options.lang ?? 'nb-NO';
+        instance.continuous = options.continuous ?? false;
+        instance.interimResults = true;
+        instance.maxAlternatives = 1;
+
+        instance.onresult = event => {
             let interim = '';
             for (let i = event.resultIndex; i < event.results.length; i++) {
                 const result = event.results[i];
                 const text = result[0]?.transcript ?? '';
-                if (result.isFinal) final += text;
-                else interim += text;
+                if (result.isFinal) {
+                    final += text;
+                    options.onFinal?.(final.trim());
+                } else {
+                    interim += text;
+                }
             }
             if (interim) options.onInterim?.(interim);
         };
 
-        recognition.onerror = event => {
+        instance.onerror = event => {
+            // A silence timeout is not a failure when we mean to keep going:
+            // onend will restart us. Anything else ends the session.
+            if (options.continuous && !stopped && event.error === 'no-speech') return;
             finish({
-                text: null,
+                text: final.trim() || null,
                 conflict: MIC_CONFLICT.has(event.error),
                 error: event.error,
             });
         };
 
-        recognition.onend = () => finish({ text: final.trim() || null });
-
-        options.signal?.addEventListener('abort', () => {
-            try {
-                recognition.abort();
-            } catch {
-                // Already finished.
+        instance.onend = () => {
+            if (options.continuous && !stopped) {
+                try {
+                    begin();
+                    return;
+                } catch {
+                    // Could not restart; hand over what we have.
+                }
             }
-            finish({ text: null, error: 'aborted' });
-        });
+            finish({ text: final.trim() || null });
+        };
 
+        instance.start();
+    };
+
+    const stop = () => {
+        stopped = true;
         try {
-            recognition.start();
+            // stop(), not abort(): it flushes the last result rather than
+            // discarding a sentence the learner has just finished saying.
+            recognition?.stop();
         } catch {
-            // start() throws if one is already running.
-            finish({ text: null, error: 'already-running' });
+            finish({ text: final.trim() || null });
         }
+    };
+
+    options.signal?.addEventListener('abort', () => {
+        stopped = true;
+        try {
+            recognition?.abort();
+        } catch {
+            // Already finished.
+        }
+        finish({ text: final.trim() || null, error: 'aborted' });
     });
+
+    try {
+        begin();
+    } catch {
+        // start() throws if one is already running.
+        finish({ text: null, error: 'already-running' });
+    }
+
+    return { done, stop };
+}
+
+/** Listen for one phrase, ending when the speaker does. */
+export function listenOnce(options: WebSpeechOptions = {}): Promise<WebSpeechOutcome> {
+    return listen(options).done;
 }
 
 // ---------------------------------------------------------------------------
