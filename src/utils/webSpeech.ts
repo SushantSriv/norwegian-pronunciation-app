@@ -274,6 +274,40 @@ export const cloudTakesMicrophone = (): boolean => read(CONFLICT_KEY) === '1';
 
 export const rememberCloudTakesMicrophone = (): void => write(CONFLICT_KEY, '1');
 
+const RECORDER_KEY = 'npa-recorder-takes-mic-v1';
+
+/**
+ * Whether this device has proved the RECORDER starves the speech service.
+ *
+ * The mirror image of the case above, and the one that actually bites on
+ * iOS — which means every browser on an iPhone or iPad, Chrome included,
+ * because Apple requires them all to use WebKit.
+ *
+ * There, a MediaRecorder holding a getUserMedia stream and a speech service
+ * asking for the microphone at the same time do not share it: the recorder
+ * wins, and recognition returns no words at all. The learner sees "Jeg hørte
+ * deg, men fikk ikke tak i ordene" after every single attempt, which reads as
+ * a comment on their pronunciation and is nothing of the kind.
+ *
+ * Once observed, the recorder stands down. That costs the melody chart and
+ * listening back — both of which need audio this app captured itself — and
+ * buys the transcript, which is the thing nothing else can replace. The app
+ * says which trade it has made rather than quietly making it.
+ */
+export const recorderTakesMicrophone = (): boolean => read(RECORDER_KEY) === '1';
+
+export const rememberRecorderTakesMicrophone = (): void => write(RECORDER_KEY, '1');
+
+/** For a learner who wants to try again after changing something. */
+export const forgetMicrophoneConflicts = (): void => {
+    try {
+        window.localStorage.removeItem(RECORDER_KEY);
+        window.localStorage.removeItem(CONFLICT_KEY);
+    } catch {
+        // Storage unavailable; nothing was remembered to forget.
+    }
+};
+
 /**
  * Whether recognition can work at all right now.
  *

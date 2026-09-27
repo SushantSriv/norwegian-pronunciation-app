@@ -30,6 +30,9 @@ interface Props {
     /** Partial text, which only the browser service can produce. */
     interim: string;
     speechError: string | null;
+    /** Hands the microphone to the speech service for good, on this device. */
+    onStandDownRecorder: () => void;
+    recorderStoodDown: boolean;
     lastAttempt: Attempt | null;
     recordingUrl: string | null;
     recordingAvailable: boolean;
@@ -74,6 +77,8 @@ export function PracticeScreen({
     transcribing,
     interim,
     speechError,
+    onStandDownRecorder,
+    recorderStoodDown,
     lastAttempt,
     recordingUrl,
     recordingAvailable,
@@ -527,7 +532,11 @@ export function PracticeScreen({
                             ) : (
                                 <p className="text-sm text-white/45">Tap the mic, then say the phrase</p>
                             )}
-                            <SpeechTrouble error={speechError} />
+                            <SpeechTrouble
+                                error={speechError}
+                                onStandDownRecorder={onStandDownRecorder}
+                                recorderStoodDown={recorderStoodDown}
+                            />
                         </div>
                     </motion.div>
                 )}

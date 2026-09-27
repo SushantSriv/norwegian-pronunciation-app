@@ -5,6 +5,18 @@ import { collectSpeechDiagnostics, type SpeechDiagnostic } from '../utils/speech
 interface Props {
     /** The recogniser error, or null when everything is fine. */
     error: string | null;
+    /**
+     * Give the microphone to the speech service for good, on this device.
+     *
+     * Some devices — iOS in particular, which is every browser on an iPhone or
+     * iPad — will not let a MediaRecorder and the speech service share a
+     * microphone. The recorder wins and not one word comes back, on every
+     * single attempt. The app tries to spot that, and cannot always: browsers
+     * differ in whether the starved side errors, returns nothing, or simply
+     * never finishes. So the switch is offered here, where the message is read.
+     */
+    onStandDownRecorder?: () => void;
+    recorderStoodDown?: boolean;
 }
 
 /**
@@ -12,7 +24,7 @@ interface Props {
  * checks that actually decide whether recognition can run are listed with the
  * fix for each one that failed.
  */
-export function SpeechTrouble({ error }: Props) {
+export function SpeechTrouble({ error, onStandDownRecorder, recorderStoodDown }: Props) {
     const [checks, setChecks] = useState<SpeechDiagnostic[] | null>(null);
     const [open, setOpen] = useState(false);
 
@@ -34,6 +46,7 @@ export function SpeechTrouble({ error }: Props) {
     if (!error) return null;
 
     const problems = checks?.filter(c => !c.ok) ?? [];
+    const soundsLikeMicFight = error.includes('fikk ikke tak i ordene');
 
     return (
         <motion.div
@@ -42,6 +55,23 @@ export function SpeechTrouble({ error }: Props) {
             className="mx-auto mt-2 max-w-sm text-center"
         >
             <p className="text-sm leading-relaxed text-amber-300">{error}</p>
+
+            {soundsLikeMicFight && onStandDownRecorder && !recorderStoodDown && (
+                <button
+                    onClick={onStandDownRecorder}
+                    className="mt-2 min-h-[44px] w-full rounded-xl border border-amber-300/40 px-3 text-sm font-semibold text-amber-200 transition hover:bg-amber-400/10"
+                >
+                    Skjer dette hver gang? Trykk her — appen slutter å ta opp, så taletjenesten får
+                    mikrofonen alene
+                </button>
+            )}
+
+            {recorderStoodDown && (
+                <p className="mt-1.5 text-[11px] leading-relaxed text-white/40">
+                    Appen tar ikke opp på denne enheten. Du får poengsum og lydskriften, men ikke
+                    melodikurven eller avspilling.
+                </p>
+            )}
 
             {problems.length > 0 && (
                 <>

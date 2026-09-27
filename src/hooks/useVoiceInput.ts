@@ -8,7 +8,13 @@ import {
 } from '../utils/speech';
 import { decodeForRecognition, RECOGNITION_RATE } from '../utils/audioDecode';
 import { findSpeechBounds } from '../utils/pitch';
-import { listen, type WebSpeechSession } from '../utils/webSpeech';
+import {
+    listen,
+    recorderTakesMicrophone,
+    rememberRecorderTakesMicrophone,
+    type WebSpeechSession,
+} from '../utils/webSpeech';
+import { diagnoseEmptyTranscript, EMPTY_MESSAGES } from '../utils/micConflict';
 
 /**
  * Recording the learner, and letting the browser transcribe it.
@@ -49,8 +55,6 @@ const MIC_ERRORS: Record<string, string> = {
     NotReadableError: 'Mikrofonen er opptatt av et annet program. Lukk det og prøv igjen.',
 };
 
-const NOTHING_HEARD = 'Jeg hørte ingenting — prøv å snakke litt høyere.';
-
 interface Options {
     onResult: (recognition: Recognition) => void;
     /** How long a take may run. Defaults to one phrase. */
@@ -82,6 +86,14 @@ export function useVoiceInput({
     const [error, setError] = useState<string | null>(null);
     const [recordingUrl, setRecordingUrl] = useState<string | null>(null);
     const [recordingAvailable, setRecordingAvailable] = useState(true);
+    /**
+     * True once this device has shown it cannot record and recognise at once.
+     *
+     * The recorder then stands down so the speech service can hear. Surfaced
+     * so a screen can explain the missing melody chart and playback instead of
+     * leaving them unaccountably absent.
+     */
+    const [recorderStoodDown, setRecorderStoodDown] = useState(recorderTakesMicrophone);
     /** Partial text, which the service produces as the learner speaks. */
     const [interim, setInterim] = useState('');
     /** The listening session for the take in flight. */
@@ -120,6 +132,9 @@ export function useVoiceInput({
         []
     );
 
+    /** `stop` runs before `finish` is declared; this bridges them. */
+    const finishRef = useRef<(url: string | null) => Promise<void>>(async () => {});
+
     const clearTimers = useCallback(() => {
         stopTimersRef.current.forEach(window.clearTimeout);
         stopTimersRef.current = [];
@@ -136,7 +151,16 @@ export function useVoiceInput({
     const stop = useCallback(() => {
         clearTimers();
         const recorder = mediaRecorderRef.current;
-        if (recorder && recorder.state !== 'inactive') recorder.stop();
+        if (recorder && recorder.state !== 'inactive') {
+            recorder.stop();
+            return;
+        }
+        // No recorder to stop, because it stood down for the speech service.
+        // The take still has to end, or "Jeg er ferdig" would do nothing.
+        if (recorderTakesMicrophone() && speechRef.current) {
+            setListening(false);
+            void finishRef.current(null);
+        }
     }, [clearTimers]);
 
     /**
@@ -161,24 +185,57 @@ export function useVoiceInput({
             // made about the recognition" rather than as silence.
             if (!url) {
                 if (!text) {
-                    setError(NOTHING_HEARD);
+                    setError(
+                        EMPTY_MESSAGES[
+                            diagnoseEmptyTranscript({
+                                hasRecording: false,
+                                // Nothing was recorded, so nothing can be said
+                                // about whether there was speech.
+                                hasSpeech: false,
+                                alreadyKnown: recorderTakesMicrophone(),
+                            })
+                        ]
+                    );
                     return;
                 }
                 onResultRef.current({ text });
                 return;
             }
 
-            const audio = await decodeForRecognition(url);
-            const speech = audio?.length ? findSpeechBounds(audio, RECOGNITION_RATE) : null;
-
-            // Nothing said and nothing heard is the one case worth refusing
-            // outright: scoring silence teaches nothing.
-            if (!text && !speech) {
-                setError(NOTHING_HEARD);
-                return;
+            /**
+             * Reading the clip must never be what ends the attempt.
+             *
+             * Decoding can throw as well as return nothing: an unusual
+             * container, a codec the browser will not open, an
+             * OfflineAudioContext that refuses. That used to escape to the
+             * outer catch, where a raw exception message was shown to the
+             * learner in place of anything useful — and the microphone
+             * diagnosis below never ran at all.
+             *
+             * A clip we could not read leaves `heardSpeech` null: unknown,
+             * which is the honest value and not the same as silent.
+             */
+            let audio: Float32Array | null = null;
+            try {
+                audio = await decodeForRecognition(url);
+            } catch {
+                audio = null;
             }
+
+            const speech = audio?.length ? findSpeechBounds(audio, RECOGNITION_RATE) : null;
+            const heardSpeech: boolean | null = audio?.length ? Boolean(speech) : null;
+
             if (!text) {
-                setError('Jeg hørte deg, men fikk ikke tak i ordene — prøv en gang til.');
+                const verdict = diagnoseEmptyTranscript({
+                    hasRecording: true,
+                    hasSpeech: heardSpeech,
+                    alreadyKnown: recorderTakesMicrophone(),
+                });
+                if (verdict === 'opptaket-tar-mikrofonen') {
+                    rememberRecorderTakesMicrophone();
+                    setRecorderStoodDown(true);
+                }
+                setError(EMPTY_MESSAGES[verdict]);
                 return;
             }
 
@@ -189,6 +246,8 @@ export function useVoiceInput({
             setTranscribing(false);
         }
     }, []);
+
+    finishRef.current = finish;
 
     /**
      * Stop on silence, so the learner does not have to tap twice.
@@ -244,6 +303,54 @@ export function useVoiceInput({
         }
 
         setRecordingAvailable(true);
+
+        /**
+         * On a device that cannot share the microphone, do not record at all.
+         *
+         * The speech service opens its own microphone; we cannot hand it ours.
+         * Where the two cannot coexist — iOS, and therefore every browser on an
+         * iPhone or iPad — the recorder wins the fight and recognition comes
+         * back empty, every time. Standing the recorder down costs the melody
+         * chart and listening back, and buys the words, which is the half
+         * nothing else can supply.
+         *
+         * The stream is still opened first, and on purpose: on iOS that is what
+         * makes the browser show its microphone prompt while the learner's tap
+         * is still in hand.
+         */
+        if (recorderTakesMicrophone()) {
+            stream.getTracks().forEach(track => track.stop());
+            // Nothing is recording, so a stale recorder from an earlier take
+            // must not be what `stop()` finds.
+            mediaRecorderRef.current = null;
+            setListening(true);
+            setInterim('');
+
+            const session = listen({
+                onInterim: setInterim,
+                continuous: profileRef.current.continuous,
+            });
+            speechRef.current = session;
+
+            // WITHOUT A RECORDER THERE IS NO LEVEL METER, so the usual
+            // stop-on-silence cannot run. The speech service ending is the only
+            // signal left that the learner has finished, and waiting out the
+            // whole ceiling instead would make every attempt feel broken.
+            void session.done.then(() => {
+                if (speechRef.current !== session) return;
+                setListening(false);
+                void finishRef.current(null);
+            });
+
+            stopTimersRef.current.push(
+                window.setTimeout(() => {
+                    setListening(false);
+                    void finishRef.current(null);
+                }, profileRef.current.maxMs)
+            );
+            return;
+        }
+
         const recorder = new MediaRecorder(stream);
         chunksRef.current = [];
 
@@ -306,13 +413,32 @@ export function useVoiceInput({
         }
     }, [listening, transcribing, supported, clearTimers, releaseAudio, finish, watchLevel, stop]);
 
+    /**
+     * Give the microphone to the speech service, for good, on this device.
+     *
+     * The app tries to work this out by itself, and on the device in front of
+     * you it may not manage: browsers differ in whether a starved speech
+     * service reports an error, returns an empty result, or simply never
+     * finishes. Rather than leave somebody reading "fikk ikke tak i ordene"
+     * after every attempt they will ever make, the switch is offered where
+     * that message appears.
+     */
+    const standDownRecorder = useCallback(() => {
+        rememberRecorderTakesMicrophone();
+        setRecorderStoodDown(true);
+        setError(null);
+    }, []);
+
     return {
         supported,
         listening,
         transcribing,
         error,
+        standDownRecorder,
         recordingUrl,
         recordingAvailable,
+        /** True when this device made the app choose words over audio. */
+        recorderStoodDown,
         analyserRef,
         interim,
         start,

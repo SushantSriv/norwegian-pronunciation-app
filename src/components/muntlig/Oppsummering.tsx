@@ -210,9 +210,10 @@ export function Oppsummering({
                                     )}
                                 </div>
                             ) : (
-                                <p className="mt-2 text-[12px] text-white/30">
-                                    Ingen lyd å spille av — taletjenesten tok mikrofonen for seg
-                                    selv på denne enheten.
+                                <p className="mt-2 text-[12px] leading-relaxed text-white/30">
+                                    Ingen lyd å spille av. På denne enheten kan ikke opptak og
+                                    taletjenesten dele mikrofonen, så appen valgte ordene — de kan
+                                    ingenting annet erstatte.
                                 </p>
                             )}
                         </div>
