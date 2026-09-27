@@ -330,6 +330,31 @@ Every prompt is quoted from HK-dir's published examples with a link to the sourc
 real tasks are confidential — printed from PAD a week before the exam period and
 shredded afterwards — so no app can give you them, and one that claims to is guessing.
 
+### The vurderingskort
+
+Afterwards you get the exam's own four criteria, laid out the way the vurderingsskjema
+lays them out — **and three of the four struck through**, with the reason:
+
+| | |
+|---|---|
+| **Flyt** | *observed.* How many pauses of 0.6 s or more, and the longest. Reported next to what a pause cannot tell apart: a thought, a breath, a dropped microphone. Fillers — *eh*, *liksom* — are speech, so it cannot hear them at all. |
+| **Uttale** | *not measured.* Pronunciation is scored by comparing what you said against what you were meant to say, and a free answer has no "meant to". The read-back test below does have one. |
+| **Ordforråd** | *not measured.* The transcript is the speech service's guess at your words. A vocabulary figure from it measures how well the service heard you. |
+| **Grammatikk** | *not measured.* The service writes what it thinks you meant — it fixes endings and word order on the way past. The error can be gone before the app sees it. |
+
+The **Resultat** box is shown, and shown disabled. Leaving it out would look kinder and
+teach less: that box is what decides, and a person fills it in.
+
+Under an evidence threshold — **30 seconds of speech and 60 words across the assessed
+tasks** — nothing is reported at all, not even the pause count. A pause count from two
+sentences is noise, and publishing it would be the app inventing a finding.
+
+Then three things you can actually do: **read a sentence back** (there is a reference, so
+the feedback means something — still no score out of a hundred), **rewrite your own
+answers** and see which words you changed, and compare against **your own past runs at
+the same level** and nobody else's. Only the counts are stored, only in your browser.
+No audio, no transcripts, nothing sent anywhere.
+
 ## Pronunciation data
 
 Pronunciation and pitch-accent data comes from **[NB Uttale](https://www.nb.no/sprakbanken/en/resource-catalogue/oai-nb-no-sbr-79/)**,
