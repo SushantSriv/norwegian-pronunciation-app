@@ -23,6 +23,8 @@ interface Props {
     /** Speaking time per seat, when the session was run as a pair. */
     spoke?: Record<string, number>;
     seat?: Seat | null;
+    /** True when the pair was disconnected because the exam ended. */
+    roomClosed?: boolean;
     onRestart: () => void;
 }
 
@@ -67,6 +69,7 @@ export function Oppsummering({
     elapsedMs,
     spoke,
     seat,
+    roomClosed = false,
     onRestart,
 }: Props) {
     const [history, setHistory] = useState<ExamRun[]>(() => readHistory());
@@ -263,6 +266,13 @@ export function Oppsummering({
             </p>
 
             {!measuring && <Vurderingskort report={report} nivaa={nivaa} />}
+
+            {roomClosed && (
+                <p className="mt-5 rounded-xl border border-white/10 bg-white/[0.03] p-4 text-[12px] leading-relaxed text-white/45">
+                    Rommet er lukket, og mikrofonen er av. Det du gjør herfra — leser svarene dine
+                    igjen, retter deg selv, tar uttaleprøven — hører ingen andre.
+                </p>
+            )}
 
             {spoke && seat && <Taletid spoke={spoke} seat={seat} />}
 
