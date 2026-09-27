@@ -8,6 +8,8 @@ import {
     MAX_SPOKEN_MS,
     normaliseCode,
     parseClientMessage,
+    parseQueueClientMessage,
+    parseQueueServerMessage,
     parseServerMessage,
     ROOM_NIVAAER,
     seededPick,
@@ -233,5 +235,55 @@ describe('drawing the same tasks on both devices', () => {
         const pool = ['a', 'b', 'c'];
         const draw = seededPick(7);
         for (let i = 0; i < 500; i++) expect(pool).toContain(draw(pool));
+    });
+});
+
+describe('the queue', () => {
+    it('takes only the two things a waiting browser can say', () => {
+        expect(parseQueueClientMessage(JSON.stringify({ t: 'wait' }))).toEqual({ t: 'wait' });
+        expect(parseQueueClientMessage(JSON.stringify({ t: 'leave' }))).toEqual({ t: 'leave' });
+        expect(parseQueueClientMessage(JSON.stringify({ t: 'match', with: 'someone' }))).toBeNull();
+        expect(parseQueueClientMessage(JSON.stringify({ t: 'nickname', name: 'Ola' }))).toBeNull();
+        expect(parseQueueClientMessage('x'.repeat(500))).toBeNull();
+        expect(parseQueueClientMessage(42)).toBeNull();
+    });
+
+    it('accepts a match only with a code it could have issued', () => {
+        expect(
+            parseQueueServerMessage(JSON.stringify({ t: 'matched', code: 'ABC234', nivaa: 'A2-B1' }))
+        ).toEqual({ t: 'matched', code: 'ABC234', nivaa: 'A2-B1' });
+
+        // A code from the wrong alphabet, or a level nobody offers, would send
+        // the pair to a room that cannot exist.
+        expect(
+            parseQueueServerMessage(JSON.stringify({ t: 'matched', code: 'abc01l', nivaa: 'A2-B1' }))
+        ).toBeNull();
+        expect(
+            parseQueueServerMessage(JSON.stringify({ t: 'matched', code: 'ABC234', nivaa: 'C1' }))
+        ).toBeNull();
+    });
+
+    it('bounds the queue length it will believe', () => {
+        expect(parseQueueServerMessage(JSON.stringify({ t: 'queue', waiting: 3 }))?.t).toBe('queue');
+        expect(parseQueueServerMessage(JSON.stringify({ t: 'queue', waiting: -1 }))).toBeNull();
+        expect(parseQueueServerMessage(JSON.stringify({ t: 'queue', waiting: 1e9 }))).toBeNull();
+    });
+
+    it('carries nothing about who is waiting', () => {
+        // The queue holds a socket and a timestamp. If a name, an id or a
+        // transcript ever became part of this protocol, it would have to be
+        // added here — which is where it would be noticed.
+        const shapes = [
+            { t: 'queue', waiting: 2 },
+            { t: 'matched', code: 'ABC234', nivaa: 'B1-B2' },
+            { t: 'error', reason: 'nope' },
+        ];
+        for (const shape of shapes) {
+            const parsed = parseQueueServerMessage(JSON.stringify(shape));
+            expect(parsed).not.toBeNull();
+            for (const key of Object.keys(parsed as object)) {
+                expect(['t', 'waiting', 'code', 'nivaa', 'reason']).toContain(key);
+            }
+        }
     });
 });

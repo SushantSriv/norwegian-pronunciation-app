@@ -29,10 +29,20 @@ ALLOWED_ORIGINS = "https://saynorwegian.app,https://www.saynorwegian.app,https:/
 name = "ROOM"
 class_name = "ExamRoom"
 
+# The queue that pairs two strangers who picked the same level. One instance
+# per level, holding nothing but sockets and timestamps.
+[[durable_objects.bindings]]
+name = "QUEUE"
+class_name = "ExamQueue"
+
 # SQLite-backed, which is what the free plan provides.
 [[migrations]]
 tag = "v1"
 new_sqlite_classes = ["ExamRoom"]
+
+[[migrations]]
+tag = "v2"
+new_sqlite_classes = ["ExamQueue"]
 
 # Serve it from a subdomain of your own instead of workers.dev. The zone must
 # already be on Cloudflare; `wrangler deploy` creates the DNS record. Then build

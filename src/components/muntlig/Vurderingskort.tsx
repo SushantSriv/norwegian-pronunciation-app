@@ -1,7 +1,11 @@
+import { useState } from 'react';
 import type { CriteriaReport } from '../../utils/criteriaReport';
+import { KJENNETEGN, KJENNETEGN_KILDE, TRINN_FOR } from '../../data/muntlig/kjennetegn';
+import type { Nivaa } from '../../data/muntlig/oppgaver';
 
 interface Props {
     report: CriteriaReport;
+    nivaa: Nivaa;
 }
 
 /**
@@ -16,7 +20,18 @@ interface Props {
  *
  * The struck-through rows are the point of the card, not an apology for it.
  */
-export function Vurderingskort({ report }: Props) {
+export function Vurderingskort({ report, nivaa }: Props) {
+    /**
+     * What each of the two levels sounds like, folded away by default.
+     *
+     * Open, it is sixteen paragraphs of official prose and it buries the one
+     * thing this card actually measured. Closed, it is a line a candidate can
+     * reach for when they want to know what they are aiming at — which is a
+     * different moment from reading what could not be measured.
+     */
+    const [open, setOpen] = useState<string | null>(null);
+    const [lower, upper] = TRINN_FOR[nivaa];
+
     return (
         <div className="mt-5 overflow-hidden rounded-xl border border-white/12 bg-white/[0.03]">
             <div className="border-b border-white/10 px-4 py-3">
@@ -66,6 +81,36 @@ export function Vurderingskort({ report }: Props) {
                                 <p className="mt-2 text-[12px] leading-relaxed text-white/50">
                                     {row.whyNot}
                                 </p>
+                            )}
+
+                            <button
+                                onClick={() =>
+                                    setOpen(open === row.kriterium ? null : row.kriterium)
+                                }
+                                aria-expanded={open === row.kriterium}
+                                className="mt-2.5 min-h-[36px] rounded-lg text-[12px] font-semibold text-sky-200/70 underline underline-offset-2 transition hover:text-sky-100"
+                            >
+                                {open === row.kriterium
+                                    ? 'Skjul hva nivåene krever'
+                                    : `Hva skiller ${lower} fra ${upper} her?`}
+                            </button>
+
+                            {open === row.kriterium && (
+                                <dl className="mt-2 space-y-2 rounded-lg border border-white/10 bg-white/[0.03] p-3">
+                                    {[lower, upper].map(trinn => (
+                                        <div key={trinn}>
+                                            <dt className="text-[11px] font-bold uppercase tracking-wide text-white/50">
+                                                {trinn}
+                                            </dt>
+                                            <dd className="mt-0.5 text-[12px] leading-relaxed text-white/65">
+                                                {KJENNETEGN[trinn][row.kriterium]}
+                                            </dd>
+                                        </div>
+                                    ))}
+                                    <p className="pt-1 text-[10px] text-white/30">
+                                        Sitert fra {KJENNETEGN_KILDE.label}.
+                                    </p>
+                                </dl>
                             )}
                         </li>
                     );

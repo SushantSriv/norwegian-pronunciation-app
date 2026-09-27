@@ -167,3 +167,79 @@ export const POOLS: Record<PoolId, { kilde: Kilde; oppgaver: Oppgave[] }> = {
 
 /** How many of the published follow-ups the examiner must ask, where they exist. */
 export const PAAKREVDE_OPPFOLGINGER = 2;
+
+/**
+ * Extra prompts, written for this app and never mixed into the published ones.
+ *
+ * HK-dir publishes three or four examples per slot, which is enough to see what
+ * a task looks like and not enough to rehearse with: by the third run every
+ * question is one you have already answered, and rehearsing an answer you have
+ * memorised is the one thing this mode is meant to stop you doing.
+ *
+ * THESE ARE NOT EXAM TASKS AND ARE LABELLED AS SUCH EVERYWHERE THEY APPEAR.
+ * They are written in the register and the grammatical frame of the published
+ * ones — «Kan du fortelle om …», «Synes du …? Hvorfor/hvorfor ikke?» — because
+ * recognising the frame is part of what a rehearsal is for. They are kept in a
+ * separate structure from POOLS rather than appended to it, so that no future
+ * change can quietly let one of them be presented as something HK-dir wrote.
+ *
+ * The real tasks are confidential: printed from PAD a week before the exam
+ * period and shredded afterwards. Nothing here is a guess at them, and nothing
+ * here should be read as one.
+ */
+export const OVING_KILDE: Kilde = {
+    label: 'skrevet for denne appen — ikke publisert av HK-dir',
+    url: 'https://github.com/SushantSriv/norwegian-pronunciation-app',
+};
+
+export const OVINGSOPPGAVER: Partial<Record<PoolId, Oppgave[]>> = {
+    'fortelle-beskrive': [
+        { id: 'ov-fb-1', text: 'Kan du fortelle om en vanlig dag hos deg?' },
+        { id: 'ov-fb-2', text: 'Kan du fortelle om hva du gjør når du har fri?' },
+        { id: 'ov-fb-3', text: 'Kan du fortelle om hvordan du kommer deg til jobb eller skole?' },
+        { id: 'ov-fb-4', text: 'Kan du fortelle om et måltid du liker å lage?' },
+        { id: 'ov-fb-5', text: 'Kan du fortelle om stedet der du bor?' },
+        { id: 'ov-fb-6', text: 'Kan du fortelle om noe du har lært i Norge?' },
+        { id: 'ov-fb-7', text: 'Kan du fortelle om hva du gjør for å holde deg i form?' },
+        { id: 'ov-fb-8', text: 'Kan du fortelle om en høytid som betyr noe for deg?' },
+    ],
+    'samtale-dagligdags': [
+        { id: 'ov-sd-1', text: 'Kan dere snakke sammen om hva dere pleier å handle i butikken?' },
+        { id: 'ov-sd-2', text: 'Kan dere snakke sammen om hvordan dere reiser rundt i byen?' },
+        { id: 'ov-sd-3', text: 'Kan dere snakke sammen om hva dere gjør når dere blir syke?' },
+        { id: 'ov-sd-4', text: 'Kan dere snakke sammen om hva dere liker å gjøre om sommeren?' },
+        { id: 'ov-sd-5', text: 'Kan dere snakke sammen om hvordan dere lærer norske ord?' },
+    ],
+    'samtale-synspunkt': [
+        { id: 'ov-ss-1', text: 'Kan dere snakke sammen om hva som gjør en god nabo?' },
+        {
+            id: 'ov-ss-2',
+            text: 'Synes dere det er lett eller vanskelig å bli kjent med folk i Norge? Hvorfor/hvorfor ikke?',
+        },
+        {
+            id: 'ov-ss-3',
+            text: 'Mener dere at barn bør ha mobiltelefon på skolen? Hvorfor/hvorfor ikke?',
+        },
+        { id: 'ov-ss-4', text: 'Hva mener dere er det viktigste når man skal lære et nytt språk?' },
+        {
+            id: 'ov-ss-5',
+            text: 'Synes dere det er viktig å kunne dialekten der man bor? Hvorfor/hvorfor ikke?',
+        },
+        { id: 'ov-ss-6', text: 'Kan dere snakke sammen om hva som er bra med å bo i en liten by?' },
+    ],
+    synspunkt: [
+        { id: 'ov-sy-1', text: 'Synes du det er viktig å kunne lage mat selv? Hvorfor/hvorfor ikke?' },
+        { id: 'ov-sy-2', text: 'Hva er positivt og negativt med å jobbe hjemmefra?' },
+        { id: 'ov-sy-3', text: 'Synes du alle bør kunne svømme? Hvorfor/hvorfor ikke?' },
+        { id: 'ov-sy-4', text: 'Hva mener du skal til for å trives på en arbeidsplass?' },
+        { id: 'ov-sy-5', text: 'Synes du det er bra at butikkene har åpent på søndager?' },
+        { id: 'ov-sy-6', text: 'Hva er positivt og negativt med å flytte til et nytt land?' },
+    ],
+    paastand: [
+        { id: 'ov-pa-1', text: 'Alle burde lære seg å sykle til jobben.' },
+        { id: 'ov-pa-2', text: 'Det er bedre å leie enn å eie bolig.' },
+        { id: 'ov-pa-3', text: 'Barn lærer mer av å være ute enn av å sitte inne.' },
+        { id: 'ov-pa-4', text: 'Folk bruker for mye tid på sosiale medier.' },
+        { id: 'ov-pa-5', text: 'Alle på en arbeidsplass burde snakke norsk sammen.' },
+    ],
+};

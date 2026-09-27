@@ -1,5 +1,6 @@
 import { useState } from 'react';
 import type { RoomState } from '../../hooks/useExamRoom';
+import type { QueueState } from '../../hooks/useExamQueue';
 import {
     CODE_LENGTH,
     normaliseCode,
@@ -9,8 +10,11 @@ import {
 
 interface Props {
     state: RoomState;
+    queue: QueueState;
     onCreate: (nivaa: RoomNivaa) => void;
     onJoin: (code: string, nivaa: RoomNivaa) => void;
+    onQueue: (nivaa: RoomNivaa) => void;
+    onLeaveQueue: () => void;
     onLeave: () => void;
 }
 
@@ -42,7 +46,20 @@ const STATUS: Record<RoomState['phase'], string> = {
     feilet: 'Det gikk ikke.',
 };
 
-export function Parrom({ state, onCreate, onJoin, onLeave }: Props) {
+const clock = (ms: number) => {
+    const total = Math.max(0, Math.round(ms / 1000));
+    return `${Math.floor(total / 60)}:${String(total % 60).padStart(2, '0')}`;
+};
+
+export function Parrom({
+    state,
+    queue,
+    onCreate,
+    onJoin,
+    onQueue,
+    onLeaveQueue,
+    onLeave,
+}: Props) {
     const [typed, setTyped] = useState('');
     const [copied, setCopied] = useState(false);
     /**
@@ -79,7 +96,63 @@ export function Parrom({ state, onCreate, onJoin, onLeave }: Props) {
                 skal opp — da hører dere hverandre, og hver mikrofon hører bare sin egen kandidat.
             </p>
 
-            {state.phase === 'av' ? (
+            {state.phase === 'av' && queue.phase !== 'av' && (
+                <div className="mt-3.5 rounded-xl border border-white/12 bg-white/[0.05] p-4 text-center">
+                    {queue.phase === 'venter' && (
+                        <>
+                            <p className="text-sm font-semibold text-white">
+                                Venter på en å øve med på {queue.nivaa}
+                            </p>
+                            <p
+                                className="mt-1 text-[12px] tabular-nums text-white/45"
+                                role="status"
+                                aria-live="polite"
+                            >
+                                {clock(queue.elapsedMs)}
+                                {queue.waiting > 1 && ` · ${queue.waiting} i køen`}
+                            </p>
+                            <p className="mt-2 text-[11px] leading-relaxed text-white/35">
+                                Appen setter dere sammen så snart én til velger samme nivå. Du kan
+                                gå ut når som helst.
+                            </p>
+                        </>
+                    )}
+
+                    {queue.phase === 'fant-noen' && (
+                        <p className="text-sm font-semibold text-emerald-200">
+                            Fant en kandidat. Kobler dere sammen …
+                        </p>
+                    )}
+
+                    {queue.phase === 'ingen-kom' && (
+                        <>
+                            <p className="text-sm font-semibold text-white/80">
+                                Ingen andre kom i løpet av tre minutter.
+                            </p>
+                            <p className="mt-1.5 text-[12px] leading-relaxed text-white/45">
+                                Det er få som øver akkurat nå. Du kan prøve igjen, sende lenken til
+                                noen du kjenner, eller ta prøven alene — samtaleoppgaven blir stående
+                                ukjørt, og appen sier hva du gikk glipp av.
+                            </p>
+                        </>
+                    )}
+
+                    {queue.phase === 'feilet' && (
+                        <p className="text-sm font-semibold text-amber-300">
+                            {queue.problem ?? 'Køen svarte ikke.'}
+                        </p>
+                    )}
+
+                    <button
+                        onClick={onLeaveQueue}
+                        className="mt-3 min-h-[44px] w-full rounded-xl border border-white/20 text-sm font-semibold text-white/75 transition hover:border-white/40 hover:bg-white/10"
+                    >
+                        {queue.phase === 'venter' ? 'Gå ut av køen' : 'Tilbake'}
+                    </button>
+                </div>
+            )}
+
+            {state.phase === 'av' && queue.phase === 'av' ? (
                 <>
                     <div className="mt-3.5" role="group" aria-label="Nivå for rommet">
                         <p className="mb-1.5 text-[11px] font-semibold uppercase tracking-wide text-white/40">
@@ -104,11 +177,32 @@ export function Parrom({ state, onCreate, onJoin, onLeave }: Props) {
                         </div>
                     </div>
 
+                    {/*
+                      The queue is the first option, because it is the only one
+                      most people can use: preparing for this exam does not come
+                      with knowing somebody else preparing for it.
+                    */}
                     <button
-                        onClick={() => onCreate(nivaa)}
+                        onClick={() => onQueue(nivaa)}
                         className="mt-2.5 min-h-[48px] w-full rounded-xl bg-white text-base font-bold text-slate-900 transition hover:bg-white/90"
                     >
-                        Lag et rom for {nivaa}
+                        Finn en å øve med på {nivaa}
+                    </button>
+
+                    <p className="mt-2 text-[11px] leading-relaxed text-white/35">
+                        Du blir satt sammen med en fremmed som øver til samme prøve. Ingen navn
+                        utveksles. Men for å koble lyden direkte må nettleserne fortelle hverandre
+                        hvordan de nås, så <strong className="font-semibold text-white/55">
+                        IP-adressen din blir synlig for den du blir satt sammen med</strong> — slik
+                        er det i enhver samtale på nett. Vil du heller styre hvem det blir, lag et
+                        rom og send lenken.
+                    </p>
+
+                    <button
+                        onClick={() => onCreate(nivaa)}
+                        className="mt-3 min-h-[48px] w-full rounded-xl border border-white/20 text-base font-semibold text-white transition hover:border-white/40 hover:bg-white/10"
+                    >
+                        Lag et rom og send lenken
                     </button>
 
                     <div className="mt-3 flex items-center gap-2">
@@ -123,7 +217,7 @@ export function Parrom({ state, onCreate, onJoin, onLeave }: Props) {
                             inputMode="text"
                             autoCapitalize="characters"
                             spellCheck={false}
-                            className="min-h-[48px] min-w-0 flex-1 rounded-xl border border-white/12 bg-white/[0.04] px-3 text-center text-base font-bold uppercase tracking-[0.25em] text-white outline-none transition placeholder:tracking-normal placeholder:text-white/25 focus:border-white/35"
+                            className="min-h-[48px] min-w-0 flex-1 rounded-xl border border-white/12 bg-white/[0.04] px-3 text-center text-base font-bold uppercase tracking-[0.25em] text-white outline-none transition placeholder:tracking-normal placeholder:text-white/25 focus:border-white/35 focus-visible:ring-2 focus-visible:ring-sky-300/70"
                         />
                         <button
                             onClick={() => onJoin(typed, nivaa)}

@@ -1,4 +1,6 @@
+import { useState } from 'react';
 import { previousAt, type ExamRun } from '../../utils/examHistory';
+import { dayKey, daysBetween } from '../../utils/period';
 import type { Nivaa } from '../../data/muntlig/oppgaver';
 
 interface Props {
@@ -14,6 +16,25 @@ const nb = (value: number, digits = 0) =>
     value.toLocaleString('nb-NO', { minimumFractionDigits: digits, maximumFractionDigits: digits });
 
 /**
+ * Consecutive days with at least one rehearsal, counting back from the latest.
+ *
+ * From the dates already stored, so nothing new is kept. It is the only number
+ * in this mode that rewards coming back rather than performing, which is the
+ * only thing about a rehearsal worth rewarding: the app cannot tell you whether
+ * today's went better, and says so, but it can tell you that you turned up.
+ */
+function streak(history: ExamRun[]): number {
+    if (!history.length) return 0;
+    const days = [...new Set(history.map(run => dayKey(new Date(run.at).getTime())))].sort().reverse();
+    let count = 1;
+    for (let i = 1; i < days.length; i++) {
+        if (daysBetween(days[i], days[i - 1]) !== 1) break;
+        count++;
+    }
+    return count;
+}
+
+/**
  * Your own past rehearsals.
  *
  * COMPARED TO NOBODY BUT YOURSELF, and at the same level only. The three levels
@@ -27,11 +48,21 @@ const nb = (value: number, digits = 0) =>
  * of those happened.
  */
 export function Historikk({ history, nivaa, onForget }: Props) {
+    /**
+     * Deleting asks twice.
+     *
+     * It was a fifteen-pixel link at the top of a card, next to nothing else
+     * tappable, and one tap ended every run the learner had recorded. A
+     * confirmation is not ceremony here: the data cannot be recovered, because
+     * it was never anywhere but this browser.
+     */
+    const [confirming, setConfirming] = useState(false);
     const atLevel = history.filter(run => run.nivaa === nivaa);
-    if (atLevel.length < 2) return null;
+    if (atLevel.length === 0) return null;
 
     const latest = atLevel[0];
     const before = previousAt(history, nivaa);
+    const days = streak(history);
 
     return (
         <div className="mt-5 rounded-xl border border-white/12 bg-white/[0.03] p-4">
@@ -40,12 +71,34 @@ export function Historikk({ history, nivaa, onForget }: Props) {
                     Dine tidligere {nivaa}-prøver
                 </h2>
                 <button
-                    onClick={onForget}
-                    className="shrink-0 text-[11px] font-semibold text-white/35 underline-offset-2 transition hover:text-white/70 hover:underline"
+                    onClick={() => {
+                        if (confirming) onForget();
+                        else setConfirming(true);
+                    }}
+                    onBlur={() => setConfirming(false)}
+                    className={[
+                        '-my-2 min-h-[44px] shrink-0 rounded-lg px-3 py-2 text-[12px] font-semibold underline underline-offset-2 transition',
+                        confirming
+                            ? 'text-amber-300 hover:text-amber-200'
+                            : 'text-white/60 hover:text-white',
+                    ].join(' ')}
                 >
-                    Slett historikken
+                    {confirming ? 'Trykk igjen for å slette' : 'Slett historikken'}
                 </button>
             </div>
+
+            {!before && (
+                <p className="mt-2 text-[12px] leading-relaxed text-white/50">
+                    Lagret. Kom tilbake i morgen og kjør {nivaa} igjen — da har appen noe å
+                    sammenligne med, og det er den eneste sammenligningen den gjør.
+                </p>
+            )}
+
+            {days > 1 && (
+                <p className="mt-2 text-[12px] font-semibold text-amber-200/80">
+                    🔥 {days} dager på rad
+                </p>
+            )}
 
             {before && latest.pauses !== null && before.pauses !== null && (
                 <p className="mt-2 text-[12px] leading-relaxed text-white/50">
@@ -57,6 +110,7 @@ export function Historikk({ history, nivaa, onForget }: Props) {
                 </p>
             )}
 
+            {atLevel.length > 1 && (
             <ul className="mt-3 space-y-1">
                 {atLevel.slice(0, 8).map((run, index) => (
                     <li
@@ -73,6 +127,7 @@ export function Historikk({ history, nivaa, onForget }: Props) {
                     </li>
                 ))}
             </ul>
+            )}
 
             <p className="mt-3 text-[11px] leading-relaxed text-white/30">
                 Bare tallene over lagres, og bare i denne nettleseren. Verken opptak eller det du sa

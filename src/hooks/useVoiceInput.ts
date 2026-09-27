@@ -34,22 +34,47 @@ const SPEECH_LEVEL = 0.025;
 /** How often the level is sampled while recording. */
 const LEVEL_POLL_MS = 100;
 
+/**
+ * What a learner reads when something goes wrong.
+ *
+ * In Norwegian, in both languages' worth of screens. The practice game is in
+ * English and the rehearsal is entirely in Norwegian, and these strings turned
+ * up in the middle of the Norwegian one — which is the worst place for them,
+ * because somebody reading it is already stuck.
+ */
 const MIC_ERRORS: Record<string, string> = {
     NotAllowedError:
-        'Microphone access was blocked. Allow it for this site, then tap the mic again.',
-    NotFoundError: 'No microphone found. Check that one is connected.',
-    NotReadableError: 'The microphone is in use by another app. Close it and try again.',
+        'Mikrofonen ble blokkert. Tillat mikrofon for dette nettstedet, og prøv igjen.',
+    NotFoundError: 'Fant ingen mikrofon. Sjekk at én er koblet til.',
+    NotReadableError: 'Mikrofonen er opptatt av et annet program. Lukk det og prøv igjen.',
 };
 
-const NOTHING_HEARD = 'I did not catch anything — try speaking a little louder.';
+const NOTHING_HEARD = 'Jeg hørte ingenting — prøv å snakke litt høyere.';
 
 interface Options {
     onResult: (recognition: Recognition) => void;
     /** How long a take may run. Defaults to one phrase. */
     profile?: ListenProfile;
+    /**
+     * Hand every recording's URL to the caller instead of revoking it.
+     *
+     * By default the hook keeps one recording at a time: a new take revokes the
+     * previous URL, which is right for practice, where only the attempt you
+     * just made is worth playing back.
+     *
+     * A whole exam is different. The rehearsal summary lists every answer and
+     * invites you to listen to them, and with the default the only one that
+     * still plays is the last. When this is set the caller owns every URL it
+     * has been handed, and must revoke them itself.
+     */
+    ownRecordings?: boolean;
 }
 
-export function useVoiceInput({ onResult, profile = PHRASE }: Options) {
+export function useVoiceInput({
+    onResult,
+    profile = PHRASE,
+    ownRecordings = false,
+}: Options) {
     const supported = recognitionSupported();
 
     const [listening, setListening] = useState(false);
@@ -79,10 +104,18 @@ export function useVoiceInput({ onResult, profile = PHRASE }: Options) {
     const onResultRef = useRef(onResult);
     onResultRef.current = onResult;
 
-    // Release the last object URL when the hook goes away.
+    /** Whether this hook is responsible for the URLs it creates. */
+    const ownsUrls = useRef(!ownRecordings);
+    ownsUrls.current = !ownRecordings;
+
+    // Release the last object URL when the hook goes away — unless the caller
+    // asked to own them, in which case revoking here would break the playback
+    // it asked for.
     useEffect(
         () => () => {
-            if (recordingUrlRef.current) URL.revokeObjectURL(recordingUrlRef.current);
+            if (ownsUrls.current && recordingUrlRef.current) {
+                URL.revokeObjectURL(recordingUrlRef.current);
+            }
         },
         []
     );
@@ -145,13 +178,13 @@ export function useVoiceInput({ onResult, profile = PHRASE }: Options) {
                 return;
             }
             if (!text) {
-                setError('I heard you, but could not make out the words — try once more.');
+                setError('Jeg hørte deg, men fikk ikke tak i ordene — prøv en gang til.');
                 return;
             }
 
             onResultRef.current({ text, speech });
         } catch (cause) {
-            setError(cause instanceof Error ? cause.message : 'Could not read that recording.');
+            setError(cause instanceof Error ? cause.message : 'Fikk ikke lest opptaket.');
         } finally {
             setTranscribing(false);
         }
@@ -205,7 +238,7 @@ export function useVoiceInput({ onResult, profile = PHRASE }: Options) {
             stream = await navigator.mediaDevices.getUserMedia({ audio: true });
         } catch (cause) {
             const name = cause instanceof Error ? cause.name : '';
-            setError(MIC_ERRORS[name] ?? 'The microphone could not be opened.');
+            setError(MIC_ERRORS[name] ?? 'Mikrofonen kunne ikke åpnes.');
             setRecordingAvailable(false);
             return;
         }
@@ -233,7 +266,9 @@ export function useVoiceInput({ onResult, profile = PHRASE }: Options) {
 
             const blob = new Blob(chunksRef.current, { type: recorder.mimeType || 'audio/webm' });
             chunksRef.current = [];
-            if (recordingUrlRef.current) URL.revokeObjectURL(recordingUrlRef.current);
+            if (ownsUrls.current && recordingUrlRef.current) {
+                URL.revokeObjectURL(recordingUrlRef.current);
+            }
             const url = URL.createObjectURL(blob);
             recordingUrlRef.current = url;
             setRecordingUrl(url);
