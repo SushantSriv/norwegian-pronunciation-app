@@ -33,6 +33,7 @@ your attempt, extracts the pitch contour, and draws it.
 | 🎧 **Listen back** | Play the reference and your own attempt back to back. Silence before and after you speak is trimmed automatically. |
 | 🎯 **Rising difficulty** | Clear 10 phrases before losing 3 lives. The pass bar climbs with every one you get right. |
 | 📚 **13 tracks** | Five CEFR levels from A1 words to B2 clusters, plus eight occupation tracks — helse, bygg, barnehage, butikk, restaurant, transport, renhold, kontor. |
+| 👥 **Øv sammen** | Open a room, send the link, and do the conversation task with a real second candidate. Audio goes directly between the two browsers; nothing of it touches a server. |
 | 🎓 **Prøverommet** | A rehearsal of Norskprøven's oral exam at all three levels — the examiner's real lines read aloud, the real task order, the published clock. It scores nothing and says so: you get your transcript back and no number. See below. |
 | 🏆 **Learning points** | Points for clearing your own level's bar, for beating your own best on a word, for mastering one, and for coming back tomorrow — with caps that make repeating an easy phrase worthless. See below. |
 
@@ -329,6 +330,29 @@ simpler than it is, and the conversation task alone is a fifth to a third of it.
 Every prompt is quoted from HK-dir's published examples with a link to the source. The
 real tasks are confidential — printed from PAD a week before the exam period and
 shredded afterwards — so no app can give you them, and one that claims to is guessing.
+
+### Two candidates, one room
+
+The conversation task needs a person, and the app will not fake one. Instead one of you
+opens a room and sends the link: the two browsers connect **directly**, you hear each
+other, and each microphone hears only its own candidate — so who said what is simply
+true rather than something you tap.
+
+Both devices draw their prompts from a **shared seed**, so the pair is answering the same
+question rather than two different ones at each other. Either of you can move the session
+on and the room keeps the furthest, so nobody is stranded on a task the other has
+finished — and being moved on does not throw away the answer you were part-way through.
+
+Afterwards you get the one instruction the conversation task actually carries — *«det er
+viktig at dere begge er aktive i samtalen»* — as a split of the talking time. There is no
+threshold for what counts as balanced, because HK-dir publishes none, and it is not one
+of the four criteria.
+
+Nothing of the conversation passes through a server: not audio, not transcripts, not
+names. Two things are said up front rather than discovered — your IP address is visible
+to whoever you practise with, which is how every video call works, and some networks will
+not allow a direct connection at all, in which case it fails visibly rather than leaving
+you in a silent room. Details in [server/ROM.md](server/ROM.md).
 
 ### The vurderingskort
 

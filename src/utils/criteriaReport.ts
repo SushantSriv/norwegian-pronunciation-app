@@ -84,6 +84,15 @@ const nb = (value: number, digits = 0) =>
     value.toLocaleString('nb-NO', { minimumFractionDigits: digits, maximumFractionDigits: digits });
 
 /**
+ * Seconds, with a decimal while the figure is small.
+ *
+ * Rounding 0.4 to "0 sekunder" would say the candidate was silent, when what
+ * happened is that they said very little — and the difference between those
+ * two is exactly what this module exists to keep straight.
+ */
+const secs = (value: number) => nb(value, value < 10 ? 1 : 0);
+
+/**
  * Why three of the four are not measured.
  *
  * These are reasons, not apologies. Each one names something true about the
@@ -147,7 +156,7 @@ export function buildReport(takes: TakeEvidence[]): CriteriaReport {
     const shortfalls: string[] = [];
     if (seconds === null) shortfalls.push('ingen av opptakene kunne måles');
     else if (seconds < EVIDENCE.seconds)
-        shortfalls.push(`du snakket ${nb(seconds)} sekunder, og det trengs ${EVIDENCE.seconds}`);
+        shortfalls.push(`du snakket ${secs(seconds)} sekunder, og det trengs ${EVIDENCE.seconds}`);
     if (tokens < EVIDENCE.tokens)
         shortfalls.push(`svarene ble ${nb(tokens)} ord, og det trengs ${EVIDENCE.tokens}`);
 

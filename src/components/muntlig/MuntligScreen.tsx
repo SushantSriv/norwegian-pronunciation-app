@@ -1,7 +1,12 @@
-import { useCallback, useEffect, useRef, useState, type ReactNode } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from 'react';
 import { motion } from 'framer-motion';
 import { SessionMap } from './SessionMap';
 import { Oppsummering } from './Oppsummering';
+import { Rommet, type Who } from './Rommet';
+import { Parrom } from './Parrom';
+import { useExamRoom } from '../../hooks/useExamRoom';
+import { seededPick } from '../../utils/roomProtocol';
+import type { PickOppgave } from '../../utils/examTimeline';
 import { useExamSession } from '../../hooks/useExamSession';
 import { useVoiceInput } from '../../hooks/useVoiceInput';
 import { examProfile, PHRASE, recognitionSupported, type ListenProfile } from '../../utils/speech';
@@ -40,8 +45,47 @@ const clock = (ms: number) => {
     return `${Math.floor(total / 60)}:${String(total % 60).padStart(2, '0')}`;
 };
 
+/** Empty disables the pair feature entirely, the way the leaderboard works. */
+const ROOM_URL = (import.meta.env.VITE_ROOM_URL as string | undefined) ?? '';
+
 export function MuntligScreen({ onBack }: Props) {
     const [nivaa, setNivaa] = useState<Nivaa | null>(null);
+
+    // The partner's voice. An audio element rather than the Web Audio graph:
+    // nothing is measured about what they say — that is their device's job and
+    // their transcript — so it only has to be audible.
+    const partnerAudio = useRef<HTMLAudioElement | null>(null);
+    const room = useExamRoom({
+        url: ROOM_URL,
+        onRemoteStream: useCallback((stream: MediaStream) => {
+            if (partnerAudio.current) partnerAudio.current.srcObject = stream;
+        }, []),
+    });
+
+    /**
+     * A room link opens straight into the lobby, already joining.
+     *
+     * NOT guarded by a "have I done this" ref, which is the obvious way to
+     * write it and is wrong. Mounting this screen twice — which React does on
+     * every development mount, and which a real remount does too — runs the
+     * hook's cleanup in between and closes the socket. A ref would remember
+     * that it had already joined and leave the second mount holding a socket
+     * that had just been torn down. Joining again is cheap and idempotent:
+     * `join` closes whatever it had before opening the new one.
+     */
+    const joinRoom = useRef(room.join);
+    joinRoom.current = room.join;
+    useEffect(() => {
+        const code = new URLSearchParams(window.location.search).get('rom');
+        if (ROOM_URL && code) joinRoom.current(code);
+    }, []);
+
+    // Once the pair is connected the room decides the level, because the two
+    // of them have to sit the same exam.
+    const connected = room.state.phase === 'tilkoblet';
+    useEffect(() => {
+        if (connected && room.state.nivaa) setNivaa(room.state.nivaa);
+    }, [connected, room.state.nivaa]);
 
     if (!recognitionSupported()) {
         return (
@@ -76,28 +120,57 @@ export function MuntligScreen({ onBack }: Props) {
                     ))}
                 </div>
 
+                {room.available && (
+                    <Parrom
+                        state={room.state}
+                        onCreate={level => void room.create(level)}
+                        onJoin={(code, level) => room.join(code, level)}
+                        onLeave={room.leave}
+                    />
+                )}
+
                 <div className="mt-5 space-y-2.5 rounded-xl border border-white/10 bg-white/[0.03] p-4 text-[12px] leading-relaxed text-white/45">
                     <p>{APP_SIER.ikkeEkteOppgaver}</p>
                     <p>{APP_SIER.halvDupleks}</p>
-                    <p>{APP_SIER.ingenPartner}</p>
+                    {!room.available && <p>{APP_SIER.ingenPartner}</p>}
                     <p className="text-white/35">{APP_SIER.ikkeHkdir}</p>
                 </div>
+
+                <audio ref={partnerAudio} autoPlay playsInline className="hidden" />
             </Shell>
         );
     }
 
     // Keyed on the level so a fresh session — and a fresh timeline — is built,
     // rather than the first pick being frozen in for the whole visit.
-    return <ExamRunner key={nivaa} nivaa={nivaa} onBack={onBack} onRestart={() => setNivaa(null)} />;
+    return (
+        <>
+            <ExamRunner
+                key={nivaa}
+                nivaa={nivaa}
+                room={connected ? room : null}
+                onBack={onBack}
+                onRestart={() => {
+                    room.leave();
+                    setNivaa(null);
+                }}
+            />
+            <audio ref={partnerAudio} autoPlay playsInline className="hidden" />
+        </>
+    );
 }
+
+type Room = ReturnType<typeof useExamRoom>;
 
 interface RunnerProps {
     nivaa: Nivaa;
+    /** The shared room, when there is a partner in it. */
+    room: Room | null;
     onBack: () => void;
     onRestart: () => void;
 }
 
-function ExamRunner({ nivaa, onBack, onRestart }: RunnerProps) {
+function ExamRunner({ nivaa, room, onBack, onRestart }: RunnerProps) {
     const [profile, setProfile] = useState<ListenProfile>(PHRASE);
     /** Bumped when a take is waiting for the microphone. Carries no value. */
     const [armed, setArmed] = useState(0);
@@ -154,8 +227,55 @@ function ExamRunner({ nivaa, onBack, onRestart }: RunnerProps) {
     }, [voice.error, settle]);
 
     const endTake = voice.stop;
-    const session = useExamSession({ nivaa, listen, endTake });
+
+    /**
+     * Both candidates draw the same prompts.
+     *
+     * `buildTimeline` asks for one prompt per pool in a fixed order, so the
+     * room's shared seed walks the same sequence on both devices. Without it
+     * the pair would be two people answering different questions at each other
+     * in the task whose whole point is that they answer the same one.
+     */
+    const seed = room?.state.seed ?? null;
+    const pick = useMemo<PickOppgave | undefined>(() => {
+        if (seed === null) return undefined;
+        const draw = seededPick(seed);
+        return (_pool, oppgaver) => draw(oppgaver);
+    }, [seed]);
+
+    const session = useExamSession({
+        nivaa,
+        pick,
+        pairPresent: room !== null,
+        listen,
+        endTake,
+    });
     const { begin, phase } = session;
+
+    /**
+     * Keep the pair on the same task.
+     *
+     * Either candidate may move the session on and the room keeps the furthest,
+     * so a partner who is still reading catches up rather than being left
+     * behind on a task nobody is answering any more.
+     */
+    const roomIndex = room?.state.index ?? 0;
+    const localIndex = session.index;
+    const advance = room?.advance;
+    useEffect(() => {
+        if (roomIndex <= localIndex) return;
+        // Being moved on while still answering must not throw the answer away.
+        // At the real exam the examiner moves the pair on and what you managed
+        // to say still counts, so end the take first: it lands, the phase
+        // becomes 'klar', and this effect runs again and steps forward.
+        if (phase === 'lytter') session.finishTake();
+        else session.next();
+    }, [roomIndex, localIndex, phase, session]);
+
+    const step = useCallback(() => {
+        session.next();
+        advance?.(localIndex + 1);
+    }, [session, advance, localIndex]);
 
     useEffect(() => {
         begin();
@@ -203,15 +323,31 @@ function ExamRunner({ nivaa, onBack, onRestart }: RunnerProps) {
         void (async () => {
             const decoded = await decodeMono(url);
             if (!alive) return;
-            setProfiles(current => ({
-                ...current,
-                [last.segmentId]: decoded ? pausesFrom(decoded.data, decoded.rate) : null,
-            }));
+            const profile = decoded ? pausesFrom(decoded.data, decoded.rate) : null;
+            setProfiles(current => ({ ...current, [last.segmentId]: profile }));
         })();
         return () => {
             alive = false;
         };
     }, [takes]);
+
+    /**
+     * Tell the room how long this candidate's own microphone heard them.
+     *
+     * «Det er viktig at dere begge er aktive i samtalen» is an instruction the
+     * pair was given, and this is how they can check it. Each device measures
+     * only its own speaker — nobody's audio is analysed on anybody else's
+     * behalf — and with no ranking anywhere in this mode there is nothing to be
+     * gained by reporting it wrong.
+     */
+    const reportSpoken = room?.reportSpoken;
+    useEffect(() => {
+        if (!reportSpoken) return;
+        const spoken = Object.values(profiles)
+            .filter(profile => profile?.measured)
+            .reduce((sum, profile) => sum + (profile?.speaking ?? 0), 0);
+        if (spoken > 0) reportSpoken(spoken * 1000);
+    }, [profiles, reportSpoken]);
 
     const segment = session.segment;
 
@@ -224,6 +360,8 @@ function ExamRunner({ nivaa, onBack, onRestart }: RunnerProps) {
                     takes={takes}
                     profiles={profiles}
                     elapsedMs={session.elapsedMs}
+                    spoke={room?.state.spoke}
+                    seat={room?.state.seat}
                     onRestart={onRestart}
                 />
             </Shell>
@@ -232,6 +370,15 @@ function ExamRunner({ nivaa, onBack, onRestart }: RunnerProps) {
 
     const listening = phase === 'lytter';
     const speaking = phase === 'snakker';
+
+    /**
+     * Who is lit up in the room.
+     *
+     * Derived from the phase AND the floor, not from the floor alone: the
+     * examiner reads the framing of a task whose floor is yours, so during
+     * 'snakker' it is always her turn whatever the segment says.
+     */
+    const talking: Who = speaking ? 'eksaminator' : listening ? segment.floor : 'ingen';
 
     return (
         <Shell onBack={onBack} onQuit={session.quit}>
@@ -249,6 +396,10 @@ function ExamRunner({ nivaa, onBack, onRestart }: RunnerProps) {
                 </div>
 
                 <div className="min-w-0 flex-1">
+                    <div className="mb-4">
+                        <Rommet floor={talking} pairPresent={room !== null} />
+                    </div>
+
                     <div
                         role="status"
                         aria-live="polite"
@@ -316,7 +467,7 @@ function ExamRunner({ nivaa, onBack, onRestart }: RunnerProps) {
 
                     {phase === 'klar' && (
                         <button
-                            onClick={session.next}
+                            onClick={step}
                             className="mt-4 min-h-[48px] w-full rounded-xl border border-white/20 text-base font-semibold text-white transition hover:border-white/40 hover:bg-white/10"
                         >
                             Neste

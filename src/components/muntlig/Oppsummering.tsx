@@ -3,6 +3,8 @@ import { Vurderingskort } from './Vurderingskort';
 import { Selvsjekk } from './Selvsjekk';
 import { Uttaleprove } from './Uttaleprove';
 import { Historikk } from './Historikk';
+import { Taletid } from './Taletid';
+import type { Seat } from '../../utils/roomProtocol';
 import { buildReport } from '../../utils/criteriaReport';
 import { forgetHistory, readHistory, remember, type ExamRun } from '../../utils/examHistory';
 import type { PauseProfile } from '../../utils/pauses';
@@ -18,6 +20,9 @@ interface Props {
     /** Pause measurement per segment; undefined while still being measured. */
     profiles: Record<string, PauseProfile | null>;
     elapsedMs: number;
+    /** Speaking time per seat, when the session was run as a pair. */
+    spoke?: Record<string, number>;
+    seat?: Seat | null;
     onRestart: () => void;
 }
 
@@ -44,6 +49,8 @@ export function Oppsummering({
     takes,
     profiles,
     elapsedMs,
+    spoke,
+    seat,
     onRestart,
 }: Props) {
     const [history, setHistory] = useState<ExamRun[]>(() => readHistory());
@@ -198,6 +205,8 @@ export function Oppsummering({
             ) : (
                 <Vurderingskort report={report} />
             )}
+
+            {spoke && seat && <Taletid spoke={spoke} seat={seat} />}
 
             {/* The uttale row says "nedenfor", so it is directly below. */}
             <Uttaleprove />

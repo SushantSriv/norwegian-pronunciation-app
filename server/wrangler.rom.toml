@@ -1,0 +1,42 @@
+# The shared exam room: one Durable Object, two candidates, no audio.
+#
+# SEPARATE FROM THE LEADERBOARD ON PURPOSE. They share nothing — different
+# data, different failure modes, different reasons to exist — and a room going
+# down should not take a leaderboard with it. Deploy this one with:
+#
+#     npx wrangler deploy --config server/wrangler.rom.toml
+#
+# Then build the app with VITE_ROOM_URL pointing at it. Leave that variable
+# unset and the pair feature is not offered at all, which is the right default:
+# an app should not show a button that cannot work.
+#
+# COST. Durable Objects are on the Workers free plan with no commitment:
+# 100 000 requests a day, incoming WebSocket messages billed at a twentieth of
+# a request each, and an idle room hibernates and is billed no duration at all.
+# A rehearsal is a few hundred messages, so the free allocation is thousands of
+# sessions a day.
+
+name = "norsk-uttale-rom"
+main = "room.ts"
+compatibility_date = "2026-09-26"
+
+# Which origins may open a room. A browser refuses anything not listed here,
+# so update it BEFORE pointing a new domain at the site.
+[vars]
+ALLOWED_ORIGINS = "https://saynorwegian.app,https://www.saynorwegian.app,https://sushantsriv.github.io"
+
+[[durable_objects.bindings]]
+name = "ROOM"
+class_name = "ExamRoom"
+
+# SQLite-backed, which is what the free plan provides.
+[[migrations]]
+tag = "v1"
+new_sqlite_classes = ["ExamRoom"]
+
+# Serve it from a subdomain of your own instead of workers.dev. The zone must
+# already be on Cloudflare; `wrangler deploy` creates the DNS record. Then build
+# the app with VITE_ROOM_URL=https://rom.saynorwegian.app
+# [[routes]]
+# pattern = "rom.saynorwegian.app"
+# custom_domain = true

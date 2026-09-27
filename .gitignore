@@ -25,3 +25,11 @@ dist-ssr
 *.sw?
 .vs/
 .bench-cache/
+
+# Local-only worker variables (wrangler dev reads these).
+.dev.vars
+**/.dev.vars
+
+# Wrangler local state and build scratch.
+.wrangler/
+**/.wrangler/
