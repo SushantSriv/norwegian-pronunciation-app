@@ -2,7 +2,10 @@
   "compilerOptions": {
     "tsBuildInfoFile": "./node_modules/.tmp/tsconfig.node.tsbuildinfo",
     "target": "ES2023",
-    "lib": ["ES2023"],
+    /* DOM as well as Node, because the worker tests reach through the shared
+       rules in src/utils, which is browser code. This project type-checks
+       only; nothing here runs in a browser. */
+    "lib": ["ES2023", "DOM", "DOM.Iterable"],
     "module": "ESNext",
     "skipLibCheck": true,
 
@@ -21,5 +24,7 @@
     "noFallthroughCasesInSwitch": true,
     "noUncheckedSideEffectImports": true
   },
-  "include": ["vite.config.ts"]
+  /* Everything that runs under Node: the build config, the leaderboard's
+     development server, and the tests that drive the workers. */
+  "include": ["vite.config.ts", "server/dev-server.ts", "server/sqlite-d1.ts", "server/__tests__"]
 }

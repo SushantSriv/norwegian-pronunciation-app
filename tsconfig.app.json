@@ -28,7 +28,14 @@
     "noFallthroughCasesInSwitch": true,
     "noUncheckedSideEffectImports": true
   },
-  /* server/ holds the optional leaderboard worker. It is type-checked with
-     the app so the rules it shares with the browser cannot drift. */
-  "include": [ "src", "server" ]
+  /* The two workers are checked here, because the rules they share with the
+     browser live in src/utils and must not drift.
+
+     The Node-only files beside them are NOT, and that is the point: this is
+     the project `npm run build` compiles, and a site build has no business
+     depending on Node type declarations. It did for months without anybody
+     noticing, and the day a clean install stopped providing them the site
+     stopped building. dev-server.ts, sqlite-d1.ts and the worker tests are
+     checked in tsconfig.node.json, where Node types belong. */
+  "include": [ "src", "server/worker.ts", "server/room.ts" ]
 }

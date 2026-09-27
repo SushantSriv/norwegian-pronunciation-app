@@ -34,6 +34,13 @@ jobs:
       - name: Lint
         run: npm run lint
 
+      # The FULL check, across both tsconfig projects. `npm run build` only
+      # compiles the one that ships, deliberately: a site build has no business
+      # failing over a Node development script. This is where the rest is
+      # caught.
+      - name: Typecheck
+        run: npm run typecheck
+
       - name: Test
         run: npm run test
 
