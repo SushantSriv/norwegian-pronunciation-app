@@ -92,30 +92,12 @@ export default defineConfig(({ command }) => ({
                 // The parallax background art is large; raise the precache
                 // ceiling so the installed app still works offline.
                 maximumFileSizeToCacheInBytes: 6 * 1024 * 1024,
-                // Note the absence of `wasm`. ONNX Runtime's binary is 22 MB
-                // (5.7 MB over the wire), and precaching it would put all of
-                // that in front of the first page load for a learner who has
-                // not pressed the microphone yet. It is cached on first use
-                // instead, by the rule below.
                 globPatterns: ['**/*.{js,css,html,png,svg,woff2}'],
-                runtimeCaching: [
-                    {
-                        // Fetched once, when the speech model first starts, and
-                        // then served from cache forever — including offline,
-                        // which is the whole reason recognition moved on-device.
-                        urlPattern: ({ url }) => url.pathname.endsWith('.wasm'),
-                        handler: 'CacheFirst',
-                        options: {
-                            cacheName: 'onnx-runtime',
-                            expiration: { maxEntries: 4 },
-                            cacheableResponse: { statuses: [0, 200] },
-                        },
-                    },
-                ],
-                // The model weights themselves are not handled here at all:
-                // transformers.js fetches them from the Hugging Face CDN and
-                // keeps them in its own Cache Storage entry, which already
-                // survives reloads and works offline.
+                // No runtime caching. There used to be a rule for ONNX
+                // Runtime's 22 MB WebAssembly binary, back when recognition ran
+                // on-device; the model is gone and so is the rule. Recognition
+                // is now the browser's own service, which needs a network and
+                // cannot be cached by us at all.
             },
         }),
     ],
