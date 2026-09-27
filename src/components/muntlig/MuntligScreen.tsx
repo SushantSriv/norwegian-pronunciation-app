@@ -242,8 +242,28 @@ function ExamRunner({ nivaa, room, onBack, onRestart }: RunnerProps) {
         [settle]
     );
 
-    const voice = useVoiceInput({ onResult, profile });
+    /**
+     * This session owns its recordings.
+     *
+     * By default the hook keeps one at a time and revokes the previous URL when
+     * a new take lands, which is right for practice. A rehearsal lists every
+     * answer and offers to play each one back, so with the default every player
+     * but the last pointed at a URL that had already been revoked — and said
+     * ERR_FILE_NOT_FOUND when pressed. They are released together below.
+     */
+    const voice = useVoiceInput({ onResult, profile, ownRecordings: true });
+
+    /** Every object URL this session has been handed, for releasing at the end. */
+    const owned = useRef<string[]>([]);
+    useEffect(() => {
+        const urls = owned.current;
+        return () => urls.forEach(url => URL.revokeObjectURL(url));
+    }, []);
     recordingRef.current = voice.recordingUrl;
+
+    if (voice.recordingUrl && !owned.current.includes(voice.recordingUrl)) {
+        owned.current.push(voice.recordingUrl);
+    }
 
     const voiceRef = useRef(voice);
     voiceRef.current = voice;
